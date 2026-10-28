@@ -6,15 +6,15 @@ The in-app BYOK path currently supports Google Gemini API keys. Each row is a ke
 When **Use your agent** is on, the API does not fall back to Pothub's own configured AI provider. If all supplied keys fail, the operation fails and the existing reserve/refund flow returns the reserved credits. Operation credits remain applicable for Pothub's service workflow; do not describe these as provider AI charges.
 
 ## Key handling
-- Keys are held in `sessionStorage`, not IndexedDB, localStorage, or Pothub backups.
-- Keys are transmitted to the configured API only for the test and operation requests. The API parses them in memory and does not write them to storage.
-- The API does not log the request headers or test request body. Hosting/platform-level request capture must also be configured not to retain these values.
-- Remove one key or use **Remove all keys** to clear them. Closing the browser session may clear sessionStorage.
+- Keys are held in JavaScript memory only, not IndexedDB, localStorage, sessionStorage, or Pothub backups. A page reload clears them.
+- Keys are attached to the JSON body of POST test/operation requests only. The API parses them in memory and does not write them to storage.
+- Application code redacts provider errors and does not intentionally log request bodies. Hosting/platform-level request capture must also be configured not to retain these values.
+- Remove one key or use **Remove all keys** to clear them. Secret Mode can additionally lock access while the app is backgrounded.
 - Never paste server service-role credentials or unrelated secrets into this interface.
 - Use only providers and keys you trust. Provider terms, quotas and data retention apply.
 
 ## Testing and selection
-**Test and choose fastest** is a connectivity/latency test, not a guarantee of best reasoning quality. Configure different candidate models for the task, test them, and put the preferred working candidate first. Automatic task-specific model benchmarking remains a future improvement; current routing uses the configured model and key order, with fallback on failure.
+**Test and choose fastest** is a connectivity/latency test, not a guarantee of best reasoning quality. Configure different candidate models for the task, test them, and put the preferred working candidate first. The test endpoint checks text connectivity and latency only. Image generation uses a separate Gemini response adapter and requires a model that returns actual image data. Video generation is not supported by this build. Task-specific routing currently supports Any task, Diagnosis, Repair proposals, File generation, and Image generation; other task types are intentionally not shown.
 
 ## Security limitation
 A key must reach a backend for the backend to call Gemini, so it exists in transient request memory. This implementation does not persist it in the application database, but deployment logs, observability middleware, reverse proxies and provider logs must be configured carefully. Do not claim that a key is never transmitted to a server.
