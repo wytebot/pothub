@@ -1,0 +1,25 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root=process.cwd();
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const required=['package.json','index.html','public/manifest.webmanifest','public/sw.js','server/app.js','server/lib.js','supabase/schema.sql','src/ui/App.jsx','src/lib/db.js','public/icons/pothub-192.png','public/icons/pothub-512.png'];
+for(const f of required) if(!fs.existsSync(path.join(root,f))) throw new Error(`Missing required file: ${f}`);
+const lib=read('server/lib.js'),api=read('server/app.js'),schema=read('supabase/schema.sql'),manifest=JSON.parse(read('public/manifest.webmanifest')),pkg=JSON.parse(read('package.json')),ui=read('src/ui/App.jsx'),sw=read('public/sw.js'),pricing=read('server/pricing.js');
+for (const dep of ['express','helmet','express-rate-limit','@hapi/iron','@supabase/supabase-js','@google/generative-ai','jszip','zod']) if (!pkg.dependencies?.[dep]) throw new Error(`Missing server runtime dependency: ${dep}`);
+if(!api.includes("import{PACKS as PRICING_PACKS}from'./pricing.js'")||!['spark','builder','pro','power'].every(id=>pricing.includes(`id: '${id}'`)))throw new Error('Server pricing module must be the source of truth for all credit pack IDs.');
+if (!schema.includes('p_amount') || !schema.toLowerCase().includes('for update') || !schema.includes('credit_ledger')) throw new Error('Atomic credit ledger checks are missing.');
+if(manifest.name?.split(' ')[0]!=='Pothub')throw new Error('PWA manifest is not branded Pothub.');
+if(!lib.includes("throw Error('Credit accounting is unavailable.")||lib.includes('return{credits:25,demo:true}'))throw new Error('Credit accounting must fail closed when Supabase is unavailable.');
+if(!api.includes('chargedModelJson')||!api.includes('failed-operation refund'))throw new Error('AI credit reservation/refund path is missing.');
+if(!schema.includes('initialize_profile')||!schema.includes('vercel_connections')||!schema.includes('to service_role'))throw new Error('Required profile/credential schema or RPC restrictions are missing.');
+if(!api.includes('/api/files/generate')||!ui.includes("page==='files'")||!ui.includes('downloadGeneratedFile'))throw new Error('File Studio generation/download flow is missing.');
+if(!api.includes('makePdf')||!api.includes('makeDocx')||!api.includes('makeXlsx')||!api.includes('contentBase64'))throw new Error('PDF/DOCX/XLSX binary export paths are missing.');
+if(!api.includes('VERCEL_CLIENT_ID')||!api.includes('encryptSecret')||!api.includes('resolveVercelToken'))throw new Error('Vercel OAuth encrypted token flow is missing.');
+if(!sw.includes('/assets/')||!sw.includes("url.pathname.startsWith('/api/')"))throw new Error('Service worker asset caching or API exclusion is missing.');
+const sourceFiles=[];function walk(dir){for(const name of fs.readdirSync(path.join(root,dir))){if(['node_modules','dist','.git'].includes(name))continue;const rel=path.join(dir,name),full=path.join(root,rel),st=fs.statSync(full);if(st.isDirectory())walk(rel);else if(/\.(jsx?|tsx?)$/.test(name)&&!rel.startsWith('server/'))sourceFiles.push(rel)}}walk('src');
+for(const f of sourceFiles){const t=read(f);if(/GEMINI_API_KEY|FLW_CLIENT_SECRET|SUPABASE_SERVICE_ROLE_KEY|VERCEL_CLIENT_SECRET/.test(t))throw new Error(`Server secret variable reference leaked into frontend source: ${f}`)}
+if(!pkg.scripts?.build||!pkg.scripts?.check||!pkg.scripts?.['pricing:check'])throw new Error('Build/check/pricing scripts missing.');
+for(const f of ['docs/COMPATIBILITY.md','docs/DEVICE_TEST.md','docs/PRICING.md','CHANGELOG.md','AUDIT_REPORT.md','server/pricing.js'])if(!fs.existsSync(path.join(root,f)))throw new Error(`Missing deliverable: ${f}`);
+console.log('Pothub release source audit passed.');
+console.log('Checked runtime dependencies, central pricing source, required assets, fail-closed credits, AI reservation/refunds, profile RPC, Vercel OAuth token encryption, file studio, PWA caching, deliverable docs and frontend secret references.');
+console.log('This static audit does not replace a production build, SQL execution, OAuth, payment or device test.');
