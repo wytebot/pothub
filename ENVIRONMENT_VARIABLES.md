@@ -41,10 +41,6 @@ The runtime has eight intended required Vercel variables. Firebase client SDK co
 5. Deploy `firestore.rules` and `firestore.indexes.json` using Firebase CLI. All direct client Firestore access is denied; the server uses Admin SDK.
 6. Deploy to Vercel and call `/api/health`. It returns `200` only when all eight required environment values are present and Firebase Admin initialized; it does not prove live provider credentials are valid.
 
-## Migration from Supabase
-
-`npm run migrate:firestore -- --dry-run` reads the legacy Supabase tables using temporary local `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, plus Firebase credentials. The script refuses to write if any destination collection is non-empty. The migration must be reconciled and tested before production cutover; these legacy variables are not runtime Vercel requirements. Keep the Supabase source intact until balances, paid/pending orders, ledger references and encrypted OAuth tokens are checked manually.
-
 ## Important limitations
 
 - Creator Google sign-in is not end-to-end; API authorization currently requires the GitHub session.

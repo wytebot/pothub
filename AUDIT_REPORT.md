@@ -5,7 +5,7 @@ The supplied archive did not contain `AUDIT_REPORT.md`; `QUALITY_AUDIT.md` was u
 ## Open items carried forward
 - Full repository scan remains bounded; diagnosis must state inspected coverage and limitations.
 - AI output remains a hypothesis; builds/tests must be independently executed.
-- Previous baseline: Supabase was the primary store. The current migration section below supersedes that baseline.
+- Current persistence: Firebase Admin + Cloud Firestore.
 - Full BYOK provider routing is not implemented.
 - Refund failures need an operator-visible reconciliation flow.
 - Live GitHub/Vercel/Flutterwave/Play, webhook, PWA offline, and Android tests require credentials/device.
@@ -49,9 +49,9 @@ The pass reviewed the repository file inventory, server AI routing/credits/auth/
 
 
 ## Firebase migration update (2026-10-28)
-- Replaced the server database client with Firebase Admin + Firestore. Supabase SDK and runtime environment requirements have been removed from the application configuration.
+- Server persistence uses Firebase Admin + Firestore; no external database SDK is required by the runtime.
 - Ported profile initialization, atomic credit spending/grants, order storage, Vercel token storage, notification subscriptions, deployment monitoring and notification records to Firestore collections.
 - Firestore credit changes use transactions and positive credit grants are idempotent by payment reference.
 - Added deny-all client Firestore rules and composite indexes because privileged records must only be accessed by the server. Added a one-time guarded migration script that refuses to import into non-empty target collections.
-- Important: this source migration does not copy existing production Supabase records. Before switching an existing live deployment, export/import profiles, balances, positive credit ledger references, unpaid orders and encrypted Vercel credentials. Existing paid orders must not be re-granted during import.
+- Important: source code changes do not import records from another database. Verify profiles, balances, credit-ledger references, orders and encrypted Vercel credentials in Firestore before production use.
 - Runtime verification still requires installing dependencies and testing against the actual Firebase project; this environment did not provide the service-account credentials.

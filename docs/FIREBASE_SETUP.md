@@ -15,6 +15,3 @@ Do not put the service-account JSON in any `VITE_` variable or frontend file. Th
 4. Test account creation, credit reservation/refund, repeated payment verification, notification delivery and Vercel token storage in a non-production project.
 
 Client rules deny all direct reads/writes; server routes use Firebase Admin. Do not loosen the rules for convenience.
-
-## Existing Supabase production data
-The code switch does not automatically transfer live records. Use `npm run migrate:firestore -- --dry-run` locally with temporary `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `FIREBASE_SERVICE_ACCOUNT_JSON`; review record counts, then run without `--dry-run` only when the target collections are empty. Verify balances, credit ledger references, pending/paid orders and encrypted Vercel credentials before cutting over. Keep the source project until verification is complete. The old Supabase variables are not required by the deployed runtime after migration.

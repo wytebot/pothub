@@ -6,7 +6,7 @@ The in-app BYOK path currently supports Google Gemini API keys. Each row is a ke
 When **Use your agent** is on, the API does not fall back to Pothub's own configured AI provider. If all supplied keys fail, the operation fails and the existing reserve/refund flow returns the reserved credits. Operation credits remain applicable for Pothub's service workflow; do not describe these as provider AI charges.
 
 ## Key handling
-- Keys are held in `sessionStorage`, not IndexedDB, localStorage, Supabase, or Pothub backups.
+- Keys are held in `sessionStorage`, not IndexedDB, localStorage, or Pothub backups.
 - Keys are transmitted to the configured API only for the test and operation requests. The API parses them in memory and does not write them to storage.
 - The API does not log the request headers or test request body. Hosting/platform-level request capture must also be configured not to retain these values.
 - Remove one key or use **Remove all keys** to clear them. Closing the browser session may clear sessionStorage.

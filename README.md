@@ -41,9 +41,8 @@ The current test suite contains eight unit tests for pure safety/validation func
 
 1. Configure the eight required secrets in Vercel and set `APP_URL` to the canonical HTTPS domain.
 2. Deploy Firestore rules and indexes.
-3. Run the migration dry-run with temporary legacy Supabase credentials if existing accounts or paid orders exist. Do not migrate into a non-empty Firestore collection; reconcile manually.
-4. Deploy a preview first, verify `/api/health`, GitHub OAuth, account balances, checkout sandbox, webhook verification, refunds and file downloads.
-5. Promote only after those checks pass. Keep the previous Vercel deployment and the Supabase source intact until the cutover is reconciled. Roll back by promoting the prior deployment; do not delete or mutate the source database during rollback.
+3. Deploy a preview first, verify `/api/health`, GitHub OAuth, account balances, checkout sandbox, webhook verification, refunds and file downloads.
+4. Promote only after those checks pass. Keep the previous Vercel deployment available for rollback; roll back by promoting the prior deployment.
 
 ## Owner must verify before production
 
