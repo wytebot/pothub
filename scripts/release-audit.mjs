@@ -33,5 +33,11 @@ if(manifest.name!=='Pothub' && !String(manifest.name||'').startsWith('Pothub')) 
 if(/GEMINI_API_KEY|FLW_CLIENT_SECRET|SUPABASE_SERVICE_ROLE_KEY|VERCEL_CLIENT_SECRET/.test(ui)) failures.push('Server-only secret variable referenced by the main UI source.');
 if(!pkg.scripts?.build||!pkg.scripts?.test||!pkg.scripts?.check) failures.push('Build/test/check scripts missing.');
 if(failures.length){console.error('Release source audit failed:');for(const f of failures)console.error(`- ${f}`);process.exit(1)}
+const biometricUi = ui;
+if (!biometricUi.includes('pothub_secret_mode') || !biometricUi.includes('NativeBiometric.verifyIdentity') || !biometricUi.includes('navigator.credentials.get')) throw new Error('Optional browser/native biometric Secret mode is not wired.');
+if (!pkg.dependencies?.['@capgo/capacitor-native-biometric']) throw new Error('Native biometric plugin dependency is missing.');
+const apiClient = read('src/lib/api.js');
+if (apiClient.includes("sessionStorageSafe('pothub_agent_config')") || apiClient.includes("sessionStorage.setItem('pothub_agent_config'")) throw new Error('Provider keys must not be persisted to Web Storage.');
+if (!apiClient.includes('Secret mode is locked') || !apiClient.includes('configureRuntimeAgent') || !ui.includes("document.visibilityState==='hidden'")) throw new Error('Runtime biometric lock / background relock is not enforced.');
 console.log('Release source audit passed: package and manifest JSON parsed; required files exist; prices match the pricing module; pricing endpoint is wired; Firebase Admin init and deny-all rules checked; Firebase browser authentication wired; no known server-secret variable names in main UI.');
 console.log('Scope: this is a static source audit. It does not validate live Firebase credentials, Firestore indexes against production queries, provider payments, browser E2E, Android devices, or deployment state.');

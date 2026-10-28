@@ -23,3 +23,11 @@ A key must reach a backend for the backend to call Gemini, so it exists in trans
 ## Transport and test limitations
 
 Provider keys are attached only to the transient JSON body of POST operations that need them, rather than HTTP headers, to reduce accidental exposure in proxy/header diagnostics. The server must not log request bodies. The current key test checks text connectivity and latency only; it does not certify image/video capability or compare output quality. Image generation has its own response validation. Video generation remains unsupported until a provider-specific adapter is added.
+
+## Secret Mode storage and limits
+- BYO provider keys are held in JavaScript memory only. They are not saved in `localStorage` or `sessionStorage`; a page reload clears them.
+- Legacy `pothub_agent_config` and `pothub_use_agent` session-storage values are removed at startup.
+- When Secret Mode is enabled, BYO API requests are rejected locally while the runtime gate is locked. The gate relocks when the page/app becomes hidden or the settings modal closes.
+- Browser WebAuthn is currently a local device-authenticator gate. There is no server-side WebAuthn challenge/credential verification in this build, so it must not be represented as server-verified identity or a secure vault.
+- Native biometric prompts require a successful Capacitor sync and a real-device test. The plugin prompt alone does not encrypt JavaScript memory or protect against a compromised app/device.
+- For higher assurance, move provider calls to a trusted backend or implement a native secure-storage design whose decryption key is protected by Android Keystore/biometric-bound cryptographic operations. Never store plaintext provider keys in browser storage.

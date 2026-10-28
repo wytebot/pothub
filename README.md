@@ -63,3 +63,9 @@ Browser sign-in can use Firebase Authentication's GitHub provider. Configure the
 
 ### Credit pack planning estimate
 Current proposed packs are $1.99/24, $4.99/74, $9.99/158, and $19.99/324 credits. `npm run pricing:check` models a $0.003 base provider cost per credit doubled for safety, $0.05 infrastructure per order, and the higher of a 30% app-store fee or 3.5% + $0.30 web fee. These assumptions are conservative planning inputs—not live cost measurements. Check actual model token usage, image costs, retries, taxes, refunds, and processor invoices before launch.
+
+### Optional biometric lock for API settings
+
+The BYO-agent API environment has an opt-in **Secret mode**. It is off on first visit, so the settings panel opens normally and advises the user to enable it. Once enabled, reopening the panel requires device verification: native Android builds use the system biometric prompt, while secure browser origins use a WebAuthn platform authenticator. No new environment variables are required. See `ENVIRONMENT_VARIABLES.md` for compatibility notes and the security boundary.
+
+For Android, install dependencies and run `npm run android:configure` (or `npx cap sync android`) before building the APK so Capacitor registers the biometric plugin. Browser biometric setup requires HTTPS and a device/browser that supports platform WebAuthn.

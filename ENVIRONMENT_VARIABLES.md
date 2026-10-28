@@ -60,3 +60,10 @@ The runtime has eight intended required Vercel variables. Firebase client SDK co
 ## Firebase GitHub sign-in (browser)
 
 Set the four `VITE_FIREBASE_*` values from Firebase Console → Project settings → Your apps (web app). In Firebase Authentication, enable the GitHub provider and configure its OAuth client ID/secret; authorize the Firebase `authDomain` callback in the GitHub OAuth app. Request the `repo`, `read:user`, and `user:email` scopes so Pothub can list and inspect repositories. These VITE values are public Firebase web-app configuration, not service-account secrets. Keep `FIREBASE_SERVICE_ACCOUNT_JSON` server-only. The server verifies the Firebase ID token and separately validates the GitHub access token against GitHub before creating the existing secure Pothub session. The existing browser OAuth path remains as a fallback when Firebase web config is absent; native APK login still uses the existing browser handoff until the Capacitor Firebase credential handoff is implemented.
+
+
+## Optional API environment Secret mode
+
+Secret mode is disabled by default, so the first visit does not show a biometric gate. Users can enable it in the “Use your agent” API-key panel. The standalone Capacitor Android build uses the device biometric prompt through `@capgo/capacitor-native-biometric`; browser mode uses WebAuthn platform-authenticator prompts and requires HTTPS plus a supported authenticator. No additional Vercel environment variables are required.
+
+Important: this is a local privacy gate around the API-key settings UI, not server-side secret storage or a cryptographic vault. API keys entered into the BYO-agent panel remain in session storage for the active session; do not use this feature as protection against malicious scripts, developer tools, or a compromised device. For production-grade key protection, keep provider keys server-side.

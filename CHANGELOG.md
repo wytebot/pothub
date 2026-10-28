@@ -26,3 +26,17 @@ Verification limits: `npm test` passed 5/5 and Node syntax checks passed for ser
 - Added browser Firebase Authentication with GitHub provider/scopes. The backend verifies Firebase ID tokens, validates the GitHub provider access token with GitHub, and then issues the existing secure Pothub session while preserving the GitHub numeric account key used by Firestore. Existing OAuth remains fallback/native flow for compatibility.
 - Added `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` configuration guidance.
 - Repriced packs without raising their USD prices: $1.99/24 credits, $4.99/74, $9.99/158, $19.99/324. Planning model now assumes $0.003 per credit before a 2× safety factor, plus $0.05 infrastructure/order and the higher of assumed 30% app-store fees or 3.5% + $0.30 web fees. These are estimates, not measured provider invoices.
+
+
+## Optional biometric Secret mode
+- Added an opt-in lock for the BYO-agent API environment; first visit remains ungated.
+- Capacitor Android uses the native device biometric prompt; HTTPS browsers use a WebAuthn platform authenticator.
+- Reopening the API settings panel requests verification again while Secret mode is enabled.
+- Documented that this is a local privacy gate, not a replacement for server-side secret storage.
+
+## Secret Mode hardening follow-up
+- Provider keys are now held only in JavaScript memory; legacy `sessionStorage` entries are deleted at startup.
+- Runtime API requests fail closed when Secret Mode is enabled and agent access is locked.
+- Agent access relocks when the app/page is backgrounded or hidden and when the settings panel closes.
+- Release source audit now checks that provider keys are not read from Web Storage and that runtime lock checks are present.
+- Limitation: browser WebAuthn registration is still a local platform-authenticator gate, not a server-verified account credential. It cannot defend against malicious same-origin JavaScript, browser extensions, devtools, or a compromised device. Native biometric UI is not equivalent to cryptographic key storage.

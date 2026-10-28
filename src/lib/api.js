@@ -1,6 +1,21 @@
+let runtimeAgentConfig = null;
+let runtimeUseAgent = false;
+let runtimeAgentUnlocked = false;
+
+// Provider credentials deliberately exist only in JS memory. They are never persisted to Web Storage.
+export function configureRuntimeAgent(keys, enabled) {
+  runtimeAgentConfig = Array.isArray(keys) ? { keys: keys.map(k => ({ ...k })) } : null;
+  runtimeUseAgent = Boolean(enabled);
+}
+export function setRuntimeAgentUnlocked(unlocked) { runtimeAgentUnlocked = Boolean(unlocked); }
+export function clearRuntimeAgent() { runtimeAgentConfig = null; runtimeUseAgent = false; runtimeAgentUnlocked = false; }
+
 export async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   const taskPath = String(path || '');
+  if (runtimeUseAgent && localStorageSafe('pothub_secret_mode') && !runtimeAgentUnlocked) {
+    throw new Error('Secret mode is locked. Unlock the API environment before using your provider keys.');
+  }
   const taskKind = taskPath.includes('/diagnose') ? 'diagnosis'
     : taskPath.includes('/agent/edit-project') ? 'repair'
     : taskPath.includes('/repair/') ? 'repair'
@@ -11,7 +26,7 @@ export async function api(path, options = {}) {
   const workspace = taskPath.includes('/creator/') ? 'creator' : 'developer';
   headers['X-Pothub-Task-Kind'] = taskKind;
   headers['X-Pothub-Workspace'] = workspace;
-  if (sessionStorageSafe('pothub_use_agent') === 'true') headers['X-Pothub-Use-Agent'] = 'true';
+  if (runtimeUseAgent && (!localStorageSafe('pothub_secret_mode') || runtimeAgentUnlocked)) headers['X-Pothub-Use-Agent'] = 'true';
 
   // Do not put provider keys in HTTP headers: proxies and request diagnostics are more
   // likely to record headers. Attach them only to the body of a POST operation that
@@ -19,12 +34,7 @@ export async function api(path, options = {}) {
   let body = options.body;
   if (body && typeof body !== 'string' && String(options.method || 'GET').toUpperCase() !== 'GET') {
     body = { ...body };
-    if (!taskPath.includes('/agent/test') && sessionStorageSafe('pothub_use_agent') === 'true') {
-      try {
-        const raw = sessionStorageSafe('pothub_agent_config');
-        if (raw) body.agentConfig = JSON.parse(raw);
-      } catch { /* invalid or unavailable session configuration is handled by the API */ }
-    }
+    if (!taskPath.includes('/agent/test') && runtimeUseAgent && (!localStorageSafe('pothub_secret_mode') || runtimeAgentUnlocked) && runtimeAgentConfig) body.agentConfig = runtimeAgentConfig;
   }
   if (window.Capacitor?.isNativePlatform?.()) {
     const token = localStorage.getItem('pothub_native_session') || localStorage.getItem('kithub_native_session');
@@ -38,7 +48,7 @@ export async function api(path, options = {}) {
   if (!res.ok) throw new Error(data.error || data.message || `Request failed (${res.status})`);
   return data;
 }
-function sessionStorageSafe(key) {
-  try { return sessionStorage.getItem(key); } catch { return null; }
+function localStorageSafe(key) {
+  try { return localStorage.getItem(key) === 'true'; } catch { return false; }
 }
 export function redact(t=''){return String(t).replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g,'[REDACTED_GITHUB_TOKEN]').replace(/AIza[0-9A-Za-z_-]{30,}/g,'[REDACTED_GOOGLE_KEY]').replace(/(Bearer\s+)[A-Za-z0-9._-]{20,}/gi,'$1[REDACTED]').replace(/((?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi,'$1[REDACTED]')}
