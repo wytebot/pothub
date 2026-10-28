@@ -10,6 +10,20 @@ export function configureRuntimeAgent(keys, enabled) {
 export function setRuntimeAgentUnlocked(unlocked) { runtimeAgentUnlocked = Boolean(unlocked); }
 export function clearRuntimeAgent() { runtimeAgentConfig = null; runtimeUseAgent = false; runtimeAgentUnlocked = false; }
 
+// Single source of truth for the API prefix. Web uses same-origin /api (served by the
+// Vite proxy in dev and by Vercel functions in production). The Android APK and any
+// separately hosted UI set an absolute base URL; the API routes always live under /api.
+export function apiBase() {
+  let base = '';
+  try {
+    base = import.meta.env.VITE_API_BASE_URL
+      || localStorage.getItem('pothub_api_base')
+      || localStorage.getItem('kithub_api_base')
+      || '';
+  } catch { base = ''; }
+  return `${String(base).trim().replace(/\/$/, '')}/api`;
+}
+
 export async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   const taskPath = String(path || '');
