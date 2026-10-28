@@ -1,21 +1,28 @@
 # Changelog
 
-## 2026-10-28 — Repair workspace hardening pass
-- Added a central pricing module and a repeatable margin-check command, preserving the four requested USD pack prices and operation costs.
-- Added automated tests for repository-name rules, CSV parsing, pricing assumptions, bounded prompt length and reserve/refund arithmetic.
-- Added browser/APK compatibility matrix, Android device checklist and internal pricing assumptions.
-- Improved health endpoint to return degraded status when Supabase is unavailable and to report integration readiness without exposing secrets.
-- Added icon asset set and metadata alignment.
-- Explicitly documented items that remain unverified or blocked by external accounts/device access; this pass does not claim production certification.
+## 2026-10-28 — Repository audit hardening
 
-## 2026-10-28 — Mobile navigation and APK checkout
-- Enabled the existing Flutterwave v4 checkout path in the standalone Capacitor APK as requested, pending Play Store publication.
-- Replaced the mobile bottom navigation with Inbox, Projects, Fix and Me entry points.
-- Added a local Inbox view from saved repository findings with tap-through to project evidence.
-- Routed legal links through Capacitor Browser on native Android so external legal pages can open outside the WebView.
-- This change does not claim live payment verification, native download/share, or device QA; those require configured credentials and Android testing.
+- Fixed Firebase Admin initialization to return the initialized app instead of referencing an undefined `admin` symbol.
+- Removed unused Firebase browser SDK initialization and its hardcoded public configuration; server-side Admin SDK remains.
+- Added a public `/api/pricing` endpoint and switched credit-pack/operation-cost display to server pricing data.
+- Added comma-separated Gemini key routing through `GEMINI_API_KEY`.
+- Made OAuth/payment origin derivation ignore untrusted request Host headers.
+- Removed duplicate Firestore rules file and Netlify-only redirect file from this Vercel project.
+- Rewrote environment documentation to match the intended eight-variable configuration and disclose known incomplete flows.
+- Added this audit's evidence and deferred items to `FINDINGS_LEDGER.md`.
 
-## 2026-10-28 — Session-only agent keys
-- Added a collapsible-menu Use your agent setting with session-only Gemini key/model entries, add/remove controls, a clear-all action, and provider test/latency ranking.
-- Wired diagnosis, repair proposals and file generation to use user-configured keys when enabled; user-agent mode does not silently fall back to Pothub AI, and operation failures retain the existing reserve/refund behaviour.
-- Added BYOK security and setup documentation. Production Vite build could not be run because dependencies are not installed in this environment.
+Verification limits: `npm test` passed 5/5 and Node syntax checks passed for server files. Dependency installation timed out; `npm run build` then failed because Vite was not installed. Browser E2E, Firebase Emulator, live payment/OAuth and real Android testing remain unverified.
+
+## 2026-10-28 — Follow-up hardening
+- Added deterministic transactional grant markers to make repeated payment verification/webhook grants idempotent.
+- Added fail-closed Flutterwave webhook shared-secret verification and server-side amount/currency/reference/charge-ID checks.
+- Cached Flutterwave tokens and bounded provider request durations.
+- Extracted and tested prompt bounding and model JSON parsing.
+- Removed unsupported Creator video mode and corrected identified contrast, focus, reduced-motion and mobile input issues.
+- Verification: 8 unit tests, source audit, pricing check and JavaScript syntax checks pass. Build, emulator, provider and device checks remain unverified.
+
+
+## Follow-up: Firebase GitHub authentication and credit repricing
+- Added browser Firebase Authentication with GitHub provider/scopes. The backend verifies Firebase ID tokens, validates the GitHub provider access token with GitHub, and then issues the existing secure Pothub session while preserving the GitHub numeric account key used by Firestore. Existing OAuth remains fallback/native flow for compatibility.
+- Added `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` configuration guidance.
+- Repriced packs without raising their USD prices: $1.99/24 credits, $4.99/74, $9.99/158, $19.99/324. Planning model now assumes $0.003 per credit before a 2× safety factor, plus $0.05 infrastructure/order and the higher of assumed 30% app-store fees or 3.5% + $0.30 web fees. These are estimates, not measured provider invoices.
