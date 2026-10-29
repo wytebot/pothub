@@ -8,7 +8,7 @@ Pothub already reads its Firebase web configuration through `src/lib/firebase.js
 - `VITE_FIREBASE_AUTH_DOMAIN` — set to your **app's own hostname** (e.g. `your-pothub-project.vercel.app`, no `https://`). `vercel.json` proxies `/__/auth/*` from that host to `<project-id>.firebaseapp.com`, so Google sign-in no longer depends on `firebaseapp.com` being reachable. Add the same hostname under Firebase Authentication → Settings → Authorized domains.
 - `VITE_FIREBASE_PROJECT_ID` — same web config → `projectId`.
 - `VITE_FIREBASE_APP_ID` — same web config → `appId`.
-- `VITE_API_BASE` — optional. Leave blank when frontend and API are served from the same Vercel domain. If the API is on a separate domain, use only its origin, e.g. `https://your-api-project.vercel.app` (no trailing `/api`).
+- `VITE_API_BASE` — **required for the Android APK**. The APK is served from its own local origin, so it must call the Vercel API by absolute URL: set it to `https://your-api.vercel.app` (no trailing `/api`) and run `npm run build` before `cap sync`. Leave blank only for the browser build served from the same domain as the API. If the API is on a separate domain, use only its origin, e.g. `https://your-api-project.vercel.app` (no trailing `/api`).
 
 The Firebase browser SDK remains the source used by the app. If these four values are already configured in your existing Vercel project, keep them; do not create duplicate variables. They are public web-app configuration, not secrets. Never put service-account JSON, OAuth client secrets, Gemini keys, or Flutterwave secrets in a `VITE_*` variable.
 
