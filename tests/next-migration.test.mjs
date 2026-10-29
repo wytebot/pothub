@@ -2,18 +2,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const read = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-test('Next.js static export wraps the existing full Pothub UI without removing API entrypoints', async () => {
+test('Next.js server deployment wraps the full Pothub UI and routes APIs through the same runtime', async () => {
   const config = await read('next.config.mjs');
   const page = await read('pages/index.jsx');
-  const api = await read('api/[...path].js');
+  const api = await read('pages/api/[...path].js');
   const app = await read('src/ui/App.jsx');
-  assert.match(config, /output:\s*'export'/);
+  assert.doesNotMatch(config, /output:\s*'export'/);
   assert.match(page, /import\('\.\.\/src\/ui\/App\.jsx'\)/);
-  assert.match(api, /export default app/);
+  assert.match(api, /export default function pothubApi/);
+  assert.match(api, /bodyParser: false/);
   assert.match(app, /\/api\/auth\/github/);
   assert.match(app, /signInWithPopup\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
   assert.match(app, /\/api\/billing\/checkout/);
 });
+test('Capacitor has a separate static-export build while Vercel keeps server APIs', async () => {
+  const pkg = JSON.parse(await read('package.json'));
+  const capBuilder = await read('scripts/build-capacitor.mjs');
+  const config = await read('next.config.mjs');
+  assert.match(pkg.scripts['build:cap'], /build-capacitor\.mjs/);
+  assert.match(pkg.scripts['cap:sync'], /build:cap/);
+  assert.match(capBuilder, /pages', 'api'/);
+  assert.match(capBuilder, /output: 'export'/);
+  assert.doesNotMatch(config, /output:\s*'export'/);
+});
+
 test('new deployments stamp the service worker and show a refresh prompt', async () => {
   const stamp = await read('scripts/stamp-service-worker.mjs');
   const notice = await read('src/ui/DeploymentUpdateNotice.jsx');
@@ -38,4 +50,15 @@ test('frontend uses Next.js public environment variables rather than Vite import
   assert.match(pkg.scripts.build, /prepare-next-assets\.mjs/);
   assert.doesNotMatch(pkg.scripts.build, /vite/);
   assert.match(firebase, /process\.env\.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN/);
+});
+test('all health and auth endpoints are routed through the Next.js API catch-all', async () => {
+  const entry = await read('pages/api/[...path].js');
+  assert.match(entry, /import app from '\.\.\/\.\.\/server\/app\.js'/);
+  assert.match(entry, /return app\(req, res\)/);
+  const app = await read('src/ui/App.jsx');
+  assert.match(app, /\/api\/auth\/github/);
+  assert.match(app, /signInWithPopup\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
+  const server = await read('server/app.js');
+  assert.match(server, /app\.post\('\/api\/auth\/google-session'/);
+  assert.match(server, /app\.get\('\/api\/auth\/github\/callback'/);
 });

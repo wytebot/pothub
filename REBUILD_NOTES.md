@@ -64,7 +64,7 @@ Provider keys are carried in the POST body, not a custom header, for diagnosis/f
 `src/lib/biometric.js` is imported by `src/ui/App.jsx` only to guard the API & Agents section. Browser HTTPS uses a WebAuthn platform authenticator; Android uses the native biometric prompt. It is off by default and never gates app launch, authentication, Creator or Developer workspaces. It is a local page-access gate, not server-side identity proof.
 
 ## Capacitor
-- App ID: `ai.pothub.app`; web directory: `out` (Next.js static export).
+- App ID: `ai.pothub.app`; web runtime: Next.js server deployment with API catch-all under `pages/api/[...path].js`.
 - Run `npx cap add android` once, then `npm run android:configure`, `npm run cap:sync`.
 - The Android setup script finds the generated `MainActivity.java`, derives its actual package, registers `PublicDownloadsPlugin`, and adds the `ai.pothub.app://auth` intent filter.
 - `src/lib/platform.js` isolates system-browser auth, share and file save. Native secure storage is separate from the optional biometric gate.

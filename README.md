@@ -1,6 +1,6 @@
 # Pothub
 
-Pothub is a compact React 18 + Next.js static-export PWA with a shared Capacitor Android code path. The Vercel-hosted Express API is retained for authentication, GitHub operations, provider proxying, video jobs, credit accounting, and Flutterwave v4 payment verification.
+Pothub is a React 18 + Next.js application for browser deployment on Vercel, with a separate static-export build for Capacitor Android. The Express API is routed through a Next.js API catch-all on Vercel and remains responsible for authentication, GitHub operations, provider proxying, video jobs, credit accounting, and Flutterwave v4 payment verification.
 
 ## Project map
 - `src/ui/` — welcome, role selection, Developer/Creator workspaces, agents, history, backup, profile and responsive styling.
@@ -8,7 +8,7 @@ Pothub is a compact React 18 + Next.js static-export PWA with a shared Capacitor
 - `src/lib/video-adapters/` — provider-specific asynchronous video operations; Gemini Omni Flash is implemented first.
 - `design/` — source design assets and visual references.
 - `server/` — Express API, auth/session handling, GitHub operations, AI proxy, credit ledger and payment routes.
-- `api/` — Vercel entrypoints forwarding API requests to Express.
+- `pages/api/[...path].js` — Next.js API catch-all forwarding `/api/*` requests to Express.
 - `public/` — PWA shell, service worker, manifest, and app icons.
 - Video results stream through the Vercel API; Firebase Storage is not required.
 - `android-template/` — custom Android Downloads/MediaStore plugin source copied into the generated Capacitor project.
@@ -17,7 +17,7 @@ Pothub is a compact React 18 + Next.js static-export PWA with a shared Capacitor
 - `docs/` — setup, pricing, compatibility and manual device-test guidance.
 
 ## Framework and deployment updates
-- The frontend is built by Next.js and statically exported to `out/` for browser hosting and Capacitor. The existing Express/Vercel serverless API remains separate and owns all secrets, authentication, GitHub operations, AI/provider requests, credits and Flutterwave v4 billing.
+- Vercel must use a normal Next.js server build (do not set `output: export` or set the Vercel Output Directory to `out`). The API catch-all and UI deploy together. `npm run build:cap` temporarily switches to static export, removes the API route only during that build, and restores source files afterward.
 - Set `NEXT_PUBLIC_API_BASE` only when the API is hosted on a different origin; it must be the API origin without a trailing `/api`. For same-origin browser deployment, leave it blank. For APK builds, set it to the deployed API origin before building.
 - Each build stamps the service worker and its cache name. Existing users get a refresh popup when a newer deployed worker is detected.
 
@@ -27,8 +27,8 @@ Pothub is a compact React 18 + Next.js static-export PWA with a shared Capacitor
 3. Copy `.env.example` to `.env` if present and configure the required server variables in `ENVIRONMENT_VARIABLES.md`.
 4. Run `npm run dev` for the Next.js UI or `npm run dev:api` for the Express API.
 5. Run `npm run check` for syntax/source audit and automated tests.
-6. Build the web app with `npm run build` (static files are exported to `out/`).
-7. For Android, run `npx cap add android` once, then `npm run android:configure`, `npm run cap:sync`, and build from Android Studio.
+6. Build the Vercel web app with `npm run build` (normal Next.js build; output is not a static `out/` folder).
+7. For Android, run `npx cap add android` once, then `npm run android:configure`, `npm run cap:sync`, and build from Android Studio. The Capacitor command uses the separate static export script.
 
 ## Browser GitHub OAuth
 - The Developer sign-in action navigates to the same-origin `/api/auth/github` endpoint. The server redirects the browser to `https://github.com/login/oauth/authorize`; it is not a Firebase GitHub provider flow.
@@ -37,7 +37,7 @@ Pothub is a compact React 18 + Next.js static-export PWA with a shared Capacitor
 
 ## Authentication and security
 - GitHub accounts use the GitHub OAuth authorization-code flow with state + PKCE and an HTTP-only session cookie in browsers. Native Android uses a one-time deep-link ticket exchanged with the API.
-- Creator accounts use Firebase Google redirect in browsers and system-browser Google OAuth in the APK. The server provisions the Google profile and starter credit ledger.
+- Creator accounts use Firebase Google popup in browsers (with redirect fallback when popups are blocked) and system-browser Google OAuth in the APK. The server verifies the Firebase ID token, provisions the Google profile and starter credit ledger, and establishes an HTTP-only session cookie.
 - Native session tokens and the AES key used for agent secrets are stored through Android Keystore-backed secure storage. Browser agent secrets are AES-GCM encrypted with a non-extractable WebCrypto key in IndexedDB.
 - Optional device verification is scoped to the API & Agents page only. It is off by default and does not gate app launch, sign-in, or other screens.
 - API keys are sent in the request body only for the operation that uses them. Configure hosting/proxy logs to avoid capturing request bodies.

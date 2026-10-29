@@ -9,12 +9,13 @@
     "dev:api": "node server/dev.js",
     "build": "node scripts/prepare-next-assets.mjs && node scripts/stamp-service-worker.mjs && next build",
     "start": "next start -H 0.0.0.0",
-    "cap:sync": "npm run build && cap sync",
+    "cap:sync": "npm run build:cap && cap sync",
     "android": "npm run cap:sync && cap open android",
     "android:configure": "node scripts/configure-android.mjs",
     "check": "node --check server/app.js && node --check server/lib.js && node scripts/release-audit.mjs && npm test",
     "pricing:check": "node scripts/pricing-check.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "build:cap": "node scripts/build-capacitor.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",

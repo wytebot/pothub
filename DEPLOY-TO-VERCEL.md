@@ -1,38 +1,36 @@
-# Deploy this ZIP to Vercel (important root-directory fix)
+# Deploy Pothub to Vercel (frontend + API on the same origin)
 
-The Vercel error `ENOENT: /vercel/path0/package.json` happens before Next.js starts. It means Vercel is building a Git commit/root directory where `package.json` is absent. Changing environment variables cannot fix it.
+Pothub must be deployed as a normal **Next.js** application, not a static export. The previous `output: 'export'` plus `outputDirectory: 'out'` configuration could cause Vercel to serve only the static frontend while `/api/*` returned a platform HTML 404. That prevents Developer sign-in and Google Creator workspace setup from completing.
 
-## Correct repository layout
+## Repository layout
 
-Extract this ZIP and commit its **contents** to the root of `wytebot/pothub` on the `main` branch. Do not commit the ZIP itself, and do not put all project files inside an extra `pothub-nextjs-migration-clean/` folder unless you configure Vercel's Root Directory to that folder. These files must sit side by side at the configured root:
+Commit the **contents** of this archive to the root of `wytebot/pothub` on `main`. Do not commit the ZIP itself or put all files in an extra nested folder. These paths must be at the configured root:
 
 - `package.json`
 - `next.config.mjs`
 - `vercel.json`
-- `pages/`
-- `api/`
+- `pages/` (including `pages/api/[...path].js`)
 - `server/`
 - `src/`
-
-This archive is already structured with those files at the archive root.
 
 ## Vercel settings
 
 In **Project → Settings → Build and Deployment**:
 
-- Root Directory: `.` (repository root; leave the field empty if Vercel treats that as the root)
-- Framework Preset: `Next.js`
+- Root Directory: repository root (`.` / empty)
+- Framework Preset: **Next.js**
 - Build Command: `npm run build`
 - Install Command: `npm install`
-- Output Directory: `out`
+- Output Directory: leave default/override disabled; do **not** set it to `out`
 
-If Vercel's Root Directory points to a different folder, change it to the directory containing `package.json`.
+The Next.js API catch-all at `pages/api/[...path].js` forwards all `/api/*` requests to the shared Express backend. It preserves the existing API endpoints and keeps browser OAuth callbacks on the same deployed origin. Do not restore the old root `api/` folder or static-export setting.
 
-## Confirm before redeploying
+## Verify after deployment
 
-1. Open GitHub `wytebot/pothub` and select branch `main`.
-2. Confirm `package.json` is visible at the repository root, not just inside a ZIP or nested folder.
-3. Commit/push this migrated project so Vercel builds the new commit. The previous build log used commit `5b44533`; redeploying that same old commit will repeat the error.
-4. In Vercel's deployment log, confirm the commit hash changed and dependency installation gets past `npm install`.
+1. Confirm the deployment is for the new commit and the build succeeds.
+2. Open `https://YOUR-HOST/api/health`. It must return JSON from Pothub, not an HTML Vercel 404/405 page.
+3. Open `https://YOUR-HOST/api/auth/github`. In a browser it should start the GitHub authorization redirect (or show a clear JSON/configuration error if OAuth environment variables are missing), not a platform 404.
+4. Test Developer login from the browser; after GitHub consent it should return to Pothub and open Developer workspace.
+5. Test Google login; after Google consent it should establish the backend session and open Creator workspace. Test a refresh to ensure `/api/auth/me` restores the session.
 
-Do not add fake `package.json` files or change environment variables to work around this error. The actual source commit or Root Directory must be corrected.
+A passing local test suite cannot prove Vercel deployed the new commit or that provider credentials are valid. If `/api/health` is still HTML, inspect the Vercel deployment's commit and Root Directory before changing OAuth credentials.

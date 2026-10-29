@@ -73,9 +73,9 @@ Keep these server-only if the **Connect Vercel** feature is used: `VERCEL_CLIENT
 
 - **Framework preset:** Next.js.
 - **Build command:** `npm run build`.
-- **Output directory:** `out` (the project uses Next.js static export for the browser UI and Capacitor).
-- Do not set `dist` as the output directory or override the build command with Vite commands.
-- Keep the `api/` folder and `vercel.json`; they route requests to the existing Express API functions.
+- **Output directory:** leave the Vercel default; do not set `out`. The browser deployment is a normal Next.js server app with the API route at `pages/api/[...path].js`.
+- Do not override the build command with Vite commands.
+- Keep `pages/api/[...path].js`, `server/`, and `vercel.json` together so API routes deploy with the UI.
 - After changing variables, redeploy so Next.js embeds the new `NEXT_PUBLIC_*` values and Vercel functions receive the new server values.
 - Test `https://YOUR-PROJECT.vercel.app/api/health`; it should return JSON. Then test GitHub login, Google login, a read-only GitHub operation, and Flutterwave sandbox verification.
 
@@ -84,7 +84,7 @@ Keep these server-only if the **Connect Vercel** feature is used: `VERCEL_CLIENT
 1. Install Node.js 20+ and run `npm install`.
 2. For the web UI run `npm run dev`; for the API locally run `npm run dev:api` in a second terminal.
 3. Run `npm run check`, then `npm run build`. The build prepares the PDF.js worker and stamps the service worker with the deployment/build identifier.
-4. Before building Android, set `NEXT_PUBLIC_API_BASE` to the deployed API origin, then run `npm run cap:sync`. `capacitor.config.json` uses `webDir: "out"`.
+4. Before building Android, set `NEXT_PUBLIC_API_BASE` to the deployed API origin, then run `npm run cap:sync`. The dedicated `build:cap` script temporarily excludes the server API route and uses a static export config only for the Capacitor build, then restores the server config. `capacitor.config.json` uses `webDir: "out"`.
 
 ## Security
 
