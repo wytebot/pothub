@@ -5,3 +5,7 @@ test('provider identity controls Developer and Creator role',()=>{assert.match(a
 test('native auth return listens for appUrlOpen and exchanges one-time ticket',()=>{assert.match(app,/appUrlOpen/);assert.match(app,/native-exchange/);assert.match(app,/nativeSessionToken=d\.session/)});
 
 test('OAuth callback errors are shown in browser and progress UI does not falsely mark timed stages complete',()=>{assert.match(app,/url\.searchParams\.get\('auth_error'\)/);assert.match(app,/setError\(authError\)/);assert.match(app,/These are the current processing stages, not a percentage-complete estimate/);assert.match(app,/work-progress-track/)});
+
+test('GitHub browser ticket exchange is module-memoized for StrictMode effect re-runs',()=>{assert.match(app,/let browserTicketPromise=null/);assert.match(app,/let browserTicketValue=''/);assert.match(app,/function consumeBrowserTicket\(ticket\)/);assert.match(app,/browserTicketValue!==ticket/);assert.match(app,/else if\(browserTicketPromise\)\{await browserTicketPromise\}/);assert.match(app,/await consumeBrowserTicket\(authTicket\)/)});
+
+test('Firebase auth domain supports the same-origin auth proxy configuration',async()=>{const firebase=await readFile(new URL('../src/lib/firebase.js',import.meta.url),'utf8');assert.match(firebase,/authDomain:\s*import\.meta\.env\.VITE_FIREBASE_AUTH_DOMAIN\s*\|\|\s*"pothub-ca2a1\.firebaseapp\.com"/)});

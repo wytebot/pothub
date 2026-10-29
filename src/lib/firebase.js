@@ -6,7 +6,7 @@ import { getAuth } from 'firebase/auth';
 // must be enforced with Firebase Auth/Firestore rules and server-side IAM.
 const config = {
   apiKey: "AIzaSyArzD6DL51vblo79g4J6WwHunULfIedIDU",
-  authDomain: "pothub-ca2a1.firebaseapp.com",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "pothub-ca2a1.firebaseapp.com",
   projectId: "pothub-ca2a1",
   storageBucket: "pothub-ca2a1.firebasestorage.app",
   messagingSenderId: "518294365386",

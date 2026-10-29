@@ -119,17 +119,15 @@ class FirebaseDatabase {
 export const db=new FirebaseDatabase();
 export const flwBase=process.env.FLW_MODE==='production'?'https://api.flutterwave.cloud':'https://developersandbox-api.flutterwave.com';
 export function origin(req){
-  // Never trust an arbitrary Host or forwarded-host header for OAuth/payment redirects.
-  const configured=process.env.APP_URL;
+  const configured=String(process.env.APP_URL||'').trim();
   if(configured){let u;try{u=new URL(configured)}catch{throw Error('APP_URL must be a valid absolute URL.')}if(process.env.NODE_ENV==='production'&&u.protocol!=='https:')throw Error('APP_URL must use HTTPS in production.');return u.origin}
-  const deployment=process.env.VERCEL_PROJECT_PRODUCTION_URL||process.env.VERCEL_URL;
-  if(deployment){const host=String(deployment).replace(/^https?:\/\//,'').split('/')[0];if(!/^[a-z0-9.-]+$/i.test(host))throw Error('Vercel deployment hostname is invalid.');return `https://${host}`}
-  return 'https://ai.pothub.app';
+  if(process.env.NODE_ENV==='production')throw Error('APP_URL is required in production; set it to this Vercel environment deployment URL.');
+  return 'http://localhost:3000';
 }
 export function randomRef(p='fp'){return `${p}_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`}
 const secure=()=>process.env.NODE_ENV==='production'?'; Secure':'';
 export async function setSession(res,data){if(!process.env.SESSION_SECRET||process.env.SESSION_SECRET.length<32)throw Error('SESSION_SECRET must be at least 32 characters.');const value=await sealData({...data,kind:'session'},{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});res.append('Set-Cookie',`kithub_session=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800${secure()}`)}
-export async function getSession(req){try{if(!process.env.SESSION_SECRET)return null;const auth=String(req.headers.authorization||'');if(auth.startsWith('Bearer ')){const d=await unsealData(auth.slice(7),{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});return d.kind==='session'?d:null}const c=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('kithub_session='));if(!c)return null;const d=await unsealData(decodeURIComponent(c.slice('kithub_session='.length)),{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});return d.kind==='session'?d:null}catch{return null}}
+export async function getSession(req){try{if(!process.env.SESSION_SECRET)return null;const auth=String(req.headers.authorization||'');if(auth.startsWith('Bearer ')){const bearer=auth.slice(7);try{const d=await unsealData(bearer,{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});if(d.kind==='session')return d}catch{}if(/^[A-Za-z0-9_-]{40,80}$/.test(bearer)&&firestore){const key=crypto.createHash('sha256').update(bearer).digest('hex'),snap=await firestore.collection('browser_sessions').doc(key).get();if(!snap.exists)return null;const row=snap.data(),expires=typeof row.expiresAt?.toMillis==='function'?row.expiresAt.toMillis():Number(row.expiresAt||0);if(expires<Date.now()){await snap.ref.delete().catch(()=>{});return null}return row.session&&row.session.kind==='session'?row.session:null}return null}const c=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('kithub_session='));if(!c)return null;const d=await unsealData(decodeURIComponent(c.slice('kithub_session='.length)),{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});return d.kind==='session'?d:null}catch{return null}}
 export function clearSession(res){res.append('Set-Cookie',`kithub_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure()}`)}
 export function redactSecrets(t=''){return String(t).slice(0,25000).replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g,'[REDACTED_GITHUB_TOKEN]').replace(/AIza[0-9A-Za-z_-]{30,}/g,'[REDACTED_GOOGLE_KEY]').replace(/FLWSECK[^\s"']+/g,'[REDACTED_FLUTTERWAVE_KEY]').replace(/(Bearer\s+)[A-Za-z0-9._-]{20,}/gi,'$1[REDACTED]').replace(/((?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi,'$1[REDACTED]')}
 export async function requireUser(req,res){const s=await getSession(req);if(!s?.user?.id||(!s?.githubToken&&s?.authProvider!=='google')){res.status(401).json({error:'Sign in to Pothub to continue.'});return null}return s}
