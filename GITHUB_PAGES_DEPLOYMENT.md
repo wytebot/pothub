@@ -27,3 +27,13 @@ GitHub OAuth callback state is validated on the Vercel API. When the configured 
 
 ## Validation
 The Pages workflow runs the existing source audit and tests before deployment. The Vercel workflow remains separate and continues deploying the backend. A GitHub Actions workflow only runs after this updated project is committed and pushed; creating this ZIP does not itself update GitHub or trigger deployment.
+
+## If GitHub says it cannot detect or publish the app
+1. Confirm the repository really is `wytebot/pothub` and the default branch is `main` or `master`. The Pages URL for this project repository is `https://wytebot.github.io/pothub/` (not the account root URL).
+2. Commit and push the ZIP's extracted files to the repository root. The `.github/workflows/github-pages-deploy.yml` file must be at that exact path in the repository; uploading the ZIP as a single file will not activate the workflow.
+3. In **Settings → Pages**, select **GitHub Actions** as the source. Do not select “Deploy from a branch” for this workflow.
+4. Open **Actions → Deploy Pothub frontend to GitHub Pages** and run it manually with **Run workflow** if no push has triggered it. Open the failed step for the actual error; the workflow now checks that the built HTML, manifest, service worker, and repository-prefixed asset paths exist before deployment.
+5. In **Settings → Actions → General**, ensure Actions are enabled and the workflow has permission to deploy Pages. In **Settings → Environments**, GitHub should create/use the `github-pages` environment on deployment.
+6. GitHub Pages is static hosting, not the backend. Keep `https://pothub-self.vercel.app` deployed and healthy; the frontend will not work fully if its API is unavailable.
+
+A successful GitHub Pages deployment does not automatically configure Vercel environment variables, GitHub OAuth callback URLs, Firebase authorized domains, or the GitHub Pages source setting. Those must match the values in this document.

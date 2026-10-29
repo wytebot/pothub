@@ -39,6 +39,14 @@ jobs:
         run: npm run check
       - name: Build GitHub Pages frontend
         run: npm run build && node scripts/configure-pages-build.mjs
+      - name: Verify Pages artifact
+        shell: bash
+        run: |
+          test -s dist/index.html || { echo 'Build did not create dist/index.html'; exit 1; }
+          test -s dist/manifest.webmanifest || { echo 'Build did not create the web manifest'; exit 1; }
+          test -s dist/sw.js || { echo 'Build did not copy the service worker'; exit 1; }
+          grep -q '/${GITHUB_REPOSITORY#*/}/assets/' dist/index.html || { echo 'Built asset URLs do not match the GitHub Pages repository path'; cat dist/index.html; exit 1; }
+          echo 'GitHub Pages artifact verified for repository path /${GITHUB_REPOSITORY#*/}/'
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -46,3 +54,6 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        environment:
+          name: github-pages
+          url: ${{ steps.deployment.outputs.page_url }}
