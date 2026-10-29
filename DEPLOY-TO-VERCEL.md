@@ -1,4 +1,9 @@
-# Deploy Pothub to Vercel (frontend + API on the same origin)
+# Deploy Pothub to Vercel
+
+## Fix for Vercel looking for `dist`
+
+This project is a normal Next.js deployment, not a static `dist` export. `vercel.json` explicitly sets `framework` to `nextjs` and `outputDirectory` to `.next`, which overrides a stale `dist` output-directory setting. Keep the Vercel Root Directory pointed at the repository root containing `package.json`, `pages/`, and `vercel.json`, then redeploy the latest commit. The Capacitor build remains a separate script.
+ (frontend + API on the same origin)
 
 Pothub must be deployed as a normal **Next.js** application, not a static export. The previous `output: 'export'` plus `outputDirectory: 'out'` configuration could cause Vercel to serve only the static frontend while `/api/*` returned a platform HTML 404. That prevents Developer sign-in and Google Creator workspace setup from completing.
 
@@ -18,12 +23,12 @@ Commit the **contents** of this archive to the root of `wytebot/pothub` on `main
 In **Project → Settings → Build and Deployment**:
 
 - Root Directory: repository root (`.` / empty)
-- Framework Preset: **Next.js** (also pinned in `vercel.json`)
+- Framework Preset: **Next.js**
 - Build Command: `npm run build`
 - Install Command: `npm install`
-- Output Directory: `vercel.json` explicitly sets `.next` to override the stale `dist` setting shown in the failed deployment. If Vercel dashboard settings continue to interfere, clear the Output Directory override there and redeploy. Do **not** set it to `dist` or `out`.
+- Output Directory: leave default/override disabled; do **not** set it to `out`
 
-The Next.js API catch-all at `pages/api/[...path].js` forwards all `/api/*` requests to the shared Express backend. The failed build log confirms `next build` itself succeeds and creates the dynamic API route; Vercel then fails because the project is configured to look for `dist`. The pinned `.next` output directory fixes that specific mismatch. It preserves the existing API endpoints and keeps browser OAuth callbacks on the same deployed origin. Do not restore the old root `api/` folder or static-export setting.
+The Next.js API catch-all at `pages/api/[...path].js` forwards all `/api/*` requests to the shared Express backend. It preserves the existing API endpoints and keeps browser OAuth callbacks on the same deployed origin. Do not restore the old root `api/` folder or static-export setting.
 
 ## Verify after deployment
 

@@ -20,3 +20,7 @@ test('Google session endpoint returns the opaque ID created by the shared cookie
   assert.match(appServer, /res\.json\(\{ok:true,session,user:profile,credits:balance\.credits,authProvider:'google'\}\)/);
   assert.match(ui, /if\(session\.session\)\{webSessionToken=session\.session/);
 });
+
+test('Firebase redirect callback is processed only after an explicitly marked Google redirect return',async()=>{const ui=await readFile(new URL('../src/ui/App.jsx',import.meta.url),'utf8');assert.match(ui,/function isGoogleRedirectPending\(\).*sessionStorage\.getItem\(GOOGLE_REDIRECT_PENDING\)==='1'/);assert.match(ui,/if\(!isGoogleRedirectPending\(\)\|\|!isGoogleRedirectReturn\(\)\)/);assert.match(ui,/markGoogleRedirectPending\(\);setGoogleRedirectMarker\(true\);await signInWithRedirect/);assert.match(ui,/clearGoogleRedirectState\(\);showError\(redirectError\)/)});
+
+test('Developer login clears Google redirect state and only a marked Google return can call the Google session endpoint',()=>{assert.match(app,/const GOOGLE_REDIRECT_MARKER='pothub_google_redirect'/);assert.match(app,/function isGoogleRedirectReturn\(\).*GOOGLE_REDIRECT_MARKER/);assert.match(app,/if\(!isGoogleRedirectPending\(\)\|\|!isGoogleRedirectReturn\(\)\)/);assert.match(app,/if\(provider==='github'\)\{[\s\S]*?clearGoogleRedirectState\(\);googleRedirectPromise=null;/);assert.match(app,/markGoogleRedirectPending\(\);setGoogleRedirectMarker\(true\);await signInWithRedirect/)});
