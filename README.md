@@ -25,6 +25,11 @@ Pothub is a compact React 18 + Vite PWA with a shared Capacitor Android code pat
 6. Build the web app with `npm run build`.
 7. For Android, run `npx cap add android` once, then `npm run android:configure`, `npm run cap:sync`, and build from Android Studio.
 
+## Browser GitHub OAuth
+- The Developer sign-in action navigates to the same-origin `/api/auth/github` endpoint. The server redirects the browser to `https://github.com/login/oauth/authorize`; it is not a Firebase GitHub provider flow.
+- Register the exact callback `https://YOUR-VERCEL-DOMAIN/api/auth/github/callback` in the GitHub OAuth App. Keep `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and a random `SESSION_SECRET` of at least 32 characters in Vercel server-side environment variables. These cannot safely be embedded in frontend code.
+- Firebase Web SDK settings are embedded in `src/lib/firebase.js`; no `VITE_FIREBASE_*` variables are required for the browser Firebase configuration. Firebase Admin credentials used for account/credit storage remain server-side and must still be configured.
+
 ## Authentication and security
 - GitHub accounts use the GitHub OAuth authorization-code flow with state + PKCE and an HTTP-only session cookie in browsers. Native Android uses a one-time deep-link ticket exchanged with the API.
 - Creator accounts use Firebase Google redirect in browsers and system-browser Google OAuth in the APK. The server provisions the Google profile and starter credit ledger.

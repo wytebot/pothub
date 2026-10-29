@@ -8,7 +8,7 @@ The API function was not reachable. `vercel.json` now rewrites `/api/:path*` to 
 
 Pothub already reads its Firebase web configuration through `src/lib/firebase.js`. Keep the Firebase values already configured in your SDK/Vercel project; do not create duplicate variables. Only add a missing value if Google sign-in reports that the SDK is not configured:
 
-- `VITE_FIREBASE_API_KEY` — Firebase Console → Project settings → General → Your apps → Web app config → `apiKey`.
+- `Firebase Web SDK configuration embedded in src/lib/firebase.js (no VITE_FIREBASE_API_KEY variable required)` — Firebase Console → Project settings → General → Your apps → Web app config → `apiKey`.
 - `VITE_FIREBASE_AUTH_DOMAIN` — set to your **app's own hostname** (e.g. `your-pothub-project.vercel.app`, no `https://`). `vercel.json` proxies `/__/auth/*` from that host to `<project-id>.firebaseapp.com`, so Google sign-in no longer depends on `firebaseapp.com` being reachable. Add the same hostname under Firebase Authentication → Settings → Authorized domains.
 - `VITE_FIREBASE_PROJECT_ID` — same web config → `projectId`.
 - `VITE_FIREBASE_APP_ID` — same web config → `appId`.
