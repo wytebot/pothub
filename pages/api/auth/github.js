@@ -22,7 +22,7 @@ export default async function githubStart(req, res) {
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ error: 'Method not allowed' }); }
   try {
     const clientId = String(process.env.GITHUB_CLIENT_ID || process.env.GITHUB_OAUTH_CLIENT_ID || process.env.GH_CLIENT_ID || '').trim();
-    if (!clientId || !String(process.env.GITHUB_CLIENT_SECRET || process.env.GITHUB_OAUTH_CLIENT_SECRET || process.env.GH_CLIENT_SECRET || '').trim()) throw new Error('GitHub OAuth is not configured. Add GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in Vercel.');
+    if (!clientId) throw new Error('GitHub OAuth Client ID is missing. Add GITHUB_CLIENT_ID in Vercel. The client secret is only required after GitHub returns to the callback.');
     const secret = String(process.env.SESSION_SECRET || '');
     if (secret.length < 32) throw new Error('SESSION_SECRET must be at least 32 characters.');
     const state = crypto.randomBytes(32).toString('base64url');
