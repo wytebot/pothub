@@ -16,6 +16,7 @@ test('Google and GitHub browser sessions restore through /api/auth/me without a 
 test('Google session endpoint returns the opaque ID created by the shared cookie-session helper', async () => {
   const appServer = await readFile(new URL('../server/app.js', import.meta.url), 'utf8');
   const ui = await readFile(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
+  assert.match(appServer, /const sessionData=\{user:profile,authProvider:'google',firebaseUid:decoded.uid,createdAt:Date.now\(\)\}/);
   assert.match(appServer, /const session=await setBrowserSession\(res,sessionData\)/);
   assert.match(appServer, /res\.json\(\{ok:true,session,user:profile,credits:balance\.credits,authProvider:'google'\}\)/);
   assert.match(ui, /if\(session\.session\)\{webSessionToken=session\.session/);

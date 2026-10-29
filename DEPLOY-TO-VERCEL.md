@@ -39,3 +39,10 @@ The Next.js API catch-all at `pages/api/[...path].js` forwards all `/api/*` requ
 5. Test Google login; after Google consent it should establish the backend session and open Creator workspace. Test a refresh to ensure `/api/auth/me` restores the session.
 
 A passing local test suite cannot prove Vercel deployed the new commit or that provider credentials are valid. If `/api/health` is still HTML, inspect the Vercel deployment's commit and Root Directory before changing OAuth credentials.
+
+
+## API handler and authentication diagnostics
+
+The Next.js API catch-all (`pages/api/[...path].js`) lazily imports the Express app and returns JSON if backend initialization fails. It disables Next.js body parsing for Express and enables `externalResolver`. `/api/health` always returns JSON with the status of `APP_URL`, `FRONTEND_URL`, `GITHUB_CLIENT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`, and `SESSION_SECRET`. Explicit `APP_URL` and `FRONTEND_URL` values are recommended for production; if absent, OAuth URLs fall back to the current request host (HTTPS in production).
+
+`FIREBASE_SERVICE_ACCOUNT_JSON` may contain the service-account JSON or a base64-encoded JSON document. The backend captures Firebase initialization errors instead of throwing during module import. A route that needs Firebase returns a JSON configuration error; invalid Google ID tokens return HTTP 401 JSON. Register the exact GitHub OAuth callback reported by `/api/health` in the GitHub OAuth App settings.

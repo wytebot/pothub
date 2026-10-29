@@ -9,7 +9,7 @@ test('Next.js server deployment wraps the full Pothub UI and routes APIs through
   const app = await read('src/ui/App.jsx');
   assert.doesNotMatch(config, /output:\s*'export'/);
   assert.match(page, /import\('\.\.\/src\/ui\/App\.jsx'\)/);
-  assert.match(api, /export default function pothubApi/);
+  assert.match(api, /export default async function pothubApi/);
   assert.match(api, /bodyParser: false/);
   assert.match(app, /\/api\/auth\/github/);
   assert.match(app, /signInWithPopup\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
@@ -53,8 +53,10 @@ test('frontend uses Next.js public environment variables rather than Vite import
 });
 test('all health and auth endpoints are routed through the Next.js API catch-all', async () => {
   const entry = await read('pages/api/[...path].js');
-  assert.match(entry, /import app from '\.\.\/\.\.\/server\/app\.js'/);
-  assert.match(entry, /return app\(req, res\)/);
+  assert.match(entry, /import\('\.\.\/\.\.\/server\/app\.js'\)/);
+  assert.match(entry, /app\(req, res\)/);
+  assert.match(entry, /externalResolver: true/);
+  assert.match(entry, /status\(500\)/);
   const app = await read('src/ui/App.jsx');
   assert.match(app, /\/api\/auth\/github/);
   assert.match(app, /signInWithPopup\(firebaseAuth,new GoogleAuthProvider\(\)\)/);

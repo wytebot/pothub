@@ -2,25 +2,78 @@ import crypto from 'node:crypto';
 import { sealData, unsealData } from '@hapi/iron';
 import { getApps, initializeApp, applicationDefault, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { grantDocumentId } from './billing-safety.js';
+
+function parseServiceAccount(rawValue){
+  if(rawValue && typeof rawValue === 'object') return rawValue;
+  const raw=String(rawValue||'').trim();
+  if(!raw) return null;
+  const candidates=[];
+  const unquoted=raw.replace(/^['"]|['"]$/g,'').trim();
+  candidates.push(unquoted);
+  if(unquoted.startsWith('base64:')) candidates.push(Buffer.from(unquoted.slice(7),'base64').toString('utf8'));
+  // Support deployments that store the whole JSON document as base64.
+  if(!unquoted.startsWith('{') && /^[A-Za-z0-9+/=_-]+$/.test(unquoted)) {
+    try { candidates.push(Buffer.from(unquoted,'base64').toString('utf8')); } catch {}
+  }
+  candidates.push(unquoted.replace(/\\n/g,'\n'));
+  let lastError;
+  for(const candidate of candidates){
+    try {
+      const parsed=JSON.parse(candidate);
+      if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)) throw new Error('service account JSON must be an object');
+      return parsed;
+    } catch(e){ lastError=e; }
+  }
+  throw new Error(`FIREBASE_SERVICE_ACCOUNT_JSON is malformed: ${lastError?.message||'could not parse JSON'}`);
+}
 
 function initFirebaseAdmin(){
   if(getApps().length) return getApps()[0];
   const raw=process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if(raw){
-    const parsed=JSON.parse(raw);
-    initializeApp({credential:cert(parsed), ...(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:{})});
+  const projectId=String(process.env.FIREBASE_PROJECT_ID||'').trim();
+  if(String(raw||'').trim()){
+    const parsed=parseServiceAccount(raw);
+    if(!parsed.project_id && !projectId) throw new Error('Firebase service account is missing project_id; set FIREBASE_PROJECT_ID if the JSON omits it.');
+    if(!parsed.client_email || !parsed.private_key) throw new Error('Firebase service account JSON must include client_email and private_key.');
+    initializeApp({credential:cert(parsed), ...(projectId?{projectId}:{})});
   } else {
-    initializeApp({credential:applicationDefault(), ...(process.env.FIREBASE_PROJECT_ID?{projectId:process.env.FIREBASE_PROJECT_ID}:{})});
+    // ADC is supported, but failure is captured below and never crashes import.
+    initializeApp({credential:applicationDefault(), ...(projectId?{projectId}:{})});
   }
   return getApps()[0];
 }
 let firestoreInstance=null, firebaseInitError=null;
-try { initFirebaseAdmin(); firestoreInstance=getFirestore(); } catch(e) { firebaseInitError=e; }
+function ensureFirebaseInitialized(){
+  if(firestoreInstance) return firestoreInstance;
+  try {
+    initFirebaseAdmin();
+    firestoreInstance=getFirestore();
+    firebaseInitError=null;
+    return firestoreInstance;
+  } catch(e) {
+    firebaseInitError=e;
+    console.error('[Pothub Firebase Admin initialization]', String(e?.message||e).slice(0,300));
+    return null;
+  }
+}
+// Attempt initialization once at cold start to preserve existing Firestore flows;
+// failures are captured and reported only by routes that need Firebase.
+ensureFirebaseInitialized();
 export const firestore=firestoreInstance;
 export const databaseReady=!!firestoreInstance;
 export function databaseError(){return firebaseInitError;}
-
+export function firebaseAdminStatus(){
+  const configured=!!String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON||'').trim();
+  if(firebaseInitError) return {configured,error:String(firebaseInitError.message||'Firebase Admin initialization failed').slice(0,220)};
+  return {configured,ready:!!firestoreInstance,error:null};
+}
+export function getAdminAuth(){
+  ensureFirebaseInitialized();
+  if(!firestoreInstance) throw new Error('Firebase Admin is not configured or JSON is malformed');
+  return getAuth();
+}
 const primaryKeys={profiles:'github_id',credit_orders:'reference',credit_ledger:'id',repair_tasks:'id'};
 function docId(table,row){
   const k=primaryKeys[table]||'id';
@@ -121,8 +174,9 @@ export const flwBase=process.env.FLW_MODE==='production'?'https://api.flutterwav
 export function origin(req){
   const configured=String(process.env.APP_URL||'').trim();
   if(configured){let u;try{u=new URL(configured)}catch{throw Error('APP_URL must be a valid absolute URL.')}if(process.env.NODE_ENV==='production'&&u.protocol!=='https:')throw Error('APP_URL must use HTTPS in production.');return u.origin}
-  if(process.env.NODE_ENV==='production')throw Error('APP_URL is required in production; set it to this Vercel environment deployment URL.');
-  return 'http://localhost:3000';
+  const host=String(req?.headers?.['x-forwarded-host']||req?.headers?.host||'').split(',')[0].trim();
+  if(host && /^[A-Za-z0-9.:[\]-]+$/.test(host)) return `${process.env.NODE_ENV==='production'?'https':'http'}://${host}`;
+  return process.env.NODE_ENV==='production'?'https://localhost':'http://localhost:3000';
 }
 export function randomRef(p='fp'){return `${p}_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`}
 const secure=()=>process.env.NODE_ENV==='production'?'; Secure':'';
