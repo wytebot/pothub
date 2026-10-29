@@ -1,0 +1,9 @@
+POTHUB NEXT.JS MIGRATION NOTES
+
+- Frontend framework: Next.js 14 with static export to out/. Vite build configuration and Vite-only worker URL syntax have been removed from the app build path.
+- Existing Express API and Vercel functions remain under server/ and api/.
+- Capacitor webDir is out/.
+- PDF.js worker is copied from node_modules into public/pdf.worker.mjs during the Next.js build.
+- Service worker is stamped with a deployment-specific cache name; existing browser clients can be prompted to refresh.
+- Configure Vercel variables using ENVIRONMENT_VARIABLES.md. NEXT_PUBLIC_* values are compiled into the static frontend at build time.
+- Verification must include npm install, npm run build, npm run check, API health, GitHub and Google login, billing sandbox, and Android cap sync. Static tests do not certify live integrations.

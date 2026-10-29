@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+const read = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+test('Next.js static export wraps the existing full Pothub UI without removing API entrypoints', async () => {
+  const config = await read('next.config.mjs');
+  const page = await read('pages/index.jsx');
+  const api = await read('api/[...path].js');
+  const app = await read('src/ui/App.jsx');
+  assert.match(config, /output:\s*'export'/);
+  assert.match(page, /import\('\.\.\/src\/ui\/App\.jsx'\)/);
+  assert.match(api, /export default app/);
+  assert.match(app, /\/api\/auth\/github/);
+  assert.match(app, /signInWithPopup\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
+  assert.match(app, /\/api\/billing\/checkout/);
+});
+test('new deployments stamp the service worker and show a refresh prompt', async () => {
+  const stamp = await read('scripts/stamp-service-worker.mjs');
+  const notice = await read('src/ui/DeploymentUpdateNotice.jsx');
+  const worker = await read('public/sw.js');
+  assert.match(stamp, /VERCEL_DEPLOYMENT_ID/);
+  assert.match(stamp, /pothub-shell-v6-\$\{safeId\}/);
+  assert.match(notice, /Pothub has been updated/);
+  assert.match(notice, /Refresh now/);
+  assert.match(notice, /POTHUB_SKIP_WAITING/);
+  assert.match(worker, /hadPreviousShell/);
+});
+test('frontend uses Next.js public environment variables rather than Vite import.meta', async () => {
+  const app = await read('src/ui/App.jsx');
+  const firebase = await read('src/lib/firebase.js');
+  const video = await read('src/lib/video-adapters/gemini.js');
+  assert.doesNotMatch(app + firebase + video, /import\.meta\.env/);
+  assert.match(app, /process\.env\.NEXT_PUBLIC_API_BASE/);
+  assert.doesNotMatch(app, /pdf\.worker\.mjs\?url/);
+  const prep = await read('scripts/prepare-next-assets.mjs');
+  const pkg = JSON.parse(await read('package.json'));
+  assert.match(prep, /pdf\.worker\.mjs/);
+  assert.match(pkg.scripts.build, /prepare-next-assets\.mjs/);
+  assert.doesNotMatch(pkg.scripts.build, /vite/);
+  assert.match(firebase, /process\.env\.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN/);
+});

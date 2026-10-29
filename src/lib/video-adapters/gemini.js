@@ -1,0 +1,9 @@
+import {native,getNativeSession} from '../platform';
+const API=process.env.NEXT_PUBLIC_API_BASE||'';
+async function post(path,body,timeoutMs=30000){const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),timeoutMs);try{const headers={'Content-Type':'application/json'};if(native()){const token=await getNativeSession();if(token)headers.Authorization=`Bearer ${token}`}const r=await fetch(`${API}${path}`,{method:'POST',credentials:'include',headers,body:JSON.stringify(body),signal:ctrl.signal});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||`Video request failed (${r.status})`)}return r;}catch(e){if(e.name==='AbortError')throw new Error('Video request timed out. Retry in a moment.');throw e}finally{clearTimeout(timer)}}
+export const geminiVideo={
+ async submit(prompt,options,key,model='gemini-omni-1.1-flash'){const normalized={aspectRatio:options?.aspectRatio||'16:9'};const r=await post('/api/video/submit',{prompt,options:normalized,key,model},60000);const d=await r.json();if(!d.jobId)throw new Error('Video provider did not return a job ID.');return d.jobId;},
+ async status(jobId,key){const r=await post('/api/video/status',{jobId,key});return r.json();},
+ async fetchResult(jobId,key){const status=await this.status(jobId,key);if(!status.resultUrl||status.state!=='ready')throw new Error('Video is not ready yet.');const r=await post('/api/video/result',{jobId,key,resultUrl:status.resultUrl},120000);const blob=await r.blob();const mime=String(r.headers.get('content-type')||blob.type||'').split(';')[0].toLowerCase();if(!/^video\/(mp4|webm)$/i.test(mime)||!blob.size||blob.size>150*1024*1024)throw new Error('Video format or size is not supported.');return {blob,creditsRemaining:Number(r.headers.get('X-Pothub-Credits-Remaining')),creditsCharged:Number(r.headers.get('X-Pothub-Credits-Charged')||0)};},
+ async cancel(jobId,key){const r=await post('/api/video/cancel',{jobId,key});return r.json();}
+};
