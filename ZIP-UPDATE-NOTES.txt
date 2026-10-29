@@ -1,0 +1,13 @@
+Pothub browser OAuth + Vercel deployment repair bundle
+
+- App source is placed at the ZIP ROOT (package.json, vercel.json, src/, server/, api/).
+- Removes the broad /api/:path* rewrite that could strip API endpoint paths.
+- Adds Vercel filesystem catch-all api/[...path].js for nested API routes.
+- Adds a GitHub Actions production deploy workflow.
+- Workflow uses npm ci when package-lock.json exists, and npm install when it does not, avoiding a missing-lockfile install failure.
+
+Important:
+1. Extract the ZIP and commit/push its ROOT CONTENTS to the repository root (do not commit an extra enclosing folder).
+2. Add GitHub Actions repository secrets VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID.
+3. This ZIP does not itself deploy to your Vercel account. The workflow deploys after the files are pushed and secrets are configured.
+4. Keep GitHub OAuth credentials in Vercel Environment Variables. Register the callback URL shown by /api/health for your deployed domain in the GitHub OAuth App settings.

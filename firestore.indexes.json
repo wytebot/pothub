@@ -1,0 +1,47 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "credit_ledger",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "reference",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "delta",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "credit_orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "github_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "idempotency_key",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "credit_orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "reference",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "github_id",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
