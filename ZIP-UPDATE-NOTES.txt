@@ -1,9 +1,9 @@
-POTHUB NEXT.JS MIGRATION NOTES
+POTHUB NEXT.JS MIGRATION — ROOT DEPLOYMENT FIX
 
-- Frontend framework: Next.js 14 with static export to out/. Vite build configuration and Vite-only worker URL syntax have been removed from the app build path.
-- Existing Express API and Vercel functions remain under server/ and api/.
-- Capacitor webDir is out/.
-- PDF.js worker is copied from node_modules into public/pdf.worker.mjs during the Next.js build.
-- Service worker is stamped with a deployment-specific cache name; existing browser clients can be prompted to refresh.
-- Configure Vercel variables using ENVIRONMENT_VARIABLES.md. NEXT_PUBLIC_* values are compiled into the static frontend at build time.
-- Verification must include npm install, npm run build, npm run check, API health, GitHub and Google login, billing sandbox, and Android cap sync. Static tests do not certify live integrations.
+This ZIP has package.json, next.config.mjs, vercel.json, pages/, api/, server/, and src/ at the ZIP ROOT.
+
+The reported Vercel ENOENT /vercel/path0/package.json cannot be repaired by changing app code when Vercel is building a Git commit that does not contain package.json at its configured Root Directory.
+
+Read DEPLOY-TO-VERCEL.md before uploading. Replace the GitHub main branch contents with the contents of this ZIP (not the ZIP file itself), or point Vercel Root Directory at the folder containing package.json. The previous failing log used commit 5b44533; deploy a new commit.
+
+Framework: Next.js 14. Vite is not used to build this app. Existing server/API integrations and Capacitor files are retained. Service worker deployment versioning and refresh prompt are retained.
