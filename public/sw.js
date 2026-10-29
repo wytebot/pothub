@@ -1,5 +1,92 @@
-const CACHE='pothub-shell-v5';
-const SHELL=['/','/index.html','/manifest.webmanifest','/icons/pothub-192.png','/icons/pothub-512.png','/icons/pothub-maskable-512.png','/icons/pothub.svg'];
-self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(CACHE);await Promise.all(SHELL.map(async path=>{try{const r=await fetch(path,{cache:'reload'});if(r.ok)await cache.put(path,r)}catch{}}));try{const r=await fetch('/index.html',{cache:'reload'});if(r.ok){await cache.put('/index.html',r.clone());const html=await r.text();const assets=[...html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css))(?:\?[^"']*)?["']/g)].map(m=>m[1]).filter(x=>x.startsWith('/assets/'));await Promise.all(assets.map(async path=>{try{const a=await fetch(path,{cache:'reload'});if(a.ok)await cache.put(path,a)}catch{}}))}}catch{}await self.skipWaiting()})())});
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',event=>{const req=event.request;if(req.method!=='GET')return;const url=new URL(req.url);if(url.origin!==self.location.origin||url.pathname.startsWith('/api/'))return;if(req.mode==='navigate'){event.respondWith(fetch(req).then(res=>{if(res.ok){const copy=res.clone();caches.open(CACHE).then(cache=>cache.put('/index.html',copy))}return res}).catch(()=>caches.match('/index.html').then(res=>res||caches.match('/'))));return}if(url.pathname.startsWith('/assets/')||url.pathname.startsWith('/icons/')){event.respondWith(caches.match(req).then(cached=>cached||fetch(req).then(res=>{if(res.ok)caches.open(CACHE).then(cache=>cache.put(req,res.clone()));return res})))} });
+const CACHE = 'pothub-shell-v6';
+const SHELL = [
+  '/',
+  '/index.html',
+  '/manifest.webmanifest',
+  '/icons/pothub-192.png',
+  '/icons/pothub-512.png',
+  '/icons/pothub-maskable-512.png',
+  '/icons/pothub.svg'
+];
+
+function hasSensitiveAuthParams(url) {
+  return ['code', 'state', 'auth_ticket', 'ticket', 'auth_code', 'access_token', 'id_token']
+    .some(key => url.searchParams.has(key));
+}
+
+function isAuthOrApiPath(pathname) {
+  return pathname.startsWith('/api/') || pathname.startsWith('/__/auth/') ||
+    pathname.startsWith('/auth/') || pathname.startsWith('/login') ||
+    pathname.startsWith('/logout') || pathname.startsWith('/oauth/');
+}
+
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    // Only seed the offline shell and fixed icons. Never cache auth/API responses.
+    await Promise.all(SHELL.map(async path => {
+      try {
+        const response = await fetch(path, { cache: 'no-store' });
+        if (response.ok && !response.redirected) await cache.put(path, response);
+      } catch { /* offline during installation */ }
+    }));
+    await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key.startsWith('pothub-shell-') && key !== CACHE)
+      .map(key => caches.delete(key)));
+    await self.clients.claim();
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) client.postMessage({ type: 'POTHUB_SW_UPDATED', cache: CACHE });
+  })());
+});
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || isAuthOrApiPath(url.pathname) || hasSensitiveAuthParams(url)) return;
+
+  if (request.mode === 'navigate') {
+    // Always prefer the live deployment. Never substitute a cached shell for an
+    // OAuth return or a failed navigation carrying authentication parameters.
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request, { cache: 'no-store' });
+        if (response.ok && !response.redirected && url.pathname === '/' && !url.search) {
+          const copy = response.clone();
+          const cache = await caches.open(CACHE);
+          await cache.put('/', copy);
+          await cache.put('/index.html', copy.clone());
+        }
+        return response;
+      } catch (error) {
+        if (url.search || url.pathname !== '/') throw error;
+        const cached = await caches.match('/index.html') || await caches.match('/');
+        if (cached) return cached;
+        throw error;
+      }
+    })());
+    return;
+  }
+
+  // Vite assets are content-hashed; icons are immutable app shell resources.
+  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok && !response.redirected) await cache.put(request, response.clone());
+      return response;
+    })());
+  }
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'POTHUB_SKIP_WAITING') self.skipWaiting();
+});
