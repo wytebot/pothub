@@ -1,7 +1,0 @@
-{
-  "appId": "ai.pothub.app",
-  "appName": "Pothub",
-  "webDir": "dist",
-  "server": {"androidScheme":"https","allowNavigation":["github.com","api.github.com","generativelanguage.googleapis.com","f4bexperience.flutterwave.com","developersandbox-api.flutterwave.com"]},
-  "plugins": {"StatusBar":{"style":"DARK","backgroundColor":"#0d1117"},"SplashScreen":{"launchShowDuration":600,"backgroundColor":"#0d1117","showSpinner":false}}
-}
