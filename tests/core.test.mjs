@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PACKS, calculatePack, OPERATIONS } from '../server/pricing.js';
 import { validateRepoName, parseCsv } from './helpers.js';
-import { isVerifiedPayment, isValidWebhookSecret, grantDocumentId } from '../server/billing-safety.js';
+import { isVerifiedPayment, isValidWebhookSecret, grantDocumentId, validateCommitPayload } from '../server/billing-safety.js';
 import { boundPrompt, parseModelJson } from '../server/ai-safety.js';
 
 test('repo names reject traversal and invalid GitHub names',()=>{assert.equal(validateRepoName('my-repo'),true);assert.equal(validateRepoName('../repo'),false);assert.equal(validateRepoName('has space'),false)});
@@ -36,4 +36,13 @@ test('credit grant marker is stable per user and reference and separated by user
   assert.notEqual(grantDocumentId('user-1','order-1'),grantDocumentId('user-2','order-1'));
   assert.notEqual(grantDocumentId('user-1','order-1'),grantDocumentId('user-1','order-2'));
   assert.throws(()=>grantDocumentId('','order-1'));
+});
+
+
+test('commit validation rejects traversal, duplicate paths, secrets, and oversized patches',()=>{
+  assert.equal(validateCommitPayload({owner:'owner',repo:'repo',baseBranch:'main',files:[{path:'src/app.js',content:'export default true;'}]}),true);
+  assert.throws(()=>validateCommitPayload({owner:'owner',repo:'repo',baseBranch:'main',files:[{path:'../.env',content:'x'}]}),/unsafe|sensitive/i);
+  assert.throws(()=>validateCommitPayload({owner:'owner',repo:'repo',baseBranch:'main',files:[{path:'src/a.js',content:'x'},{path:'src/a.js',content:'y'}]}),/Duplicate/);
+  assert.throws(()=>validateCommitPayload({owner:'owner',repo:'repo',baseBranch:'main',files:[{path:'src/key.txt',content:'-----BEGIN PRIVATE KEY-----'}]}),/secret/i);
+  assert.throws(()=>validateCommitPayload({owner:'owner',repo:'repo',baseBranch:'main',files:[{path:'src/a.js',content:'x'.repeat(400001)}]}),/too large|400 KB/i);
 });

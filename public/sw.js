@@ -1,5 +1,34 @@
-const CACHE='pothub-shell-v5';
-const SHELL=['/','/index.html','/manifest.webmanifest','/icons/pothub-192.png','/icons/pothub-512.png','/icons/pothub-maskable-512.png','/icons/pothub.svg'];
-self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(CACHE);await Promise.all(SHELL.map(async path=>{try{const r=await fetch(path,{cache:'reload'});if(r.ok)await cache.put(path,r)}catch{}}));try{const r=await fetch('/index.html',{cache:'reload'});if(r.ok){await cache.put('/index.html',r.clone());const html=await r.text();const assets=[...html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css))(?:\?[^"']*)?["']/g)].map(m=>m[1]).filter(x=>x.startsWith('/assets/'));await Promise.all(assets.map(async path=>{try{const a=await fetch(path,{cache:'reload'});if(a.ok)await cache.put(path,a)}catch{}}))}}catch{}await self.skipWaiting()})())});
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',event=>{const req=event.request;if(req.method!=='GET')return;const url=new URL(req.url);if(url.origin!==self.location.origin||url.pathname.startsWith('/api/'))return;if(req.mode==='navigate'){event.respondWith(fetch(req).then(res=>{if(res.ok){const copy=res.clone();caches.open(CACHE).then(cache=>cache.put('/index.html',copy))}return res}).catch(()=>caches.match('/index.html').then(res=>res||caches.match('/'))));return}if(url.pathname.startsWith('/assets/')||url.pathname.startsWith('/icons/')){event.respondWith(caches.match(req).then(cached=>cached||fetch(req).then(res=>{if(res.ok)caches.open(CACHE).then(cache=>cache.put(req,res.clone()));return res})))} });
+const BASE = new URL('.', self.registration.scope).pathname;
+const CACHE = 'pothub-shell-v6';
+const asset = path => `${BASE}${path.replace(/^\//, '')}`;
+const SHELL = [asset(''), asset('index.html'), asset('manifest.webmanifest'), asset('icons/pothub-192.png'), asset('icons/pothub-512.png'), asset('icons/pothub-maskable-512.png'), asset('icons/pothub.svg')];
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.all(SHELL.map(async path => { try { const response = await fetch(path, { cache: 'reload' }); if (response.ok) await cache.put(path, response); } catch {} }));
+    try {
+      const response = await fetch(asset('index.html'), { cache: 'reload' });
+      if (response.ok) {
+        await cache.put(asset('index.html'), response.clone());
+        const html = await response.text();
+        const assets = [...html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css))(?:\?[^"']*)?["']/g)].map(match => match[1]).filter(path => path.includes('/assets/'));
+        await Promise.all(assets.map(async path => { try { const item = await fetch(path, { cache: 'reload' }); if (item.ok) await cache.put(path, item); } catch {} }));
+      }
+    } catch {}
+    await self.skipWaiting();
+  })());
+});
+self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).then(response => { if (response.ok) caches.open(CACHE).then(cache => cache.put(asset('index.html'), response.clone())); return response; }).catch(() => caches.match(asset('index.html')).then(response => response || caches.match(asset('')))));
+    return;
+  }
+  if (url.pathname.startsWith(BASE + 'assets/') || url.pathname.startsWith(BASE + 'icons/')) {
+    event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => { if (response.ok) caches.open(CACHE).then(cache => cache.put(request, response.clone())); return response; })));
+  }
+});

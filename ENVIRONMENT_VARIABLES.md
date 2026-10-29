@@ -9,12 +9,12 @@ The API function was not reachable. `vercel.json` now rewrites `/api/:path*` to 
 Pothub already reads its Firebase web configuration through `src/lib/firebase.js`. Keep the Firebase values already configured in your SDK/Vercel project; do not create duplicate variables. Only add a missing value if Google sign-in reports that the SDK is not configured:
 
 - `VITE_FIREBASE_API_KEY` — Firebase Console → Project settings → General → Your apps → Web app config → `apiKey`.
-- `VITE_FIREBASE_AUTH_DOMAIN` — set to your **app's own hostname** (e.g. `your-pothub-project.vercel.app`, no `https://`). `vercel.json` proxies `/__/auth/*` from that host to `<project-id>.firebaseapp.com`, so Google sign-in no longer depends on `firebaseapp.com` being reachable. Add the same hostname under Firebase Authentication → Settings → Authorized domains.
+- `VITE_FIREBASE_AUTH_DOMAIN` — use the Firebase web app’s actual `authDomain` from Project settings (normally `<project-id>.firebaseapp.com`, without `https://`). Do not set this to the GitHub Pages URL. Browser Google sign-in uses a popup and exchanges the Firebase ID token with the Vercel API; add `wytebot.github.io` (and any other frontend hostname) under Firebase Authentication → Settings → Authorized domains.
 - `VITE_FIREBASE_PROJECT_ID` — same web config → `projectId`.
 - `VITE_FIREBASE_APP_ID` — same web config → `appId`.
-- `VITE_API_BASE` — **required for the Android APK**. The APK is served from its own local origin, so it must call the Vercel API by absolute URL: set it to `https://your-api.vercel.app` (no trailing `/api`) and run `npm run build` before `cap sync`. Leave blank only for the browser build served from the same domain as the API. If the API is on a separate domain, use only its origin, e.g. `https://your-api-project.vercel.app` (no trailing `/api`).
+- `VITE_API_BASE` — required for GitHub Pages and the Android APK. Set it to `https://pothub-self.vercel.app` (API origin only; no `/api` suffix). GitHub Pages workflow injects it automatically. `npm run cap:sync` now blocks the APK build if this and the four Firebase public config values are missing.
 
-The Firebase browser SDK remains the source used by the app. If these four values are already configured in your existing Vercel project, keep them; do not create duplicate variables. They are public web-app configuration, not secrets. Never put service-account JSON, OAuth client secrets, Gemini keys, or Flutterwave secrets in a `VITE_*` variable.
+The Firebase browser SDK reads these four public values at build time. Vercel environment variables do **not** automatically reach GitHub Actions. For GitHub Pages, add all four as GitHub Actions repository secrets named exactly `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID`; the Pages workflow now fails early if any are missing. They are public web-app configuration, not server secrets. Never put service-account JSON, OAuth client secrets, Gemini keys, or Flutterwave secrets in a `VITE_*` variable.
 
 ## 2. Server/API variables (Vercel → Project → Settings → Environment Variables)
 
@@ -52,11 +52,15 @@ Routes: `GET /api/vercel/connect`, `GET /api/vercel/callback`, `POST /api/vercel
 
 1. **GitHub Developer login:** create the OAuth App above and set the exact callback URL to `${APP_URL}/api/auth/github/callback`. The browser opens GitHub's own authorization page through `/api/auth/github`; the server exchanges the code and returns the browser to `FRONTEND_URL`.
 2. **Google Creator login:** in Firebase Console → Authentication → Sign-in method, enable Google. In Authentication → Settings, add the production frontend hostname and any Preview hostname you actually use under Authorized domains. The browser Firebase SDK already reads the existing `VITE_FIREBASE_*` configuration. Keep the values already configured in Vercel; only add them if they are actually missing.
-3. **Recommended browser deployment:** keep the frontend and API on the same Vercel domain and leave `VITE_API_BASE` blank; this avoids cross-site cookie restrictions. If you split frontend/API across domains, `APP_URL` must point to the API host, `FRONTEND_URL` and `APP_ORIGIN` must point to the browser host, and `VITE_API_BASE` must point to the API origin. Cross-site session cookies may be blocked by browser privacy settings, so a same-origin deployment is the reliable choice unless cookie/CORS behavior is deliberately configured and tested.
+3. **GitHub Pages + Vercel:** set `APP_URL=https://pothub-self.vercel.app`, `FRONTEND_URL=https://wytebot.github.io/pothub/`, and `APP_ORIGIN=https://wytebot.github.io`. Set `VITE_API_BASE=https://pothub-self.vercel.app` in the Pages build. GitHub Developer login exchanges a short-lived one-time handoff ticket for a signed API bearer session, avoiding reliance on third-party cookies. Browser bearer sessions are kept in `sessionStorage` and disappear when that tab session ends; XSS protection remains important. For Vercel-hosted same-origin frontend builds, keep `VITE_API_BASE` blank if the API is served on that same domain.
 4. **Database:** the server requires Firebase Admin credentials and Firestore. Create/enable Firestore in the Firebase project and check billing/quotas for your usage; this code does not require Firebase Storage.
 5. **Redeploy:** changing Vercel environment variables does not update an already-built frontend or running deployment until a new deployment is made. Trigger a redeploy after changing them.
 
-## 5. Security / verification
+## 5. Notifications and platform compatibility
+
+Pothub currently has in-app progress/error/status feedback. This source does not contain a configured remote push-notification pipeline (FCM/Web Push) or Capacitor Local Notifications plugin; do not assume OS push notifications are active. Adding them later requires explicit browser permission/service-worker handling and a native Capacitor notification plugin with platform permissions. API operations, OAuth handoff, credit operations, diagnosis, and media delivery use the Vercel backend from both browser and Capacitor.
+
+## 6. Security / verification
 
 - Do not share tokens or service-account JSON in chat, screenshots, client-side source, or repository commits. If exposed, revoke/rotate them.
 - Configure the Flutterwave webhook URL and verify its secret according to the existing v4 billing setup.

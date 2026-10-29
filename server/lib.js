@@ -120,17 +120,30 @@ export const db=new FirebaseDatabase();
 export const flwBase=process.env.FLW_MODE==='production'?'https://api.flutterwave.cloud':'https://developersandbox-api.flutterwave.com';
 export function origin(req){
   // Never trust an arbitrary Host or forwarded-host header for OAuth/payment redirects.
-  const configured=process.env.APP_URL;
-  if(configured){let u;try{u=new URL(configured)}catch{throw Error('APP_URL must be a valid absolute URL.')}if(process.env.NODE_ENV==='production'&&u.protocol!=='https:')throw Error('APP_URL must use HTTPS in production.');return u.origin}
+  // GitHub Pages serves static files and cannot host these Express API routes or their
+  // same-origin session cookies. If APP_URL was mistakenly set to a Pages URL, ignore it
+  // and fall back to the actual Vercel deployment origin rather than sending OAuth there.
+  const configured=String(process.env.APP_URL||'').trim();
+  if(configured){
+    let u;try{u=new URL(configured)}catch{throw Error('APP_URL must be a valid absolute URL.')}
+    if(u.hostname==='github.io'||u.hostname.toLowerCase().endsWith('.github.io')){
+      console.warn('[Pothub config] APP_URL points to GitHub Pages; using the Vercel deployment origin instead.');
+    } else {
+      if(process.env.NODE_ENV==='production'&&u.protocol!=='https:')throw Error('APP_URL must use HTTPS in production.');
+      if(!['http:','https:'].includes(u.protocol)||u.username||u.password||u.pathname!=='/'&&u.pathname!==''||u.search||u.hash)throw Error('APP_URL must be an HTTP(S) origin without a path or credentials.');
+      return u.origin;
+    }
+  }
   const deployment=process.env.VERCEL_PROJECT_PRODUCTION_URL||process.env.VERCEL_URL;
   if(deployment){const host=String(deployment).replace(/^https?:\/\//,'').split('/')[0];if(!/^[a-z0-9.-]+$/i.test(host))throw Error('Vercel deployment hostname is invalid.');return `https://${host}`}
   return 'https://ai.pothub.app';
 }
 export function randomRef(p='fp'){return `${p}_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`}
 const secure=()=>process.env.NODE_ENV==='production'?'; Secure':'';
-export async function setSession(res,data){if(!process.env.SESSION_SECRET||process.env.SESSION_SECRET.length<32)throw Error('SESSION_SECRET must be at least 32 characters.');const value=await sealData({...data,kind:'session'},{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});res.append('Set-Cookie',`kithub_session=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800${secure()}`)}
+const sessionSameSite=()=>{try{const host=new URL(String(process.env.FRONTEND_URL||'')).hostname.toLowerCase();return host==='github.io'||host.endsWith('.github.io')?'None':'Lax'}catch{return 'Lax'}};
+export async function setSession(res,data){if(!process.env.SESSION_SECRET||process.env.SESSION_SECRET.length<32)throw Error('SESSION_SECRET must be at least 32 characters.');const value=await sealData({...data,kind:'session'},{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});res.append('Set-Cookie',`kithub_session=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=${sessionSameSite()}; Max-Age=604800${secure()}`);return value}
 export async function getSession(req){try{if(!process.env.SESSION_SECRET)return null;const auth=String(req.headers.authorization||'');if(auth.startsWith('Bearer ')){const d=await unsealData(auth.slice(7),{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});return d.kind==='session'?d:null}const c=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('kithub_session='));if(!c)return null;const d=await unsealData(decodeURIComponent(c.slice('kithub_session='.length)),{password:process.env.SESSION_SECRET,ttl:7*24*60*60*1000});return d.kind==='session'?d:null}catch{return null}}
-export function clearSession(res){res.append('Set-Cookie',`kithub_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure()}`)}
+export function clearSession(res){res.append('Set-Cookie',`kithub_session=; Path=/; HttpOnly; SameSite=${sessionSameSite()}; Max-Age=0${secure()}`)}
 export function redactSecrets(t=''){return String(t).slice(0,25000).replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g,'[REDACTED_GITHUB_TOKEN]').replace(/AIza[0-9A-Za-z_-]{30,}/g,'[REDACTED_GOOGLE_KEY]').replace(/FLWSECK[^\s"']+/g,'[REDACTED_FLUTTERWAVE_KEY]').replace(/(Bearer\s+)[A-Za-z0-9._-]{20,}/gi,'$1[REDACTED]').replace(/((?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi,'$1[REDACTED]')}
 export async function requireUser(req,res){const s=await getSession(req);if(!s?.user?.id||(!s?.githubToken&&s?.authProvider!=='google')){res.status(401).json({error:'Sign in to Pothub to continue.'});return null}return s}
 export async function getCredits(id){if(!databaseReady)throw Error('Credit accounting is unavailable. Configure Firebase Admin and Firestore.');const{data,error}=await db.from('profiles').select('credits').eq('github_id',String(id)).maybeSingle();if(error)throw error;if(!data)throw Error('Your Pothub profile is not initialized. Sign out and reconnect GitHub.');return{credits:Number(data.credits||0),demo:false}}
