@@ -13,15 +13,17 @@ test('Firebase auth domain supports the same-origin auth proxy configuration',as
 test('browser OAuth callbacks establish opaque cookie sessions and redirect straight back to the app',async()=>{const server=await readFile(new URL('../server/app.js',import.meta.url),'utf8');const lib=await readFile(new URL('../server/lib.js',import.meta.url),'utf8');assert.match(server,/await setBrowserSession\(res,sessionData\);res\.setHeader\('Cache-Control','no-store'\);res\.redirect\(authFrontendUrl\(req,\{connected:'github'\}\)\)/);assert.match(server,/await setBrowserSession\(res,googleSession\)/);assert.match(server,/json\(\{ok:true,session,user:profile,credits:balance\.credits,authProvider:'google'\}\)/);assert.match(lib,/pothub_sid=\$\{sid\}/);assert.match(lib,/browser_sessions/);assert.match(lib,/createHash\('sha256'\)\.update\(sid\)/)});
 test('Google and GitHub browser sessions restore through /api/auth/me without a frontend token',async()=>{const appServer=await readFile(new URL('../server/app.js',import.meta.url),'utf8');const ui=await readFile(new URL('../src/ui/App.jsx',import.meta.url),'utf8');assert.match(appServer,/app\.get\('\/api\/auth\/me'/);assert.match(appServer,/await setBrowserSession\(res,sessionData\)/);assert.match(ui,/credentials:'include'/);assert.match(ui,/connectedProvider=authUrl\.searchParams\.get\('connected'\)/);assert.match(ui,/sessionStorage\.removeItem\('pothub-session-v1'\)/)});
 
-test('Google session endpoint returns the opaque ID created by the shared cookie-session helper', async () => {
-  const appServer = await readFile(new URL('../server/app.js', import.meta.url), 'utf8');
+test('Google bearer tokens authenticate directly without calling the google-session endpoint', async () => {
+  const lib = await readFile(new URL('../server/lib.js', import.meta.url), 'utf8');
   const ui = await readFile(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
-  assert.match(appServer, /const sessionData=\{user:profile,authProvider:'google',firebaseUid:decoded.uid,createdAt:Date.now\(\)\}/);
-  assert.match(appServer, /const session=await setBrowserSession\(res,sessionData\)/);
-  assert.match(appServer, /res\.json\(\{ok:true,session,user:profile,credits:balance\.credits,authProvider:'google'\}\)/);
-  assert.match(ui, /if\(session\.session\)\{webSessionToken=session\.session/);
+  const me = await readFile(new URL('../pages/api/auth/me.js', import.meta.url), 'utf8');
+  assert.match(lib, /verifyIdToken\(token,true\)/);
+  assert.match(lib, /googleSessionFromIdToken/);
+  assert.match(ui, /googleIdToken=await user\.getIdToken\(true\)/);
+  assert.doesNotMatch(ui, /\/api\/auth\/google-session/);
+  assert.match(me, /getSession\(req\)/);
 });
 
-test('Firebase redirect callback is processed only after an explicitly marked Google redirect return',async()=>{const ui=await readFile(new URL('../src/ui/App.jsx',import.meta.url),'utf8');assert.match(ui,/function isGoogleRedirectPending\(\).*sessionStorage\.getItem\(GOOGLE_REDIRECT_PENDING\)==='1'/);assert.match(ui,/if\(!isGoogleRedirectPending\(\)\|\|!isGoogleRedirectReturn\(\)\)/);assert.match(ui,/markGoogleRedirectPending\(\);setGoogleRedirectMarker\(true\);await signInWithRedirect/);assert.match(ui,/clearGoogleRedirectState\(\);showError\(redirectError\)/)});
+test('Google sign-in uses an explicit Firebase redirect page and never calls google-session',async()=>{const ui=await readFile(new URL('../src/ui/App.jsx',import.meta.url),'utf8');assert.match(ui,/function isGoogleRedirectPending\(\).*sessionStorage\.getItem\(GOOGLE_REDIRECT_PENDING\)==='1'/);assert.match(ui,/if\(!isGoogleRedirectPending\(\)\|\|!isGoogleRedirectReturn\(\)\)/);assert.match(ui,/markGoogleRedirectPending\(\);setGoogleRedirectMarker\(true\);await signInWithRedirect/);assert.doesNotMatch(ui,/\/api\/auth\/google-session/);assert.match(ui,/screen==='connect-github'\?'Connect GitHub':'Sign in with Google'/)});
 
-test('Developer login clears Google redirect state and only a marked Google return can call the Google session endpoint',()=>{assert.match(app,/const GOOGLE_REDIRECT_MARKER='pothub_google_redirect'/);assert.match(app,/function isGoogleRedirectReturn\(\).*GOOGLE_REDIRECT_MARKER/);assert.match(app,/if\(!isGoogleRedirectPending\(\)\|\|!isGoogleRedirectReturn\(\)\)/);assert.match(app,/if\(provider==='github'\)\{[\s\S]*?clearGoogleRedirectState\(\);googleRedirectPromise=null;/);assert.match(app,/markGoogleRedirectPending\(\);setGoogleRedirectMarker\(true\);await signInWithRedirect/)});
+test('Developer flow clears Google redirect state; Creator flow uses Firebase hosted redirect only',()=>{assert.match(app,/const GOOGLE_REDIRECT_MARKER='pothub_google_redirect'/);assert.match(app,/function isGoogleRedirectReturn\(\).*GOOGLE_REDIRECT_MARKER/);assert.match(app,/if\(!isGoogleRedirectPending\(\)\|\|!isGoogleRedirectReturn\(\)\)/);assert.match(app,/if\(provider==='github'\)\{[\s\S]*?clearGoogleRedirectState\(\);googleRedirectPromise=null;googleIdToken=''/);assert.match(app,/markGoogleRedirectPending\(\);setGoogleRedirectMarker\(true\);await signInWithRedirect/);assert.doesNotMatch(app,/\/api\/auth\/google-session/) });

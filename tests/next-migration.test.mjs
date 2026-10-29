@@ -12,7 +12,9 @@ test('Next.js server deployment wraps the full Pothub UI and routes APIs through
   assert.match(api, /export default async function pothubApi/);
   assert.match(api, /bodyParser: false/);
   assert.match(app, /\/api\/auth\/github/);
-  assert.match(app, /signInWithPopup\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
+  assert.match(app, /signInWithRedirect\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
+  assert.match(app, /Connect GitHub/);
+  assert.match(app, /Sign in with Google/);
   assert.match(app, /\/api\/billing\/checkout/);
 });
 test('Capacitor has a separate static-export build while Vercel keeps server APIs', async () => {
@@ -51,7 +53,7 @@ test('frontend uses Next.js public environment variables rather than Vite import
   assert.doesNotMatch(pkg.scripts.build, /vite/);
   assert.match(firebase, /process\.env\.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN/);
 });
-test('all health and auth endpoints are routed through the Next.js API catch-all', async () => {
+test('critical auth and health endpoints are isolated from the Express catch-all', async () => {
   const entry = await read('pages/api/[...path].js');
   assert.match(entry, /import\('\.\.\/\.\.\/server\/app\.js'\)/);
   assert.match(entry, /app\(req, res\)/);
@@ -59,8 +61,10 @@ test('all health and auth endpoints are routed through the Next.js API catch-all
   assert.match(entry, /status\(500\)/);
   const app = await read('src/ui/App.jsx');
   assert.match(app, /\/api\/auth\/github/);
-  assert.match(app, /signInWithPopup\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
-  const server = await read('server/app.js');
-  assert.match(server, /app\.post\('\/api\/auth\/google-session'/);
-  assert.match(server, /app\.get\('\/api\/auth\/github\/callback'/);
+  assert.match(app, /signInWithRedirect\(firebaseAuth,new GoogleAuthProvider\(\)\)/);
+  assert.doesNotMatch(app, /\/api\/auth\/google-session/);
+  assert.match(await read('pages/api/auth/github.js'), /github\.com\/login\/oauth\/authorize/);
+  assert.match(await read('pages/api/auth/github/callback.js'), /setBrowserSession/);
+  assert.match(await read('pages/api/auth/me.js'), /getSession\(req\)/);
+  assert.match(await read('pages/api/health.js'), /firebaseAdminStatus/);
 });
