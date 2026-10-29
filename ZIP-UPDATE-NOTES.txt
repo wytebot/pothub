@@ -1,0 +1,22 @@
+Pothub browser OAuth + Vercel deployment repair bundle
+
+- App source is placed at the ZIP ROOT (package.json, vercel.json, src/, server/, api/).
+- Removes the broad /api/:path* rewrite that could strip API endpoint paths.
+- Adds Vercel filesystem catch-all api/[...path].js for nested API routes.
+- Adds a GitHub Actions production deploy workflow.
+- Workflow uses npm ci when package-lock.json exists, and npm install when it does not, avoiding a missing-lockfile install failure.
+
+Important:
+1. Extract the ZIP and commit/push its ROOT CONTENTS to the repository root (do not commit an extra enclosing folder).
+2. Add GitHub Actions repository secrets VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID.
+3. This ZIP does not itself deploy to your Vercel account. The workflow deploys after the files are pushed and secrets are configured.
+4. Keep GitHub OAuth credentials in Vercel Environment Variables. Register the callback URL shown by /api/health for your deployed domain in the GitHub OAuth App settings.
+
+
+2026-10-29 authentication follow-up:
+- Developer GitHub login now uses a short-lived, opaque, single-use browser handoff ticket after GitHub OAuth, then exchanges it for a sealed backend session. This avoids relying only on cross-site cookies when the frontend and API are hosted on different origins. The one-time ticket is removed transactionally from Firestore on exchange.
+- Browser API requests use the returned session token from sessionStorage; logout clears it. Native Capacitor ticket exchange remains unchanged.
+- Creator Google sign-in now uses Firebase Auth popup on browser and immediately provisions the Pothub backend session. Popup-blocked browsers fall back to Firebase redirect; startup consumes that redirect result before restoring the signed-in/signed-out screen, preventing the welcome screen race.
+- Google backend session responses now include a sealed session token so browser requests also work when frontend and API origins differ.
+- Added regression tests for browser handoff, session persistence, and popup/redirect Google auth.
+- Verification: 28 automated tests pass; server/app syntax check passes. Vite build could not run in this environment because dependencies are not installed (vite executable unavailable).
