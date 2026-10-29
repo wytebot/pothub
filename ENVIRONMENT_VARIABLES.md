@@ -1,8 +1,8 @@
 # Pothub environment variables and setup
 
-## 1. Browser build variables (Vercel → Project → Settings → Environment Variables)
+## 1. Existing browser SDK configuration
 
-Set these for **Production** and any Preview environment you intend to test:
+Pothub already reads its Firebase web configuration through `src/lib/firebase.js`. Keep the Firebase values already configured in your SDK/Vercel project; do not create duplicate variables. Only add a missing value if Google sign-in reports that the SDK is not configured:
 
 - `VITE_FIREBASE_API_KEY` — Firebase Console → Project settings → General → Your apps → Web app config → `apiKey`.
 - `VITE_FIREBASE_AUTH_DOMAIN` — same web config → `authDomain` (usually `<project-id>.firebaseapp.com`).
@@ -10,7 +10,7 @@ Set these for **Production** and any Preview environment you intend to test:
 - `VITE_FIREBASE_APP_ID` — same web config → `appId`.
 - `VITE_API_BASE` — optional. Leave blank when frontend and API are served from the same Vercel domain. If the API is on a separate domain, use only its origin, e.g. `https://your-api-project.vercel.app` (no trailing `/api`).
 
-These four `VITE_FIREBASE_*` values are public web-app configuration, not secrets. Never put service-account JSON, GitHub/Google client secrets, Vercel access tokens, Gemini keys, or Flutterwave secrets in a `VITE_*` variable.
+The Firebase browser SDK remains the source used by the app. If these four values are already configured in your existing Vercel project, keep them; do not create duplicate variables. They are public web-app configuration, not secrets. Never put service-account JSON, OAuth client secrets, Gemini keys, or Flutterwave secrets in a `VITE_*` variable.
 
 ## 2. Server/API variables (Vercel → Project → Settings → Environment Variables)
 
@@ -30,24 +30,24 @@ These four `VITE_FIREBASE_*` values are public web-app configuration, not secret
 - `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY` — Flutterwave v4 server credentials/encryption key. Obtain these from the Flutterwave dashboard/API credentials for the intended environment. Never use v3 keys or expose them to the browser.
 - `FLW_MODE` — use `production` only with production credentials and a verified production webhook.
 
-## 3. Vercel deployment diagnostics token
+## 3. Vercel OAuth connection for deployment diagnostics
 
-The current **Connect Vercel** button uses a Vercel REST API access token stored on the server. It is **not** a Vercel OAuth client ID/secret pair. To obtain it:
+Pothub uses the existing Vercel OAuth client credentials and a browser redirect. Users click **Connect Vercel**, approve access on Vercel, and return to Pothub. There is no access-token input and no manually pasted token flow.
 
-1. Sign in to Vercel and open your account Settings → Account Tokens (the Account Tokens page).
-2. Create a token with a descriptive name, the narrowest account/team scope that covers the target project, and a short expiry if practical.
-3. Copy it immediately; Vercel may not show the token again.
-4. In the Pothub Vercel project, open Settings → Environment Variables and add `VERCEL_ACCESS_TOKEN` with the token value. Apply it to the environment where you are testing, then redeploy.
-5. Sign in to Pothub as **Developer using GitHub** and press **Connect Vercel**.
+Keep your existing Vercel OAuth variables if already configured. Supported server-only names are `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET`, `VERCEL_OAUTH_CLIENT_ID` / `VERCEL_OAUTH_CLIENT_SECRET`, or `VERCEL_APP_CLIENT_ID` / `VERCEL_APP_CLIENT_SECRET` (the `NEXT_PUBLIC_VERCEL_APP_CLIENT_ID` alias is accepted for the client ID). Do not expose the client secret to the browser.
 
-The backend also accepts `VERCEL_TOKEN` or `VERCEL_API_TOKEN` as aliases, but prefer `VERCEL_ACCESS_TOKEN`. Never use a `VITE_` prefix. If you only have `VERCEL_CLIENT_ID`/`VERCEL_CLIENT_SECRET` from a Vercel OAuth/Sign in with Vercel integration, those do **not** satisfy this implementation; it needs an API access token. Alternatively, paste a personal access token into the field below Connect Vercel; the app encrypts it locally before storing it and sends it only with authenticated log/project requests.
+Configure the exact callback URL in your Vercel OAuth app:
 
-Routes: `POST /api/vercel/connect`, `POST /api/vercel/projects`, `POST /api/vercel/deployments`, and `POST /api/vercel/logs`. These are read-only diagnostics; they do not deploy or change projects. Runtime-log availability depends on the Vercel API endpoint and account/project access; deployment events are not guaranteed to contain full runtime logs.
+`https://YOUR_API_DOMAIN/api/vercel/callback`
+
+Use the API domain configured by `APP_URL`. The OAuth app must allow the scopes `openid`, `email`, `profile`, and `offline_access`, and be granted the Vercel project/deployment read permissions needed by the app. OAuth access/refresh tokens are held inside Pothub's signed HttpOnly session cookie; they are never returned to frontend JavaScript. Access tokens refresh server-side when needed.
+
+Routes: `GET /api/vercel/connect`, `GET /api/vercel/callback`, `POST /api/vercel/disconnect`, `POST /api/vercel/projects`, `POST /api/vercel/deployments`, and `POST /api/vercel/logs`. These are read-only diagnostics; they do not deploy or change projects. Runtime-log availability depends on the Vercel API endpoint and account/project access; deployment events are not guaranteed to contain full runtime logs.
 
 ## 4. Provider setup checklist (browser authentication)
 
 1. **GitHub Developer login:** create the OAuth App above and set the exact callback URL to `${APP_URL}/api/auth/github/callback`. The browser opens GitHub's own authorization page through `/api/auth/github`; the server exchanges the code and returns the browser to `FRONTEND_URL`.
-2. **Google Creator login:** in Firebase Console → Authentication → Sign-in method, enable Google. In Authentication → Settings, add the production frontend hostname and any Preview hostname you actually use under Authorized domains. In Project settings → General, copy the web app config into the four `VITE_FIREBASE_*` variables.
+2. **Google Creator login:** in Firebase Console → Authentication → Sign-in method, enable Google. In Authentication → Settings, add the production frontend hostname and any Preview hostname you actually use under Authorized domains. The browser Firebase SDK already reads the existing `VITE_FIREBASE_*` configuration. Keep the values already configured in Vercel; only add them if they are actually missing.
 3. **Recommended browser deployment:** keep the frontend and API on the same Vercel domain and leave `VITE_API_BASE` blank; this avoids cross-site cookie restrictions. If you split frontend/API across domains, `APP_URL` must point to the API host, `FRONTEND_URL` and `APP_ORIGIN` must point to the browser host, and `VITE_API_BASE` must point to the API origin. Cross-site session cookies may be blocked by browser privacy settings, so a same-origin deployment is the reliable choice unless cookie/CORS behavior is deliberately configured and tested.
 4. **Database:** the server requires Firebase Admin credentials and Firestore. Create/enable Firestore in the Firebase project and check billing/quotas for your usage; this code does not require Firebase Storage.
 5. **Redeploy:** changing Vercel environment variables does not update an already-built frontend or running deployment until a new deployment is made. Trigger a redeploy after changing them.

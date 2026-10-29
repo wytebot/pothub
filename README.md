@@ -37,12 +37,12 @@ Automated tests and source audits pass in the supplied environment. A production
 
 ### Optional Vercel logs connection
 
-Developer users can connect a Vercel access token from the workspace, choose a project and deployment, and load deployment events directly into Diagnose. The token is encrypted locally and sent transiently to the API only for that request. This connection is read-only and does not deploy, promote, or change Vercel projects. Create a token from the Vercel account token settings page; use the narrowest read scope available. See `ENVIRONMENT_VARIABLES.md` and `REBUILD_NOTES.md`.
+Developer users connect through Vercel OAuth, choose a project and deployment, and load available deployment events directly into Diagnose. OAuth tokens are held in Pothub's signed HttpOnly session and refreshed server-side. The connection is read-only and does not deploy, promote, or change Vercel projects. See `ENVIRONMENT_VARIABLES.md` for the exact callback URL and supported existing OAuth variable names.
 
 
 ### Vercel log connection
 
-The Developer workspace has one primary **Connect Vercel** button for a server-configured token, plus a compact access-token field and Connect button beneath it. Configure `VERCEL_ACCESS_TOKEN` (or `VERCEL_TOKEN` / `VERCEL_API_TOKEN`) in Vercel Project Settings → Environment Variables for server-side connection. The secret never reaches the browser in this mode. Users may instead provide their own read-only token, which is encrypted locally.
+The Developer workspace has a single **Connect Vercel** button. It redirects the user to Vercel OAuth, then returns to Pothub after approval. Configure the existing server-side `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET` credentials (or the supported OAuth aliases) and register `APP_URL/api/vercel/callback` as the exact callback URL. No access-token paste field is shown; access and refresh tokens remain in the signed HttpOnly session and refresh on the server.
 
 
 For exact variable retrieval steps and the distinction between Vercel API tokens and OAuth client credentials, see [`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md).

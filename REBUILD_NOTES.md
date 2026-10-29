@@ -80,21 +80,17 @@ Legacy app code/features removed in the rebuild: File Studio and document/spread
 - `node --check` passes for the server and library modules.
 - JSX syntax is parsed with the installed TypeScript parser.
 - `node scripts/release-audit.mjs` passes.
-- `npm test`: 21 tests pass, including ZIP round-trip/corruption tests.
+- `npm test`: 23 tests pass, including ZIP round-trip/corruption tests.
 - **Production Vite build and Android APK are not verified.** `npm install` repeatedly timed out in this execution environment, so dependencies could not be installed and the runtime bundle could not be built. Live OAuth, Flutterwave sandbox, provider video, native secure storage, MediaStore Downloads, WebAuthn/biometric, iOS Safari, and Android device tests remain mandatory before publishing. See `docs/DEVICE_TEST.md`.
 
 
 ## Vercel logs connection (optional)
 
-The Developer workspace now supports a user-provided Vercel access token for selecting projects/deployments and loading deployment events into the existing diagnosis input. The token is encrypted on-device using the same WebCrypto/Android secure-storage key service as agent secrets, is sent only with a specific request, and is not stored by the Express API. API contracts:
-- `POST /api/vercel/projects` `{token}` → `{ok, projects:[{id,name,framework,updatedAt,teamId}]}`
-- `POST /api/vercel/deployments` `{token, projectId}` → `{ok, deployments:[{uid,id,url,state,createdAt,meta}]}`
-- `POST /api/vercel/logs` `{token, deploymentId}` → `{ok, deployment:{id,url,state}, logs, eventCount, note}`
+The Developer workspace connects through Vercel OAuth. `GET /api/vercel/connect` starts the authorization redirect and `GET /api/vercel/callback` exchanges the code, validates the Vercel identity, and stores access/refresh tokens inside the signed HttpOnly Pothub session. The server refreshes expiring access tokens. `POST /api/vercel/projects`, `POST /api/vercel/deployments`, and `POST /api/vercel/logs` use that session; no token is entered or persisted in browser IndexedDB. The connection is read-only and does not deploy or modify Vercel projects. Available logs depend on the Vercel account permissions and API support.
 
-This is an optional Vercel connection for deployment-log diagnosis only, not Vercel deployment/OAuth management. Token never belongs in Vercel environment variables or the frontend build environment. Vercel API access and log availability depend on token permissions and Vercel project/plan capabilities.
-
-
-## Vercel connection update
-- Added `POST /api/vercel/connect`, which validates a server-configured token from `VERCEL_ACCESS_TOKEN`, `VERCEL_TOKEN`, or `VERCEL_API_TOKEN` without returning the token to the client.
-- Project, deployment, and logs endpoints accept either `{ "connection": "environment" }` or `{ "connection": "token", "token": "..." }` (the older `{ "token": "..." }` form remains accepted).
-- UI now uses a single Connect Vercel button and a compact access-token field with its own Connect button directly below.
+## Vercel OAuth update
+- Removed the manual access-token input and all client-side Vercel token persistence.
+- Added OAuth start, callback, disconnect, and connection-status routes.
+- Project discovery checks personal projects and accessible teams where the Vercel API permits it.
+- Updated environment documentation to use the existing Vercel OAuth client credentials and exact callback URL.
+- Existing Firebase browser SDK configuration remains in use; no new Firebase configuration values were introduced.
