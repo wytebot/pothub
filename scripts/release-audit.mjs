@@ -19,7 +19,7 @@ if(!pkg.dependencies?.firebase || !fs.existsSync(path.join(root,'src/lib/firebas
 if(!Array.isArray(PACKS)||PACKS.length!==4||!PACKS.every(p=>Number.isFinite(p.usd)&&Number.isInteger(p.credits))) failures.push('Pricing module does not expose four valid credit packs.');
 if(JSON.stringify(OPERATIONS)!==JSON.stringify({diagnosis:10,repair:20,file:15})) failures.push('Public operation prices changed unexpectedly.');
 if(JSON.stringify(BYO_SERVICE_FEES)!==JSON.stringify({developer:2,creator:1})) failures.push('BYO service fees changed unexpectedly.');
-if(!app.includes("app.get('/api/pricing'")||!ui.includes("api('/api/pricing')")) failures.push('Pricing UI/API are not connected to the server source of truth.');
+if(!app.includes("app.get('/api/pricing'")||!ui.includes("api('/pricing')")) failures.push('Pricing UI/API are not connected to the server source of truth.');
 if(!app.includes("app.get('/api/health'")||!app.includes("app.get('/api/billing/checkout'")&&!app.includes("app.post('/api/billing/checkout'")) failures.push('Health or checkout route missing.');
 if(app.includes("/api/creator/video") || ui.includes('Videos')) failures.push('Unsupported video-generation capability is still exposed.');
 if(!app.includes('isVerifiedPayment(o,d)') || !app.includes('isValidWebhookSecret(expected,provided)')) failures.push('Payment verification or webhook signature guard is not wired.');

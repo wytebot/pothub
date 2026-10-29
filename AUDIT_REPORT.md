@@ -55,3 +55,10 @@ The pass reviewed the repository file inventory, server AI routing/credits/auth/
 - Added deny-all client Firestore rules and composite indexes because privileged records must only be accessed by the server. Added a one-time guarded migration script that refuses to import into non-empty target collections.
 - Important: source code changes do not import records from another database. Verify profiles, balances, credit-ledger references, orders and encrypted Vercel credentials in Firestore before production use.
 - Runtime verification still requires installing dependencies and testing against the actual Firebase project; this environment did not provide the service-account credentials.
+
+## 2026-10-29 UI stability pass
+- Corrected the release audit's pricing route assertion: the shared API helper adds `/api`, so the UI correctly calls `/pricing` while the server exposes `/api/pricing`.
+- Removed whole-app CSS `zoom` scaling that altered layout width and clipped mobile/Android viewports. The app now uses a stable `100dvh` shell and scrollable content/sidebar regions.
+- Added a React error boundary with a reload and display-preference recovery action so render exceptions no longer leave only a blank page.
+- Validation: release source audit passed; all 11 existing Node tests passed; pricing estimate check passed. Dependency installation timed out twice, so a Vite production build and live browser/APK/OAuth/payment tests could not be performed.
+- Still not certified: live Firebase credentials and data, provider OAuth configuration, deployed API URL/CORS/cookies, Flutterwave v4 sandbox transactions, physical Android behavior, and end-to-end page/operation tests.
