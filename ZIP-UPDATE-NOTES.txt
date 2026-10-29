@@ -1,9 +1,15 @@
-POTHUB NEXT.JS MIGRATION — ROOT DEPLOYMENT FIX
+Pothub GitHub OAuth startup hotfix
 
-This ZIP has package.json, next.config.mjs, vercel.json, pages/, api/, server/, and src/ at the ZIP ROOT.
+Changes in this revision:
+- Replaced the GitHub OAuth start route's dynamically imported @hapi/iron state-sealing call with an HMAC-SHA256 state cookie using Node's built-in crypto API.
+- Updated the GitHub callback to verify the signed state cookie, compare signatures in constant time, and reject stale state payloads.
+- Kept the GitHub callback URL, OAuth scopes, PKCE challenge, independent Google/Firebase Creator flow, and existing app features unchanged.
+- Added regression tests for startup state signing and callback state verification.
 
-The reported Vercel ENOENT /vercel/path0/package.json cannot be repaired by changing app code when Vercel is building a Git commit that does not contain package.json at its configured Root Directory.
+Validation performed locally:
+- node --check pages/api/auth/github.js: passed
+- node --check pages/api/auth/github/callback.js: passed
+- node --test tests/*.test.mjs: 50 passed
+- node scripts/release-audit.mjs: passed (static audit only)
 
-Read DEPLOY-TO-VERCEL.md before uploading. Replace the GitHub main branch contents with the contents of this ZIP (not the ZIP file itself), or point Vercel Root Directory at the folder containing package.json. The previous failing log used commit 5b44533; deploy a new commit.
-
-Framework: Next.js 14. Vite is not used to build this app. Existing server/API integrations and Capacitor files are retained. Service worker deployment versioning and refresh prompt are retained.
+Not verified here: production Next.js build (dependencies are not installed), live Vercel deployment, or a live GitHub OAuth round trip.

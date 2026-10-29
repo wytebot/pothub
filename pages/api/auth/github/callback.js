@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 export const config = { api: { bodyParser: false, externalResolver: true } };
 const GH = 'https://api.github.com';
 function origin(req) { const configured = String(process.env.APP_URL || '').trim(); if (configured) { try { const u = new URL(configured); if (['https:', 'http:'].includes(u.protocol) && !u.username && !u.password) return u.origin; } catch {} } const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim(); if (!/^[A-Za-z0-9.:[\]-]+$/.test(host)) throw new Error('Cannot determine the Pothub API host.'); return `${process.env.NODE_ENV === 'production' ? 'https' : 'http'}://${host}`; }
@@ -6,16 +7,31 @@ function redirect(res, url) { res.statusCode = 302; res.setHeader('Location', ur
 function appendCookie(res, cookie) { const current = res.getHeader('Set-Cookie'); res.setHeader('Set-Cookie', [...(Array.isArray(current) ? current : current ? [current] : []), cookie]); }
 function ensureAppend(res) { if (typeof res.append !== 'function') res.append = (name, value) => { const current = res.getHeader(name); res.setHeader(name, [...(Array.isArray(current) ? current : current ? [current] : []), value]); }; }
 function clearStateCookie(res) { appendCookie(res, `pothub_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`); }
+function verifyState(value, secret) {
+  if (!value || typeof value !== 'string') return null;
+  const dot = value.lastIndexOf('.');
+  if (dot <= 0) return null;
+  const body = value.slice(0, dot), supplied = value.slice(dot + 1);
+  const expected = crypto.createHmac('sha256', secret).update(`pothub-github-oauth-v1.${body}`).digest();
+  let actual;
+  try { actual = Buffer.from(supplied, 'base64url'); } catch { return null; }
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!payload || !Number.isFinite(payload.createdAt) || Date.now() - payload.createdAt > 600000 || payload.createdAt > Date.now() + 30000) return null;
+    return payload;
+  } catch { return null; }
+}
 export default async function githubCallback(req, res) {
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ error: 'Method not allowed' }); }
   const secret = String(process.env.SESSION_SECRET || '');
   try {
     if (secret.length < 32) throw new Error('SESSION_SECRET must be at least 32 characters.');
-    const { unsealData, sealData } = await import('@hapi/iron');
+    const { sealData } = await import('@hapi/iron');
     const { databaseReady, db, getCredits, setBrowserSession, setSession } = await import('../../../../server/lib.js');
     const rawCookie = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('pothub_oauth_state='));
     const sealed = rawCookie?.slice('pothub_oauth_state='.length);
-    const stateData = sealed ? await unsealData(decodeURIComponent(sealed), { password: secret, ttl: 600000 }) : null;
+    const stateData = sealed ? verifyState(decodeURIComponent(sealed), secret) : null;
     if (!stateData || stateData.state !== String(req.query?.state || '')) throw new Error('GitHub sign-in state expired or did not match. Go back and tap Connect GitHub again.');
     if (req.query?.error) throw new Error(String(req.query.error_description || req.query.error));
     const clientId = String(process.env.GITHUB_CLIENT_ID || process.env.GITHUB_OAUTH_CLIENT_ID || process.env.GH_CLIENT_ID || '').trim();

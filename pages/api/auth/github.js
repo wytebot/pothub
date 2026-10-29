@@ -18,6 +18,13 @@ function front(req, params = {}) {
   return target.toString();
 }
 function redirect(res, url) { res.statusCode = 302; res.setHeader('Location', url); res.setHeader('Cache-Control', 'no-store'); res.end(); }
+// Keep OAuth state signing on Node's built-in crypto APIs. This avoids a dynamic
+// crypto/session helper import becoming a hard dependency of the initial redirect.
+function signState(payload, secret) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(`pothub-github-oauth-v1.${body}`).digest('base64url');
+  return `${body}.${signature}`;
+}
 export default async function githubStart(req, res) {
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ error: 'Method not allowed' }); }
   try {
@@ -29,8 +36,7 @@ export default async function githubStart(req, res) {
     const verifier = crypto.randomBytes(32).toString('base64url');
     const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
     const native = String(req.query?.native || '') === '1';
-    const { sealData } = await import('@hapi/iron');
-    const sealed = await sealData({ state, verifier, native, createdAt: Date.now() }, { password: secret, ttl: 600000 });
+    const sealed = signState({ state, verifier, native, createdAt: Date.now() }, secret);
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
     res.setHeader('Set-Cookie', `pothub_oauth_state=${encodeURIComponent(sealed)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secure}`);
     const url = new URL('https://github.com/login/oauth/authorize');
