@@ -36,7 +36,13 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm ci
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
       - name: Run source checks and tests
         run: npm run check
       - name: Pull Vercel production settings
