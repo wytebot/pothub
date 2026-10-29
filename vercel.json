@@ -5,10 +5,6 @@
     {
       "source": "/__/auth/:path*",
       "destination": "https://pothub-ca2a1.firebaseapp.com/__/auth/:path*"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "/api"
     }
   ],
   "headers": [
