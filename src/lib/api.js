@@ -31,7 +31,8 @@ export async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   const taskPath = String(path || '');
   if (runtimeUseAgent && localStorageSafe('pothub_secret_mode') && !runtimeAgentUnlocked) {
-    throw new Error('Secret mode is locked. Unlock the API environment before using your provider keys.');
+    const e = new Error('Secret mode is locked. Unlock the API environment before using your provider keys.');
+    e.code = 'POTHUB_SECRET_MODE_LOCKED'; e.endpoint = taskPath; throw e;
   }
   const taskKind = taskPath.includes('/diagnose') ? 'diagnosis'
     : taskPath.includes('/agent/edit-project') ? 'repair'
@@ -43,11 +44,10 @@ export async function api(path, options = {}) {
   const workspace = taskPath.includes('/creator/') ? 'creator' : 'developer';
   headers['X-Pothub-Task-Kind'] = taskKind;
   headers['X-Pothub-Workspace'] = workspace;
+  const requestId = globalThis.crypto?.randomUUID?.() || `ph-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  headers['X-Pothub-Request-Id'] = requestId;
   if (runtimeUseAgent && (!localStorageSafe('pothub_secret_mode') || runtimeAgentUnlocked)) headers['X-Pothub-Use-Agent'] = 'true';
 
-  // Do not put provider keys in HTTP headers: proxies and request diagnostics are more
-  // likely to record headers. Attach them only to the body of a POST operation that
-  // actually needs them. The API must never persist or log this transient payload.
   let body = options.body;
   if (body && typeof body !== 'string' && String(options.method || 'GET').toUpperCase() !== 'GET') {
     body = { ...body };
@@ -57,12 +57,47 @@ export async function api(path, options = {}) {
     const token = localStorage.getItem('pothub_native_session') || localStorage.getItem('kithub_native_session');
     if (token) headers.Authorization = `Bearer ${token}`;
   }
-  const res = await fetch(`${apiBase()}${path}`, {
-    credentials: 'include', ...options, headers,
-    body: body && typeof body !== 'string' ? JSON.stringify(body) : body
-  });
-  const data = await res.json().catch(() => ({ error: 'Unreadable server response.' }));
-  if (!res.ok) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  const timeoutMs = Math.max(1000, Number(options.timeoutMs) || 45000);
+  const timer = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), timeoutMs);
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort(externalSignal.reason);
+    else externalSignal.addEventListener('abort', () => controller.abort(externalSignal.reason), { once: true });
+  }
+  const requestOptions = { ...options };
+  delete requestOptions.timeoutMs;
+  delete requestOptions.signal;
+  let res;
+  try {
+    res = await fetch(`${apiBase()}${path}`, {
+      credentials: 'include', ...requestOptions, headers, signal: controller.signal,
+      body: body && typeof body !== 'string' ? JSON.stringify(body) : body
+    });
+  } catch (cause) {
+    const timedOut = controller.signal.aborted && (cause?.name === 'TimeoutError' || !externalSignal?.aborted);
+    const error = new Error(timedOut
+      ? `Request timed out after ${Math.round(timeoutMs / 1000)} seconds. Check the API deployment and retry.`
+      : (navigator.onLine === false ? 'You appear to be offline. Reconnect and retry.' : 'Could not reach the Pothub API. Check your connection, API URL, CORS settings, and deployment status.'));
+    error.name = 'PothubNetworkError'; error.code = timedOut ? 'POTHUB_REQUEST_TIMEOUT' : 'POTHUB_NETWORK_ERROR';
+    error.requestId = requestId; error.endpoint = taskPath; error.method = String(options.method || 'GET').toUpperCase(); error.causeMessage = redact(cause?.message || 'Network request failed');
+    throw error;
+  } finally { clearTimeout(timer); }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const error = new Error(data?.error || data?.message || `Request failed with HTTP ${res.status}.`);
+    error.name = 'PothubApiError'; error.code = data?.code || `HTTP_${res.status}`; error.status = res.status;
+    error.requestId = data?.requestId || res.headers.get('x-request-id') || requestId;
+    error.endpoint = taskPath; error.method = String(options.method || 'GET').toUpperCase();
+    error.details = data?.details || null; error.timestamp = new Date().toISOString();
+    throw error;
+  }
+  if (data === null) {
+    const error = new Error('The API returned a response that was not valid JSON. Check the server logs for this request.');
+    error.name = 'PothubResponseError'; error.code = 'POTHUB_INVALID_JSON'; error.status = res.status;
+    error.requestId = res.headers.get('x-request-id') || requestId; error.endpoint = taskPath; error.method = String(options.method || 'GET').toUpperCase();
+    throw error;
+  }
   return data;
 }
 function localStorageSafe(key) {
