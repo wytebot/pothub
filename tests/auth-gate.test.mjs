@@ -10,14 +10,39 @@ test('workspace UI is gated until authentication is resolved and a user exists',
   assert.match(app, /No guest access/);
 });
 
-test('Google authentication uses Firebase redirect flow and restores its result', () => {
+test('Google authentication supports browser popup with redirect fallback and restores its result without blocking startup', () => {
+  assert.match(app, /signInWithPopup\(firebaseAuth,provider\)/);
   assert.match(app, /signInWithRedirect\(firebaseAuth,provider\)/);
   assert.match(app, /getRedirectResult\(firebaseAuth\)/);
+  assert.match(app, /onAuthStateChanged\(firebaseAuth/);
+  assert.match(app, /authFallback=setTimeout/);
   assert.match(app, /Continue with Google/);
 });
 
 test('GitHub authorization navigates to the backend OAuth endpoint instead of relying on a blocked popup', () => {
-  assert.match(app, /window\.location\.assign\(target\)/);
+  assert.match(app, /window\.location\.(?:href=target|assign\(target\))/);
   assert.match(app, /\/auth\/github\?deviceId=/);
   assert.match(app, /Continue with GitHub/);
+});
+
+test('developer and creator workspace roles are selectable and persist across browser reloads', () => {
+  assert.match(app, /pothub_workspace_role/);
+  assert.match(app, /chooseWorkspaceRole/);
+  assert.match(app, /role-choice.*Developer/s);
+  assert.match(app, /role-choice.*Creator/s);
+  assert.match(app, /Change workspace/);
+});
+
+test('creator role gets a separate creator-first navigation and cannot navigate into developer-only pages', () => {
+  assert.match(app, /workspaceRole==='creator'\?\[\['creator','Creator studio'/);
+  assert.match(app, /workspaceRole==='creator'&&!\['creator','credits','history','settings','help'\]\.includes\(p\)/);
+  assert.match(app, /workspaceRole==='developer'&&<button className=\{`nav-item/);
+});
+
+test('GitHub OAuth is separate from Firebase Google authentication', async () => {
+  const firebase = await readFile(new URL('../src/lib/firebase.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(firebase, /GithubAuthProvider|createGitHubProvider/);
+  assert.doesNotMatch(app, /signInWithPopup\(firebaseAuth,\s*new GithubAuthProvider/);
+  assert.match(app, /window\.location\.assign\(target\)/);
+  assert.match(app, /GoogleAuthProvider/);
 });

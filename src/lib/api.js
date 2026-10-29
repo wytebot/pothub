@@ -21,7 +21,10 @@ export function apiBase() {
       || localStorage.getItem('kithub_api_base')
       || '';
   } catch { base = ''; }
-  return `${String(base).trim().replace(/\/$/, '')}/api`;
+  const normalized = String(base).trim().replace(/\/$/, '');
+  // Accept either an origin (https://api.example.com) or an origin already
+  // ending in /api; never generate the broken /api/api path.
+  return normalized ? (/\/api$/i.test(normalized) ? normalized : `${normalized}/api`) : '/api';
 }
 
 export async function api(path, options = {}) {

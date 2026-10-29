@@ -10,7 +10,7 @@ const apiJs = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8'
 test('api.js defines and uses apiBase()', () => {
   assert.match(apiJs, /export function apiBase\(\)/);
   assert.match(apiJs, /\$\{apiBase\(\)\}\$\{path\}/);
-  assert.match(apiJs, /return `\$\{String\(base\)\.trim\(\)\.replace\(\/\\\/\$\/, ''\)\}\/api`/);
+  assert.match(apiJs, /normalized \? \(\/\\\/api\$\/i\.test\(normalized\) \? normalized : `\$\{normalized\}\/api`\) : '\/api'/);
 });
 
 test('no api() call hard-codes the /api prefix', () => {

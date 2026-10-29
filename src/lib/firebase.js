@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GithubAuthProvider } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,11 +13,3 @@ export const firebaseApp = firebaseConfigured
   ? (getApps().length ? getApps()[0] : initializeApp(config))
   : null;
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null;
-export function createGitHubProvider() {
-  const provider = new GithubAuthProvider();
-  provider.addScope('repo');
-  provider.addScope('read:user');
-  provider.addScope('user:email');
-  provider.setCustomParameters({ allow_signup: 'true' });
-  return provider;
-}

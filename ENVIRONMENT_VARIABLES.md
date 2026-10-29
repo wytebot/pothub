@@ -63,3 +63,10 @@ Set the four `VITE_FIREBASE_*` values from Firebase Console → Project settings
 Secret mode is disabled by default, so the first visit does not show a biometric gate. Users can enable it in the “Use your agent” API-key panel. The standalone Capacitor Android build uses the device biometric prompt through `@capgo/capacitor-native-biometric`; browser mode uses WebAuthn platform-authenticator prompts and requires HTTPS plus a supported authenticator. No additional Vercel environment variables are required.
 
 Important: this is a local privacy gate around the API-key settings UI, not server-side secret storage or a cryptographic vault. API keys entered into the BYO-agent panel remain in session storage for the active session; do not use this feature as protection against malicious scripts, developer tools, or a compromised device. For production-grade key protection, keep provider keys server-side.
+
+## Browser OAuth provider separation
+
+- GitHub sign-in is a direct GitHub OAuth authorization-code flow handled by `/api/auth/github` and `/api/auth/github/callback`. It does not use Firebase's GitHub provider.
+- Google sign-in uses Firebase Authentication's Google provider in the browser.
+- If the frontend and API are deployed on different origins, set `APP_URL` (or `FRONTEND_URL`) on the API server to the exact frontend origin, e.g. `https://your-pothub-site.example`, with no trailing slash. This controls where GitHub OAuth returns after callback. The GitHub OAuth application's callback URL must still be the API origin plus `/api/auth/github/callback`.
+- `VITE_API_BASE_URL` may be either the API origin or the API origin ending in `/api`; the frontend now normalizes both without creating `/api/api`.
