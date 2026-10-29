@@ -94,3 +94,10 @@ The Developer workspace connects through Vercel OAuth. `GET /api/vercel/connect`
 - Project discovery checks personal projects and accessible teams where the Vercel API permits it.
 - Updated environment documentation to use the existing Vercel OAuth client credentials and exact callback URL.
 - Existing Firebase browser SDK configuration remains in use; no new Firebase configuration values were introduced.
+
+
+## Browser OAuth/API routing hotfix (2026-10-29)
+- Removed the global `/(.*) -> /index.html` Vercel rewrite. That broad fallback can mask an API route when the deployment's function routing does not match, causing HTML/non-JSON 405 responses for POST requests such as `/api/auth/google-session` and sending auth-start URLs back to the SPA instead of the provider.
+- Kept the Firebase `__/auth/*` proxy rewrite. Vercel's filesystem/function routing should resolve `/api/*` to the API functions; confirm `/api/health` returns JSON and `/api/auth/github` responds with a GitHub redirect after deployment.
+- Browser Developer sign-in uses same-origin navigation to `GET /api/auth/github`; this is a web redirect, not Capacitor/native flow. Only the APK appends `?native=1` and uses the native ticket/deep-link flow.
+- If `/api/health` still returns a platform HTML page or 405 after redeployment, the Vercel project is not deploying this folder as its Root Directory or its API functions are not included in the deployment. Set the Vercel Root Directory to `pothub-fixed` (or upload the contents of this folder as the project root) and redeploy.
