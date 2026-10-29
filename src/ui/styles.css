@@ -57,3 +57,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* Optional biometric gate for the user's API environment */
 .secret-mode-card{display:grid;gap:13px;margin:18px 0;padding:15px;border:1px solid var(--border,#d8d8d8);border-radius:15px;background:var(--surface,#f7f7f7)}
 .secret-mode-copy{display:flex;align-items:flex-start;gap:11px}.secret-mode-copy>div:last-child{min-width:0}.secret-mode-copy strong{display:block;font-size:14px}.secret-mode-copy p{margin:5px 0 0;color:var(--muted,#686868);font-size:12px;line-height:1.5}.secret-mode-icon,.biometric-fingerprint{display:grid;place-items:center;flex-shrink:0;width:42px;height:42px;border-radius:12px;border:1px solid var(--border,#ddd);background:var(--panel,#fff)}.secret-mode-card>.btn{justify-self:start;min-height:42px}.secret-mode-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.secret-status{display:inline-flex;align-items:center;gap:5px;color:#16834a;font-size:12px;font-weight:700;margin-right:auto}.biometric-lock-screen{display:grid;justify-items:center;text-align:center;gap:10px;padding:25px 16px;border:1px solid var(--border,#ddd);border-radius:15px;background:var(--panel,#fff)}.biometric-fingerprint{width:62px;height:62px;border-radius:50%;color:var(--text,#171717)}.biometric-lock-screen h3{margin:2px 0;font-size:18px}.biometric-lock-screen p{max-width:340px;margin:0 0 7px;color:var(--muted,#686868);font-size:13px;line-height:1.5}.biometric-lock-screen .btn{min-height:44px}@media(max-width:480px){.secret-mode-actions{display:grid;grid-template-columns:1fr 1fr}.secret-status{grid-column:1/-1}.secret-mode-actions .btn{justify-content:center}}
+
+/* Text size scaling with a fixed viewport: the whole shell is zoomed, the page never scrolls,
+   and only the main content column scrolls inside the screen. */
+html[data-text-size="small"]{--ui-zoom:.9}
+html[data-text-size="default"]{--ui-zoom:1}
+html[data-text-size="large"]{--ui-zoom:1.15}
+html[data-text-size="xl"]{--ui-zoom:1.3}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{min-height:0!important}
+.app-shell{zoom:var(--ui-zoom,1.15);height:calc(100dvh / var(--ui-zoom,1.15));width:calc(100% / var(--ui-zoom,1.15));min-height:0!important;overflow:hidden}
+.sidebar{height:calc(100dvh / var(--ui-zoom,1.15))}
+.main-area{height:calc(100dvh / var(--ui-zoom,1.15));min-height:0!important;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.text-size-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;color:var(--muted);font-size:13px;font-weight:600}
+.text-size-row>div{display:flex;gap:6px}
+.text-size-row button{min-width:44px;min-height:36px;border:1px solid #353b4d;border-radius:8px;background:transparent;color:#f4f4f4;font-weight:700}
+.text-size-row button:disabled{opacity:.35}
