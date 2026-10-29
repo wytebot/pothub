@@ -1,0 +1,16 @@
+Pothub OAuth and GitHub Pages routing fix
+
+Changes in this package:
+- GitHub Pages hostnames use https://pothub-self.vercel.app as the API base instead of sending /api/* requests to the static github.io host.
+- Backend API origin resolution ignores APP_URL when it incorrectly points at *.github.io and falls back to the Vercel deployment origin.
+- OAuth return URL selection skips FRONTEND_URL/APP_URL values that point at GitHub Pages, so the browser returns to the Vercel app that owns the HTTP-only session cookie.
+- apiOrigin now consistently uses the validated backend origin helper.
+- Updated API routing regression tests to ensure /api/:path* is not rewritten to /api and that the Vercel filesystem catch-all is used.
+
+Validation:
+- Node syntax checks passed for server/app.js, server/lib.js, api/index.js, and api/[...path].js.
+- Automated tests: 27 passed, 0 failed.
+- A production Vite build was not run because this environment has no network access to install project dependencies.
+
+Deployment note:
+This package is not automatically pushed to GitHub or deployed to Vercel. Replace the repository files with this package and push to the connected production branch, or use the configured GitHub Actions deployment workflow. In Vercel, APP_URL should be https://pothub-self.vercel.app and the GitHub OAuth callback URL should be https://pothub-self.vercel.app/api/auth/github/callback. Do not use the GitHub Pages URL as the API or callback origin.
