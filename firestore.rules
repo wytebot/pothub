@@ -1,8 +1,0 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // All privileged Pothub data is accessed through the server using Firebase Admin.
-    // Do not expose profiles, balances, orders, ledger entries, tokens to clients.
-    match /{document=**} { allow read, write: if false; }
-  }
-}
