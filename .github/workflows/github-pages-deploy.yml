@@ -21,10 +21,6 @@ jobs:
     env:
       GITHUB_PAGES: 'true'
       VITE_API_BASE: https://pothub-self.vercel.app
-      VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-      VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-      VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-      VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,14 +33,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Validate public frontend configuration
-        shell: bash
         run: |
-          missing=0
-          for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID VITE_API_BASE; do
-            if [ -z "${!name}" ]; then echo "Missing GitHub Actions secret: $name"; missing=1; fi
-          done
-          if [ "$missing" -ne 0 ]; then echo "Add the four VITE_FIREBASE_* secrets under repository Settings > Secrets and variables > Actions. These are public Firebase web config values, not private server secrets."; exit 1; fi
-          node -e "const u=new URL(process.env.VITE_API_BASE); if(u.protocol!=='https:') process.exit(1)"
+          if grep -q PASTE_ src/lib/firebase-config.json; then echo "Fill in apiKey and appId in src/lib/firebase-config.json (Firebase console > Project settings > Your apps > SDK setup)."; exit 1; fi
       - name: Run source checks and tests
         run: npm run check
       - name: Build GitHub Pages frontend

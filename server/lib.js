@@ -1,3 +1,4 @@
+process.env.FRONTEND_URL ||= 'https://wytebot.github.io/pothub/';
 import crypto from 'node:crypto';
 import { sealData, unsealData } from '@hapi/iron';
 import { getApps, initializeApp, applicationDefault, cert } from 'firebase-admin/app';

@@ -24,7 +24,7 @@ Remote diagnosis, AI, GitHub operations, payments and video polling require conn
 ## GitHub Pages and Capacitor configuration audit (2026-10)
 
 - GitHub Pages is static hosting only; `/api/*` always targets `VITE_API_BASE` (Vercel).
-- Pages build requires all four `VITE_FIREBASE_*` public web-config values as GitHub Actions secrets. The workflow now fails instead of silently building a Google-login-disabled frontend.
+- Pages build reads the public Firebase web config from `src/lib/firebase-config.json` (no secrets needed). The workflow now fails instead of silently building a Google-login-disabled frontend.
 - Browser Google sign-in uses Firebase popup and then exchanges the Firebase ID token with the backend. Firebase Authentication must list `wytebot.github.io` under Authorized domains.
 - GitHub sign-in on Pages uses a short-lived, single-use signed handoff ticket exchanged for a bearer session. The browser keeps that session in `sessionStorage`; it does not rely on cross-site Vercel cookies.
 - Native Capacitor sign-in continues to use the app URL callback and secure storage. `npm run cap:sync` validates the API origin and Firebase public config before syncing Android.
