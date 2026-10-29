@@ -34,7 +34,7 @@ class AppErrorBoundary extends React.Component {
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(error => console.warn('Pothub offline support unavailable', error));
+    navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(reg=>reg.update().catch(()=>{})).catch(error => console.warn('Pothub offline support unavailable', error));
   });
 }
 

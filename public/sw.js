@@ -1,4 +1,4 @@
-const CACHE='pothub-shell-v4';
+const CACHE='pothub-shell-v5';
 const SHELL=['/','/index.html','/manifest.webmanifest','/icons/pothub-192.png','/icons/pothub-512.png','/icons/pothub-maskable-512.png','/icons/pothub.svg'];
 self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(CACHE);await Promise.all(SHELL.map(async path=>{try{const r=await fetch(path,{cache:'reload'});if(r.ok)await cache.put(path,r)}catch{}}));try{const r=await fetch('/index.html',{cache:'reload'});if(r.ok){await cache.put('/index.html',r.clone());const html=await r.text();const assets=[...html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css))(?:\?[^"']*)?["']/g)].map(m=>m[1]).filter(x=>x.startsWith('/assets/'));await Promise.all(assets.map(async path=>{try{const a=await fetch(path,{cache:'reload'});if(a.ok)await cache.put(path,a)}catch{}}))}}catch{}await self.skipWaiting()})())});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
