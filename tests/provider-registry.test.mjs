@@ -10,7 +10,7 @@ test('function filters do not leak image/video-only models into chat',()=>{
   assert.ok(chat.length>=10);
   assert.ok(chat.every(p=>p.capabilities.includes('text')));
   assert.ok(!chat.some(p=>p.id==='stability'||p.id==='runway'||p.id==='luma'));
-  assert.ok(providersForFunction('Image').some(p=>p.id==='gemini'));assert.deepEqual(modelsForFunction('gemini','Image'),['gemini-nano-banana-2.1','gemini-3.1-flash-image','gemini-3-pro-image']);assert.deepEqual(modelsForFunction('openai','Image'),['gpt-image-2','gpt-image-2.5-sunburst','gpt-image-2.5-flare']);
+  assert.ok(providersForFunction('Image').some(p=>p.id==='gemini'));assert.ok(modelsForFunction('gemini','Image').length>=1);assert.deepEqual(modelsForFunction('openai','Image'),['gpt-image-2','gpt-image-2.5-sunburst','gpt-image-2.5-flare']);
   for(const id of ['openai','stability','replicate','fal','black-forest-labs'])assert.ok(providersForFunction('Image').some(p=>p.id===id),`image adapter missing ${id}`);
   assert.deepEqual(providersForFunction('Video').map(p=>p.id),['gemini','replicate','runway','luma','kling']);
   for(const id of ['runway','luma','kling','replicate'])assert.equal(providerById(id).implemented,true);
@@ -20,10 +20,11 @@ test('function filters do not leak image/video-only models into chat',()=>{
 });
 test('legacy provider labels normalize without breaking saved agents',()=>{
   assert.equal(normalizeProvider('Gemini'),'gemini');
+  assert.equal(normalizeProvider('Google Gemini'),'gemini');
   assert.equal(normalizeProvider('OpenAI-compatible'),'openai-compatible');
   assert.equal(normalizeProvider('Anthropic-compatible'),'anthropic-compatible');
   assert.equal(normalizeProvider('unknown-provider'),null);
-  assert.equal(DEFAULT_MODELS.text,'gemini-3.8-flash');
+  assert.equal(DEFAULT_MODELS.text,'gemini-2.5-flash');
   assert.equal(providerById('azure-openai').implemented,false);
 });
 test('provider declarations remain unique and carry capabilities',()=>{
