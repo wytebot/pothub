@@ -23,3 +23,8 @@ Configure `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`, and `APP
 - Keep Firestore client rules closed; do not loosen them for convenience.
 - Ensure server/proxy logs never capture POST bodies containing BYO provider keys or payment payloads.
 - Test duplicate Flutterwave webhooks and payment references to verify grants remain idempotent.
+
+
+## Account workspace persistence
+
+The app stores offline-first records in Dexie/IndexedDB and syncs account-owned records through authenticated server endpoints. Keep Firestore rules deny-all for browser clients; the server uses Firebase Admin. Configure `POTHUB_VAULT_ENCRYPTION_KEY` in Vercel (generate with `openssl rand -hex 32`) and keep the same value in every deployment environment. Saved provider API keys are encrypted with AES-256-GCM before being written to Firestore. Binary media blobs are local-only in this release and can be transferred using the Pothub ZIP backup.

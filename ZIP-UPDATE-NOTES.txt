@@ -1,38 +1,18 @@
-POTHUB — REPOSITORY LOADING, VERCEL OAUTH, API ERROR HANDLING & PICKER UPDATE
+POTHUB — DEVELOPER WORKSPACE AND API AUTH FIXES (2026-10-31)
 
-What changed
-1. Added a dedicated Next.js API route for GET /api/github/repos. It no longer has to boot the large Express catch-all before returning repositories. GitHub 401/403/API errors and timeouts now return JSON with a request ID and a useful next step.
-2. Added dedicated Next.js routes for Vercel connect/callback. OAuth state is signed and verified with Node's built-in HMAC-SHA256 crypto, includes expiry checks, and does not dynamically import @hapi/iron just to begin OAuth.
-3. Added a dedicated Vercel API route for status, disconnect, projects, deployments and logs. Errors are JSON with request IDs. Vercel OAuth credentials accept the existing supported environment-variable aliases.
-4. Fixed browser-session cookie updates to preserve multiple Set-Cookie headers and to avoid relying on Express-only response.append() behavior in Next.js API handlers.
-5. Vercel callback now updates the opaque browser session (pothub_sid) when the user is using browser OAuth, rather than writing a separate legacy session cookie that the browser session would ignore.
-6. Styled all select/picker controls with Pothub's dark/light theme, custom chevron, focus/hover states and consistent sizing. Native mobile option sheets can still be rendered by the Android browser/OS.
-7. Improved the frontend message for non-JSON API errors so it explains what to inspect rather than suggesting only that the route might be missing.
+Implemented
+- GitHub browser OAuth now returns a short-lived, single-use Firestore auth ticket to the frontend. The frontend exchanges it for an opaque bearer session ID, so the browser and API remain authenticated even when hosted on separate origins.
+- API-page fingerprint/WebAuthn/PIN calls send the authenticated bearer session.
+- Developer workspace automatically discovers GitHub repositories after login. GitHub OAuth now requests repo and read:org scopes; repository listing includes all visibility and collaboration affiliations and paginates up to 1,000 results.
+- Mobile menu opens a working navigation drawer and scrim. Navigation closes the drawer.
+- API & Agents has a Back to workspace action in both locked and unlocked states.
+- All pickers remain Pothub custom listboxes; no native HTML select elements are used in the React UI.
+- Error messages are fixed-position, bounded, scrollable, auto-dismissing notices and do not push/reflow the viewport.
+- Removed Pothub's Vercel OAuth diagnostics and callback routes. Vercel remains the deployment platform; no Vercel OAuth redirect URL or OAuth credentials are needed.
 
-Configuration reminders
-- Set APP_URL to https://pothub-self.vercel.app (origin only, no path).
-- Set the Vercel OAuth application's callback URL to https://pothub-self.vercel.app/api/vercel/callback exactly.
-- Keep the existing VERCEL_CLIENT_ID / VERCEL_OAUTH_CLIENT_ID / VERCEL_APP_CLIENT_ID and corresponding client-secret environment variables. Do not expose the client secret in frontend code.
-- SESSION_SECRET must be at least 32 characters and must remain stable across deployments while sessions are active.
-- GitHub sign-in still uses GitHub OAuth. Google creator sign-in remains Firebase Authentication. Vercel connection requires a signed-in GitHub Developer session.
-
-Validation performed
-- JavaScript syntax checks passed for the new API route modules and shared OAuth helper.
-- Automated Node tests: 53 passed, 0 failed.
-- Static release audit passed.
-- A full Next.js production build, live GitHub/Vercel OAuth, actual Vercel project listing, payments, and Android runtime were NOT executed in this environment because dependencies are not installed here and no live deployment credentials are available. Deploy this ZIP and test against the real Vercel OAuth app/environment before treating it as live-verified.
-
-
-Deep picker/UI pass (2026-10-29):
-- Replaced every native <select> in the React UI with the shared Pothub CustomSelect component, including repository, Vercel project/deployment, GitHub Actions run, source file, agent provider, billing authorization, and video aspect-ratio pickers.
-- Custom listbox uses Pothub theme, animated menu, keyboard navigation (arrows, Home/End, Enter/Space, Escape), outside-click dismissal, mobile sizing, light/dark themes, and scrollable option lists.
-- Added regression tests to ensure native select elements do not return.
-- Vercel OAuth callback URL: https://pothub-self.vercel.app/api/vercel/callback
-- Tests in this environment: 55 passed, 0 failed; static release audit passed. Production build and live OAuth were not run here.
-
-Server error fixes (2026-10-30):
-- server/iron.js: sealData/unsealData were imported from @hapi/iron, which only exports seal/unseal. That crashed every route importing server/lib.js (auth/me, health, github/repos, vercel/*, GitHub callback). Added a wrapper and switched all imports.
-- server/lib.js: Firestore ignoreUndefinedProperties enabled; Firebase init retries on later requests; databaseReady/firestore are live bindings.
-- server/app.js: cost.chargedAmount was undefined, so failed-patch refunds threw and users were charged without a result. Fixed. GitHub file paths are now URL-encoded in repo context.
-- pages/api/vercel/[...action].js: deployment logs are now passed through redactSecrets.
-- Not run here: npm install/next build (no network). Run `npm install && npm test && npm run build`, then check /api/health after deploy.
+Validation
+- `node --check` across server, scripts and tests: PASS.
+- TypeScript JSX parse/check for App, WorkspaceSection, AgentsWorkspace and biometric module: PASS.
+- Static release audit: PASS.
+- Full tests: 54 passed; 16 dependency-backed suites could not start because express, firebase-admin and typescript are not installed in this execution environment.
+- Production build, live OAuth/SSO, WebAuthn and physical Android tests still require a network-enabled/deployed environment.

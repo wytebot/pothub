@@ -102,3 +102,8 @@ The original Phase 0 findings above are retained as a baseline snapshot. The fol
 - No production Firebase, Flutterwave, GitHub OAuth, Google OAuth or Vercel OAuth credentials were supplied, so no live transaction/redirect test was possible.
 - No Android SDK/ADB-connected physical device was available; APK installation, native biometric prompt, MediaStore, deep-link and real device behavior remain unverified.
 - Provider adapters are source-wired and API shapes were checked against vendor documentation, but no provider keys were available for real generations or billing verification.
+
+
+## 31 October 2026 persistence/biometric fact-check supersession
+
+The earlier observations above are the initial audit baseline. The follow-up now includes server-verified browser WebAuthn registration/assertion and server-side PIN fallback (see `server/security-lock.js`), plus native biometric/PIN fallback hardening and secure-storage-backed lock state (see `src/lib/biometric.js`). Account switching no longer clears outgoing local records; Dexie v5 partitions and restores per-account caches (see `src/lib/account-cache.js`). Native agent-key migration now preflights all records before committing a single transaction (see `src/lib/agents.js`). See `FACT-CHECK-PERSISTENCE-BIOMETRIC.md` for current test outcomes and remaining live-device checks.

@@ -6,3 +6,8 @@ db.version(2).stores({settings:'key',agents:'id,function,provider,default',proje
 export const uid=()=>crypto.randomUUID?.()||`ph_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
 db.version(3).stores({projects:'id,owner,name,updatedAt',runs:'id,repo,createdAt,status,kind',chats:'id,updatedAt',messages:'id,chatId,createdAt,role',attachments:'id,messageId,kind,createdAt',videoJobs:'id,state,createdAt,updatedAt',creditEvents:'id,createdAt,kind',backups:'id,createdAt',settings:'key',agents:'id,function,provider,default',promptLibrary:'id,updatedAt,starred,category'});
+
+db.version(4).stores({projects:'id,owner,name,updatedAt',runs:'id,repo,createdAt,status,kind',chats:'id,updatedAt',messages:'id,chatId,createdAt,role',attachments:'id,messageId,kind,createdAt',videoJobs:'id,state,createdAt,updatedAt',creditEvents:'id,createdAt,kind',backups:'id,createdAt',settings:'key',agents:'id,function,provider,default',promptLibrary:'id,updatedAt,starred,category'});
+
+// Account-partitioned cache preserves unsynced local work when users switch accounts.
+db.version(5).stores({projects:'id,owner,name,updatedAt',runs:'id,repo,createdAt,status,kind',chats:'id,updatedAt',messages:'id,chatId,createdAt,role',attachments:'id,messageId,kind,createdAt',videoJobs:'id,state,createdAt,updatedAt',creditEvents:'id,createdAt,kind',backups:'id,createdAt',settings:'key',agents:'id,function,provider,default',promptLibrary:'id,updatedAt,starred,category',accountCache:'key,owner,table,id,updatedAt'});

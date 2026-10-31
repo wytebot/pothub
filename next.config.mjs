@@ -8,5 +8,8 @@ const nextConfig = {
   images: { unoptimized: true },
   poweredByHeader: false,
   reactStrictMode: true,
+  async headers() {
+    return [{ source: '/', headers: [{ key: 'Cache-Control', value: 'no-store, private, max-age=0, must-revalidate' }, { key: 'Pragma', value: 'no-cache' }] }];
+  },
 };
 export default nextConfig;

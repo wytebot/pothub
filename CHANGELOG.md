@@ -62,3 +62,11 @@
 - Re-ran release audit and the complete automated test suite: 93/93 passed.
 - Re-ran pricing validation; checked all JavaScript/MJS syntax and JSON/XML parsing.
 - Added `QUICK_FACT_CHECK.md` and updated the verification report with the production-build dependency limitation and untested live integrations.
+
+## 2026-10-31 — Persistence and biometric hardening
+
+- Added Dexie v5 account-partitioned cache to preserve unsynced local records when switching Pothub accounts.
+- Scoped cloud-sync known-item manifests per account.
+- Moved native API-page lock records and fallback PIN verifier into Android secure storage; biometric cancellation/unavailability now routes to a valid passcode fallback.
+- Made native agent-key migration preflight all records and commit migrated ciphertexts atomically; made default-agent writes transactional.
+- Added account-cache and biometric-policy regression tests and expanded release audit checks.

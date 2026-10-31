@@ -56,3 +56,19 @@ The missing PDF.js worker is a downstream symptom of the absent `node_modules` i
 - **Fix:** destructure `native` from `ctx` and use `!native()` so browser users see the Vercel panel while native Android users do not.
 - **Validation:** `tsc --noEmit --allowJs --checkJs false --jsx preserve --noResolve --skipLibCheck --target ES2022 --module ESNext src/ui/WorkspaceSection.jsx` passed; `node --check server/app.js` passed.
 - **Deployment note:** this fixes the source project only. The production URL must be redeployed from this ZIP before the live crash is resolved. The live deployment could not be fetched from this environment to verify its post-deploy behavior.
+
+
+## Developer workspace and API-page follow-up (2026-10-31)
+
+- Fixed the mobile Developer menu: it now opens a visible navigation drawer with a scrim and closes after navigation.
+- Added an explicit **Back to workspace** action to the API & Agents page, including its unlocked page header.
+- Fixed API-page biometric/PIN security requests to send the active Pothub bearer session (native secure storage on Android; sessionStorage on web) as well as cookies. A 401 now explains that the Pothub session expired instead of showing an unhelpful sign-in prompt.
+- Developer sign-in now automatically discovers repositories. The GitHub endpoint requests all visibility types and owner/collaborator/organization-member affiliations, paginates up to 1,000 repositories, deduplicates them, and returns clearer 401/403 organization/SSO errors. GitHub OAuth now requests `read:org` in addition to `repo`, `read:user`, and `user:email`.
+- Removed the Vercel diagnostics OAuth integration and its `/api/vercel/*` routes/callback URI. Vercel remains the deployment host; no separate Vercel OAuth redirect URL is required by this app.
+- All repository/provider pickers remain Pothub-rendered custom dropdowns. Error notices are now fixed, bounded, scrollable, auto-dismissing toasts that do not reflow the workspace viewport.
+- Local syntax and build checks are listed in the delivery response; live GitHub OAuth, organization SSO, WebAuthn and production behavior still require deployment verification.
+
+
+### Corrections to the earlier Vercel diagnostics scope
+
+The previous Vercel diagnostics OAuth/callback implementation is now deliberately removed from the application. Vercel remains the hosting/deployment platform and GitHub Actions/Vercel deployment workflows are not removed. The old D4 Vercel refresh-lock item is therefore obsolete for the current product surface; no Vercel OAuth redirect URL or Vercel OAuth client secrets are required by Pothub.

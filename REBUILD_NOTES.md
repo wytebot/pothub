@@ -74,7 +74,7 @@ The rebuilt tree removes these stale documents from the previous project: `AUDIT
 
 Additional dead code/config removed: the unused `GET /api/github/repo-context` route, the unused `OPERATIONS.file` credit cost, and obsolete Firestore indexes for monitored projects, Vercel OAuth states and app notifications. The retained `repoContext()` helper is still used internally by diagnosis/fix flows.
 
-Legacy app code/features removed in the rebuild: File Studio and document/spreadsheet/PDF generation; Vercel OAuth consent and webhooks (the current optional Vercel connection is read-only API-token diagnostics implemented separately); Google Drive backup; push notifications/issue monitoring; app-wide Secret Mode/biometric gate; obsolete legal/settings navigation and UI; old Drive/client/Flutterwave helper modules (`src/lib/drive.js`, `src/lib/api.js`, `src/lib/flutterwave.js`) where present in the source revision. They are not hidden behind disabled buttons; the old UI and API route implementations are removed from the rebuilt app.
+Legacy app code/features removed in the rebuild: File Studio and document/spreadsheet/PDF generation; Vercel OAuth consent, callback, diagnostics and webhooks; Google Drive backup; push notifications/issue monitoring; app-wide Secret Mode/biometric gate; obsolete legal/settings navigation and UI; old Drive/client/Flutterwave helper modules (`src/lib/drive.js`, `src/lib/api.js`, `src/lib/flutterwave.js`) where present in the source revision. They are not hidden behind disabled buttons; the old UI and API route implementations are removed from the rebuilt app.
 
 ## Automated checks and remaining release verification
 - `node --check` passes for the server and library modules.
@@ -86,15 +86,7 @@ Legacy app code/features removed in the rebuild: File Studio and document/spread
 
 ## Vercel logs connection (optional)
 
-The Developer workspace connects through Vercel OAuth. `GET /api/vercel/connect` starts the authorization redirect and `GET /api/vercel/callback` exchanges the code, validates the Vercel identity, and stores access/refresh tokens inside the signed HttpOnly Pothub session. The server refreshes expiring access tokens. `POST /api/vercel/projects`, `POST /api/vercel/deployments`, and `POST /api/vercel/logs` use that session; no token is entered or persisted in browser IndexedDB. The connection is read-only and does not deploy or modify Vercel projects. Available logs depend on the Vercel account permissions and API support.
-
-## Vercel OAuth update
-- Removed the manual access-token input and all client-side Vercel token persistence.
-- Added OAuth start, callback, disconnect, and connection-status routes.
-- Project discovery checks personal projects and accessible teams where the Vercel API permits it.
-- Updated environment documentation to use the existing Vercel OAuth client credentials and exact callback URL.
-- Existing Firebase browser SDK configuration remains in use; no new Firebase configuration values were introduced.
-
+The Developer workspace uses GitHub OAuth and automatically discovers repositories after a successful one-time browser session exchange. Vercel is used only as the deployment host; Pothub does not require a separate Vercel OAuth app, callback, or redirect URL.
 
 ## Browser OAuth/API routing hotfix (2026-10-29)
 - Removed the global `/(.*) -> /index.html` Vercel rewrite. That broad fallback can mask an API route when the deployment's function routing does not match, causing HTML/non-JSON 405 responses for POST requests such as `/api/auth/google-session` and sending auth-start URLs back to the SPA instead of the provider.

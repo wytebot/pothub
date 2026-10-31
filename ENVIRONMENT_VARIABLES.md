@@ -12,6 +12,7 @@ Set these under **Vercel → Project → Settings → Environment Variables** fo
 | `FRONTEND_URL` | Public browser app origin. If frontend and API share the Vercel domain, use the same origin as `APP_URL`. |
 | `APP_ORIGIN` | Exact browser origin allowed by API CORS; usually the same value as `FRONTEND_URL`. |
 | `SESSION_SECRET` | Random secret of at least 32 characters. Generate a unique value per environment, e.g. `openssl rand -hex 32`. |
+| `POTHUB_VAULT_ENCRYPTION_KEY` | Strong server-only key used to encrypt saved provider API keys in each account's Firestore workspace vault. Generate with `openssl rand -hex 32`; never expose it as `NEXT_PUBLIC_*`. If unset, `SESSION_SECRET` is used as a compatibility fallback. Keep this value stable across deployments or saved provider keys cannot be decrypted. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App Client ID. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App Client Secret; server-only. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Full Firebase service-account JSON, stored as a server-only secret. Do not prefix with `NEXT_PUBLIC_`. |
@@ -43,7 +44,6 @@ Only configure these if you use the corresponding feature or need to override it
 - `POTHUB_VIDEO_MAX_BYTES` — video response size limit in bytes; default is 157286400 (150 MiB).
 - `FLW_MODE` — retained for legacy v4 charge paths; hosted checkout uses the matching Flutterwave Standard secret key for the same environment.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — native Android server OAuth only, not browser Google login.
-- Vercel diagnostics OAuth: `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET`, or supported aliases `VERCEL_OAUTH_CLIENT_ID` / `VERCEL_OAUTH_CLIENT_SECRET` or `VERCEL_APP_CLIENT_ID` / `VERCEL_APP_CLIENT_SECRET`. The callback is `https://pothub-self.vercel.app/api/vercel/callback`.
 
 ## OAuth provider setup
 
@@ -66,9 +66,7 @@ In Firebase Console → Authentication → Sign-in method, enable Google. Add th
 
 Register `APP_URL/api/auth/google/callback` as the redirect URI for the native OAuth client when using that flow.
 
-### Optional Vercel diagnostics connection
 
-Keep these server-only if the **Connect Vercel** feature is used: `VERCEL_CLIENT_ID` and `VERCEL_CLIENT_SECRET`, or the existing supported aliases `VERCEL_OAUTH_CLIENT_ID` / `VERCEL_OAUTH_CLIENT_SECRET` or `VERCEL_APP_CLIENT_ID` / `VERCEL_APP_CLIENT_SECRET`. Register `https://pothub-self.vercel.app/api/vercel/callback` as the exact callback. Do not put the client secret in a `NEXT_PUBLIC_*` variable.
 
 ## Deploy/build settings
 
@@ -132,3 +130,8 @@ These remain separate compatibility settings in this release; configure all thre
 - Set `FLW_SECRET_KEY` and `FLW_WEBHOOK_SECRET_HASH` for the same environment. The old client encryption key is no longer returned by `/api/billing/config`; remove obsolete `FLW_ENCRYPTION_KEY` from deployment variables after confirming no other legacy service uses it.
 - Set `FIREBASE_STORAGE_BUCKET` if the default bucket name is not correct. Generated images are stored in private Firebase Storage objects and returned as short-lived signed URLs. Apply `storage.cors.json` to the bucket so the browser/Capacitor app can fetch signed image URLs (for example: `gcloud storage buckets update gs://YOUR_BUCKET --cors-file=storage.cors.json`).
 - Kling's current new-model endpoints use `Authorization: Bearer <API_KEY>` (not a legacy AK/SK JWT); use a Kling API key created in the Kling developer console. Legacy endpoints that require AK/SK JWT are not used by this adapter.
+
+
+## Account workspace sync
+
+PotHub uses Dexie/IndexedDB as its persistent local database and requests browser persistent-storage permission on startup. Authenticated workspace records (saved agents, prompt templates, chats, messages, runs, projects, and attachment/video metadata) are synchronized to the account-scoped `account_workspaces/{userHash}/items` Firestore collection through authenticated server routes. Firestore client rules remain deny-all; only Firebase Admin on the server accesses this collection. Saved provider API keys are decrypted only in the signed-in client, sent over HTTPS to the authenticated sync endpoint, and re-encrypted with AES-256-GCM using `POTHUB_VAULT_ENCRYPTION_KEY` before Firestore storage. Set this key in Vercel Production, Preview, and Development consistently. The same key must be retained during rotations; rotating it requires a migration of existing encrypted agent records. Binary attachment and generated-media blobs remain in the local IndexedDB and should be included in the ZIP backup when moving devices. The service worker caches only immutable static assets; HTML document navigations are network-only and no-store.

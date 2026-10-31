@@ -1,9 +1,7 @@
-const CACHE = 'pothub-shell-v6';
+const CACHE = 'pothub-shell-v7';
 // Replaced at build time so every deployment prompts an update in existing clients.
 const BUILD_ID = '__POTHUB_BUILD_ID__';
 const SHELL = [
-  '/',
-  '/index.html',
   '/manifest.webmanifest',
   '/icons/pothub-192.png',
   '/icons/pothub-512.png',
@@ -25,7 +23,7 @@ function isAuthOrApiPath(pathname) {
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // Only seed the offline shell and fixed icons. Never cache auth/API responses.
+    // Only seed the manifest and fixed icons. Never cache HTML, auth, or API responses.
     await Promise.all(SHELL.map(async path => {
       try {
         const response = await fetch(path, { cache: 'no-store' });
@@ -57,25 +55,9 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin || isAuthOrApiPath(url.pathname) || hasSensitiveAuthParams(url)) return;
 
   if (request.mode === 'navigate') {
-    // Always prefer the live deployment. Never substitute a cached shell for an
-    // OAuth return or a failed navigation carrying authentication parameters.
-    event.respondWith((async () => {
-      try {
-        const response = await fetch(request, { cache: 'no-store' });
-        if (response.ok && !response.redirected && url.pathname === '/' && !url.search) {
-          const copy = response.clone();
-          const cache = await caches.open(CACHE);
-          await cache.put('/', copy);
-          await cache.put('/index.html', copy.clone());
-        }
-        return response;
-      } catch (error) {
-        if (url.search || url.pathname !== '/') throw error;
-        const cached = await caches.match('/index.html') || await caches.match('/');
-        if (cached) return cached;
-        throw error;
-      }
-    })());
+    // App pages are deliberately network-only. Never cache a document or
+    // replay a stale workspace route when the user returns to Pothub.
+    event.respondWith(fetch(request, { cache: 'no-store' }));
     return;
   }
 

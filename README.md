@@ -4,7 +4,7 @@ Pothub is a React 18 + Next.js application for browser deployment on Vercel, wit
 
 ## Project map
 - `src/ui/` — welcome, role selection, Developer/Creator workspaces, agents, history, backup, profile and responsive styling.
-- `src/lib/` — Dexie persistence, agent-key encryption, backup ZIP support, video adapter, biometric gate, and browser/native platform adapter.
+- `src/lib/` — Dexie persistence, account-partitioned local cache, cloud sync, agent-key encryption, backup ZIP support, video adapter, biometric gate, and browser/native platform adapter.
 - `src/lib/video-adapters/` — provider-specific asynchronous video operations; Gemini Omni Flash is implemented first.
 - `design/` — source design assets and visual references.
 - `server/` — Express API, auth/session handling, GitHub operations, AI proxy, credit ledger and payment routes.
@@ -39,26 +39,23 @@ Pothub is a React 18 + Next.js application for browser deployment on Vercel, wit
 - GitHub accounts use the GitHub OAuth authorization-code flow with state + PKCE and an HTTP-only session cookie in browsers. Native Android uses a one-time deep-link ticket exchanged with the API.
 - Creator accounts use Firebase Google popup in browsers (with redirect fallback when popups are blocked) and system-browser Google OAuth in the APK. The server verifies the Firebase ID token, provisions the Google profile and starter credit ledger, and establishes an HTTP-only session cookie.
 - Native session tokens and the AES key used for agent secrets are stored through Android Keystore-backed secure storage. Browser agent secrets are AES-GCM encrypted with a non-extractable WebCrypto key in IndexedDB.
-- Optional device verification is scoped to the API & Agents page only. It is off by default and does not gate app launch, sign-in, or other screens.
+- Optional device verification is scoped to the API & Agents page only. It is off by default and does not gate app launch, sign-in, or other screens. Browser WebAuthn/PIN state is account-scoped; native biometric/PIN state is stored in Android secure storage. Native biometric enrollment always establishes a passcode fallback first.
 - API keys are sent in the request body only for the operation that uses them. Configure hosting/proxy logs to avoid capturing request bodies.
 
 ## Important release status
-Automated tests and source audits pass in the supplied environment. A production Next.js build and Android APK could not be verified because npm dependency installation timed out. Do not publish until dependencies install, `npm run build` succeeds, `npx cap sync android` completes, and the manual tests in `docs/DEVICE_TEST.md` pass with real OAuth, Google, GitHub and Flutterwave sandbox credentials.
+The static release audit and JavaScript/JSX syntax checks pass. The full test suite is not fully executable in this workspace because `express`, `firebase-admin`, and `typescript` are not installed; 64 tests passed and 16 dependency-backed suites could not start (80 total tests). A production Next.js build and Android APK were not verified. Do not publish until dependencies install, `npm test` passes, `npm run build` succeeds, `npm run build:cap` succeeds, and the manual tests in `docs/DEVICE_TEST.md` pass with real OAuth, Google, GitHub and Flutterwave sandbox credentials.
 
-### Optional Vercel logs connection
+### Deployment platform
 
-Developer users connect through Vercel OAuth, choose a project and deployment, and load available deployment events directly into Diagnose. OAuth tokens are held in Pothub's signed HttpOnly session and refreshed server-side. The connection is read-only and does not deploy, promote, or change Vercel projects. See `ENVIRONMENT_VARIABLES.md` for the exact callback URL and supported existing OAuth variable names.
-
-
-### Vercel log connection
-
-The Developer workspace has a single **Connect Vercel** button. It redirects the user to Vercel OAuth, then returns to Pothub after approval. Configure the existing server-side `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET` credentials (or the supported OAuth aliases) and register `https://pothub-self.vercel.app/api/vercel/callback` as the exact callback URL. No access-token paste field is shown; access and refresh tokens remain in the signed HttpOnly session and refresh on the server.
-
-
-For exact variable retrieval steps and the distinction between Vercel API tokens and OAuth client credentials, see [`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md).
+Vercel remains Pothub's hosting and deployment platform. The Developer workspace reads repositories and GitHub Actions directly from GitHub. Pothub does not connect to Vercel through a separate OAuth app, so no Vercel OAuth callback/redirect URL or Vercel OAuth client credentials are required.
 
 ## Latest integration build
 
 This build adds Runway, Luma, Kling and Replicate video adapters; Firestore-backed resumable media jobs; cross-instance provider health; server-verified browser WebAuthn/PIN lock; searchable model selection; and lazy workspace/history chunks. See `CHANGELOG.md`, `AUDIT_REPORT.md` and `FINAL_VERIFICATION_REPORT.md`.
 
 **Release gate:** automated checks pass, but production and Capacitor builds still require dependency installation in a network-enabled environment. Live payment/OAuth/provider checks and physical Android testing are not certified by this source-only verification. See `FINAL_VERIFICATION_REPORT.md` before deployment.
+
+
+### Persistent workspace storage
+
+PotHub keeps a durable local IndexedDB workspace and automatically synchronizes saved agents, chats, prompts, runs, projects, and metadata to the signed-in account. Local rows are partitioned per account when switching users so offline changes are preserved instead of cleared. Configure `POTHUB_VAULT_ENCRYPTION_KEY` as a stable server-only Vercel environment variable to enable encrypted API-key sync. Binary media blobs remain local and are transferable through the ZIP backup. HTML pages are network-only; only immutable static assets are cached by the service worker.

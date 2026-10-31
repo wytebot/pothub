@@ -92,3 +92,15 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 @media(max-width:600px){.ai-fallback-backdrop{align-items:flex-end;padding:8px 8px calc(8px + env(safe-area-inset-bottom))}.ai-fallback-sheet{width:100%;border-radius:22px 22px 12px 12px;padding:22px 18px}.ai-fallback-sheet button{min-height:48px}.library-page .row-actions{flex-wrap:wrap}}
 .model-picker{position:relative;width:100%;min-width:0}.model-picker-input{display:flex;gap:8px;align-items:center}.model-picker-input input{min-width:0;flex:1}.model-picker-menu{position:absolute;z-index:80;top:calc(100% + 6px);left:0;right:0;max-height:min(320px,50vh);overflow:auto;padding:6px;border:1px solid var(--border,#30363d);border-radius:12px;background:var(--panel,#161b22);box-shadow:0 14px 34px #0008}.model-picker-menu button{display:block;width:100%;min-height:44px;text-align:left;padding:10px 12px;border:0;border-radius:8px;background:transparent;color:inherit}.model-picker-menu button.active,.model-picker-menu button:hover{background:var(--hover,#263244)}.model-picker-menu p{padding:10px}.model-picker small{display:block;margin-top:6px;color:var(--muted,#8b949e)}.virtual-history{overflow:auto;overscroll-behavior:contain;contain:content}.virtual-history .history-row{margin:0 0 8px;min-height:132px;box-sizing:border-box}
 @media(max-width:760px){.model-picker-menu{position:fixed;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));top:auto;bottom:max(12px,env(safe-area-inset-bottom));max-height:min(52dvh,460px);border-radius:18px;padding:8px}.model-picker-menu button{min-height:48px}}
+
+/* Mobile workspace navigation: the menu is a real drawer, not a hidden sidebar. */
+@media(max-width:760px){
+  .sidebar.mobile-open{display:flex;position:fixed;z-index:40;left:0;top:54px;bottom:0;width:min(84vw,292px);padding:16px 12px calc(18px + env(safe-area-inset-bottom));background:var(--panel);border-right:1px solid var(--border);box-shadow:18px 0 48px #0009;overflow-y:auto}
+  .mobile-menu-scrim{position:fixed;z-index:35;inset:54px 0 0;border:0;border-radius:0;padding:0;background:#0009;min-height:0}
+  .sidebar.mobile-open nav button{min-height:48px}
+}
+/* Errors are non-blocking notices: they never push the workspace or cover its controls. */
+.toast{position:fixed;z-index:1500;top:calc(68px + env(safe-area-inset-top));bottom:auto;left:50%;transform:translateX(-50%);width:min(94vw,560px);max-height:min(22dvh,170px);overflow:auto;overscroll-behavior:contain;margin:0;padding:10px 12px;box-shadow:0 12px 32px #0009;line-height:1.45}
+.toast button{position:sticky;right:0;align-self:flex-start;flex:0 0 auto}
+.repo-load-status{display:block;margin-top:9px;line-height:1.5}
+@media(max-width:760px){.toast{top:calc(60px + env(safe-area-inset-top));width:calc(100vw - 20px);max-height:20dvh;font-size:12px}.mobile-nav{position:relative;z-index:5}.agents-page .page-heading{align-items:center}.agents-page .page-heading>.secondary{white-space:nowrap;font-size:12px;padding:8px 10px}}

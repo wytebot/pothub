@@ -52,12 +52,6 @@
         "indexes": []
       },
       {
-        "collectionGroup": "vercel_refresh_locks",
-        "fieldPath": "expiresAt",
-        "ttl": true,
-        "indexes": []
-      },
-      {
         "collectionGroup": "starter_ip_claims",
         "fieldPath": "expiresAt",
         "ttl": true,
