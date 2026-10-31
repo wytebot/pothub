@@ -165,3 +165,38 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 @media(max-width:760px){.repo-select{display:block}.repo-picker{grid-column:auto}.repo-picker .custom-select-menu{max-height:44dvh}.repo-picker .custom-select-option{padding:12px 10px}}
 
 .repo-discovery-error,.repo-refresh-note{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:#111820;color:#c9d1d9;font-size:13px;line-height:1.5;overflow-wrap:anywhere}.repo-discovery-error{border-color:#6b3535;background:#211719;color:#ffb4ae}.repo-refresh-note{border-color:#66552c;background:#201d14;color:#e3c77c}.repo-discovery-error button,.repo-refresh-note button{flex-shrink:0}
+
+/* App icon & color page: the picked color drives --accent for the whole app. */
+.pot-logo.themed{border-width:1px;border-style:solid}
+.pot-icon-svg{display:block;flex:none;border-radius:22%;border:1px solid var(--border)}
+.appicon-page{max-width:760px}
+.appicon-preview{display:flex;gap:18px;align-items:flex-start}
+.appicon-preview-text{min-width:0;display:grid;gap:10px}
+.appicon-preview-text h2{margin:0}
+.appicon-effects{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13px;color:var(--muted)}
+.appicon-effects li{display:flex;align-items:flex-start;gap:8px}
+.appicon-effects svg{width:15px;height:15px;margin-top:2px;color:var(--accent)}
+.appicon-status{font-size:13px;color:var(--muted);margin:-4px 2px 14px}
+.appicon-colors{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:10px}
+.appicon-swatch{width:48px;height:48px;min-height:48px;padding:0;border-radius:50%;background:var(--swatch-bg);border:2px solid var(--border);position:relative}
+.appicon-swatch i{width:16px;height:16px;border-radius:50%;background:var(--swatch-dot);display:block}
+.appicon-swatch.selected{border-color:var(--text);box-shadow:0 0 0 3px color-mix(in srgb,var(--swatch-dot) 45%,transparent)}
+.appicon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px}
+.appicon-tile{display:grid;justify-items:center;gap:8px;min-height:116px;padding:12px 8px;background:var(--panel2);font-size:12px}
+.appicon-tile .pot-icon-svg{width:72px;height:72px}
+.appicon-tile.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel2))}
+.appicon-help p{font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:8px}
+.appicon-help p:last-child{margin-bottom:0}
+@media(max-width:480px){.appicon-preview{flex-direction:column}}
+:root[data-theme="light"] .appicon-swatch{background:var(--swatch-bg)}
+:root[data-theme="light"] .appicon-tile{background:#fff}
+:root[data-theme="light"] .appicon-tile.selected{background:color-mix(in srgb,var(--accent) 8%,#fff)}
+/* previously hard-coded blue accents now follow the chosen color */
+.progress-steps i.pulse{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 20%,transparent)}
+.default-tag{border-color:var(--accent);color:var(--accent)}
+.deployment-update-mark{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.work-progress .progress-steps li.current .step-mark{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent)}
+
+/* Repository-aware Edit workspace */
+.edit-workspace{display:flex;flex-direction:column;gap:14px}.edit-transcript{display:flex;flex-direction:column;gap:12px;max-height:48vh;overflow:auto;padding:8px;border:1px solid var(--line,#303640);border-radius:14px}.edit-code-card{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line,#303640);border-radius:14px;background:rgba(255,255,255,.025)}.edit-code-input{width:100%;min-height:260px;max-height:60vh;resize:vertical;overflow:auto;white-space:pre;tab-size:2;font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;background:#0b0e14;color:#e6edf3;border:1px solid var(--line,#303640);border-radius:10px;padding:14px}.edit-composer{display:flex;gap:10px;align-items:flex-end;position:sticky;bottom:8px;padding:10px;background:var(--panel,#151a22);border:1px solid var(--line,#303640);border-radius:14px}.edit-composer textarea{flex:1;min-width:0;resize:vertical;max-height:180px;background:transparent;color:inherit;border:0;outline:none;font:inherit}.edit-composer button{flex:0 0 auto}.vercel-source-panel{display:flex;flex-direction:column;gap:12px}.vercel-source-panel select,.edit-code-card select{max-width:100%;min-width:0}
+@media(max-width:600px){.edit-composer{gap:6px;padding:8px}.edit-composer button{min-height:42px}.edit-code-input{min-height:220px;font-size:12px}.edit-transcript{max-height:42vh}}
