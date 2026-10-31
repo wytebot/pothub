@@ -208,7 +208,7 @@ export async function biometricAvailable() {
 async function nativeVerify() {
   const available = await NativeBiometric.isAvailable();
   if (!available?.isAvailable) throw new Error('Biometric verification is unavailable on this device.');
-  await NativeBiometric.verifyIdentity({ reason: 'Unlock PotHub API keys', title: 'Verify identity', subtitle: 'API & Agents', description: 'Confirm it is you to view or change agent settings.', negativeButtonText: 'Use passcode' });
+  await NativeBiometric.verifyIdentity({ reason: 'Unlock PotHub API keys', title: 'Verify identity', subtitle: 'API & Agents', description: 'Confirm it is you to view or change agent settings.' });
 }
 
 export async function verifyApiPage(ownerId, { requestPasscode } = {}) {
