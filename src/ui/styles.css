@@ -241,3 +241,54 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 @keyframes ai-route-in{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes ai-route-shimmer{to{background-position:200% 0}}
 .vercel-project-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0;flex-wrap:wrap}.vercel-project-actions a,.deployment-link a{color:var(--accent,#d9aa36);overflow-wrap:anywhere}.deployment-status{display:flex;align-items:center;gap:9px;padding:10px 12px;margin-top:12px;border:1px solid var(--border);border-radius:12px;font-size:.9rem}.pulse-dot{width:8px;height:8px;border-radius:50%;background:#e2ad35;box-shadow:0 0 0 0 #e2ad3555;animation:pothub-pulse 1.5s infinite}@keyframes pothub-pulse{70%{box-shadow:0 0 0 9px #e2ad3500}100%{box-shadow:0 0 0 0 #e2ad3500}}.deployment-link{display:flex;gap:12px;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:.82rem}.backup-reminder-modal{max-width:460px}
+
+/* Premium zero-server-cost workspace tools */
+.creator-prompt-tools{padding:8px 14px 0;position:relative;z-index:2}.prompt-library-panel{margin-top:8px;padding:12px;border:1px solid var(--border,#d9d9df);border-radius:12px;background:var(--panel,#fff);box-shadow:0 8px 24px #0000000d}.saved-prompt-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border,#e5e5e8)}.saved-prompt-row button:first-child{flex:1;text-align:left}.edit-context-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0;padding:10px;border:1px solid var(--border,#dedee4);border-radius:10px}.edit-context-tools>span{font-size:.85rem;font-weight:650}.edit-context-tools select{max-width:min(100%,280px)}.plan-mode-toggle{display:flex;align-items:center;gap:6px;font-size:.88rem}.plan-mode-toggle input{width:16px;height:16px}.prompt-library-panel label{display:block;margin-top:10px}.prompt-library-panel .text-input{width:100%;margin-top:4px}
+
+/* PotHub usability polish: clearer hierarchy, calmer surfaces, and touch-friendly controls. */
+.panel,.chat-layout,.prompt-library-panel,.edit-workspace{border-radius:14px;box-shadow:0 1px 2px #00000012;transition:border-color .16s ease,box-shadow .16s ease}
+.panel:focus-within{border-color:color-mix(in srgb,var(--accent) 55%,var(--border))}
+button,a,.icon-button{transition:background-color .14s ease,border-color .14s ease,transform .14s ease}
+button:not(:disabled):active{transform:translateY(1px)}
+button.primary{font-weight:650;box-shadow:0 1px 2px #00000018}
+input,textarea,select{border-radius:9px;line-height:1.45}
+textarea{resize:vertical}
+.page-heading{gap:16px}
+.page-heading p{max-width:64ch;line-height:1.55}
+.chat-layout{box-shadow:0 12px 36px #00000012}
+.chat-history-list{display:grid;gap:4px;overflow:auto}
+.chat-history-list button{width:100%;justify-content:flex-start;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-color:transparent;background:transparent;color:var(--muted)}
+.chat-history-list button.active{background:var(--panel);border-color:var(--border);color:var(--text)}
+.creator-prompt-tools{padding:10px 12px 0}
+.prompt-library-panel{box-shadow:0 12px 30px #00000018}
+.saved-prompt-row{border-radius:8px;padding:6px}
+.saved-prompt-row:hover{background:var(--panel2)}
+.edit-context-tools{background:var(--panel2);border-radius:12px}
+.edit-context-tools>span{color:var(--muted)}
+.edit-transcript{scroll-behavior:smooth}
+.message-body{overflow-wrap:anywhere}
+.generated-image{max-width:100%;height:auto;object-fit:contain;border-radius:12px;border:1px solid var(--border)}
+.job-card{background:var(--panel2);border-radius:12px}
+.toast{backdrop-filter:blur(12px)}
+@media(max-width:760px){
+ .page-heading{flex-direction:column;align-items:stretch}
+ .page-heading>.actions-row,.page-heading .actions-row{width:100%}
+ .page-heading .actions-row button{flex:1}
+ .chat-layout{border-radius:12px}
+ .composer{padding:10px;border-radius:0 0 12px 12px}
+ .composer-footer{justify-content:flex-start;flex-wrap:wrap}
+ .composer-footer .send{margin-left:auto}
+ .composer-footer select{max-width:100px}
+ .creator-prompt-tools .actions-row button{flex:1}
+ .edit-context-tools>*{max-width:100%}
+ .edit-context-tools select{width:100%;max-width:100%}
+ .panel-heading{align-items:flex-start;flex-wrap:wrap}
+}
+@media(prefers-reduced-motion:reduce){button,a,.icon-button,.panel,.chat-layout,.prompt-library-panel{transition:none!important}}
+
+/* Optional local-first code completion controls */
+.offline-autocomplete-tools{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin:.7rem 0;padding:.75rem;border:1px solid var(--border,#d8dce3);border-radius:14px;background:var(--surface-muted,#f8fafc)}
+.offline-autocomplete-tools small{flex-basis:100%;color:var(--muted,#64748b);line-height:1.45}
+.offline-completion{flex-basis:100%;min-width:0;padding:.65rem;border-radius:10px;background:var(--surface,#fff)}
+.offline-completion pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:10rem;overflow:auto;margin:0 0 .6rem;font-size:.86rem}
+@media(max-width:640px){.offline-autocomplete-tools{align-items:stretch}.offline-autocomplete-tools button{min-height:42px}.offline-autocomplete-tools small{font-size:.8rem}}
