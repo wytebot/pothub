@@ -36,4 +36,4 @@ export function providerById(id){return PROVIDERS.find(p=>p.id===id)||null}
 export function providersForFunction(fn){const need=FUNCTIONS[fn]||FUNCTIONS.Diagnosis;return PROVIDERS.filter(p=>p.implemented!==false&&need.every(c=>p.capabilities.includes(c)))}
 export function providerLabel(id){return providerById(id)?.label||id}
 export function modelsForFunction(providerId,fn){const p=providerById(providerId);return p?.modelsByFunction?.[fn]||p?.models||[]}
-export function normalizeProvider(value){const s=String(value||'').toLowerCase();if(s==='gemini')return 'gemini';if(s==='openai-compatible')return 'openai-compatible';if(s==='anthropic-compatible')return 'anthropic-compatible';return providerById(s)?.id||null}
+export function normalizeProvider(value){const s=String(value||'').trim().toLowerCase().replace(/[_\s]+/g,'-');const aliases={'google-gemini':'gemini','gemini-api':'gemini','google':'gemini','open-ai':'openai','open-ai-compatible':'openai-compatible','claude':'anthropic','anthropic-api':'anthropic','xai':'xai','meta-llama':'openrouter'};const id=aliases[s]||s;return providerById(id)?.id||null}
