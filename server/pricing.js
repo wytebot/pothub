@@ -6,7 +6,7 @@ export const PACKS = [
   { id: 'power', name: 'Power', usd: 19.99, credits: 324, maxCreditsAtTarget: 324 }
 ];
 export const OPERATIONS = { diagnosis: 10, repair: 20 };
-export const BYO_SERVICE_FEES = { developer: 2, creator: 1 };
+export const BYO_SERVICE_FEES = { developer: 1, creator: 1 }; // One credit per successful BYOK agent workflow; no separate PotHub AI fee.
 export const ASSUMPTIONS = {
   targetMargin: 0.60,
   // Conservative planning estimate: $0.003 variable provider cost per credit, doubled for model/token variance. Replace with measured provider invoices after launch.
