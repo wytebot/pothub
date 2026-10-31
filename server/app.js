@@ -49,7 +49,7 @@ function requestAgentConfig(req) {
     const mapped = parsed.keys.flatMap((item) => {
       const key=String(item.key || '').trim();
       const models=[...new Set([...(Array.isArray(item.models)?item.models:[]),item.model||parsed.model||DEFAULT_MODELS.text].map(x=>String(x||'').trim()).filter(Boolean))].slice(0,8);
-      return models.map(model=>({key,model,provider:String(item.provider||'Gemini'),baseUrl:String(item.baseUrl||'').trim(),task:String(item.task||'all'),source:'user'}));
+      return models.map(model=>({key,model,provider:String(item.provider||parsed.provider||'gemini'),baseUrl:String(item.baseUrl||parsed.baseUrl||'').trim(),task:String(item.task||'all'),source:'user'}));
     }).filter(item => item.key && item.key.length < 300 && !/[\r\n\t\s]/.test(item.key)).slice(0,8);
     const specific = mapped.filter(item => item.task === task);
     return [...specific, ...mapped.filter(item => item.task === 'all' && !specific.includes(item))].slice(0,8);
