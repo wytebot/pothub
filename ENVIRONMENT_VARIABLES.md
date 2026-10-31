@@ -140,3 +140,19 @@ PotHub uses Dexie/IndexedDB as its persistent local database and requests browse
 ## Currency display
 
 | `POTHUB_USD_NGN_RATE` | Optional | Indicative USD-to-NGN display conversion rate. Defaults to 1347; update when your published naira equivalents should change. |
+
+
+## Vercel account connection (Developer workspace)
+
+PotHub uses Sign in with Vercel OAuth so each developer connects their own Vercel account and chooses a project. Do **not** configure a shared `VERCEL_TOKEN` or `VERCEL_PROJECT_ID`. Add these server-only variables to the PotHub Vercel project:
+
+| Variable | Value |
+|---|---|
+| `VERCEL_CLIENT_ID` | Client ID from the Vercel OAuth app |
+| `VERCEL_CLIENT_SECRET` | Client Secret from the same Vercel OAuth app; keep server-only |
+| `VERCEL_REDIRECT_URI` | `https://YOUR-POTHUB-DOMAIN/api/vercel/callback` (must exactly match an Authorization Callback URL in the Vercel app) |
+
+In the Vercel app's Manage settings, enable the `openid`, `email`, `profile`, and `offline_access` identity scopes and the read permissions needed for listing projects, reading deployments, and reading deployment events/logs. The app's available API permissions are controlled by its Vercel dashboard configuration; the OAuth scopes alone do not grant deployment API permissions. PotHub uses PKCE and a short-lived, HttpOnly, signed state cookie, stores per-user access/refresh tokens encrypted in Firestore, and rotates refresh tokens server-side. Keep `SESSION_SECRET`, `POTHUB_VAULT_ENCRYPTION_KEY` (or the existing strong `SESSION_SECRET` fallback), and Firebase Admin/Firestore configured.
+
+After redeploying, open Developer workspace → Deployment logs → Connect Vercel. Authorize the account, select a project from the discovered list, then choose a deployment. If Vercel reports insufficient permissions, update the OAuth app's permissions and reconnect. The callback URL to register is `https://YOUR-POTHUB-DOMAIN/api/vercel/callback`.
+

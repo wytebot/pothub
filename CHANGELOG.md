@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-31 — App icon & color page
+
+- Added an **App icon** page to the collapsible menu (sidebar on desktop, drawer on mobile). Pick one of 8 pot shapes (Classic, Cauldron, Stock pot, Saucepan, Dutch oven, Tagine, Teapot, Plant pot) in one of 9 colors.
+- The chosen color recolors the whole app (`--accent` variables, dark and light themes) and the top-bar logo follows the chosen pot.
+- The choice also swaps the browser-tab icon, Apple touch icon and web-app manifest (72 pre-rendered icon sets in `public/icons/themes/`).
+- Android APK: new `AppIcon` Capacitor plugin switches the launcher icon through generated activity-aliases (`npm run android:configure` generates the resources; no extra PNGs needed).
+- The choice is stored in IndexedDB (`settings: app-icon`) with a localStorage mirror so it applies before the app finishes loading.
+- Added `design/icons/render-icons.py` and `measure-fit.py` to regenerate the PNG sets; see `docs/APP_ICONS.md`.
+
 ## 2026-10-30 — audit-driven hardening update
 
 - Added a shared provider catalogue for Gemini, major OpenAI-compatible text/vision services, Anthropic-compatible services, and explicit catalogue-only media providers.
