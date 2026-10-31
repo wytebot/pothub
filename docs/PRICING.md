@@ -2,14 +2,16 @@
 
 ## Current public prices (unchanged)
 
-| Pack | Price | Credits |
-|---|---:|---:|
-| Starter | $1.99 | 24 |
-| Developer | $4.99 | 74 |
-| Professional | $9.99 | 158 |
-| Power | $19.99 | 324 |
+The checkout remains USD. PotHub also displays indicative NGN equivalents using `POTHUB_USD_NGN_RATE` (default fallback: ₦1,347 per USD, an indicative 31 October 2026 reference). Configure the variable in Vercel Production, Preview and Development to keep displayed naira equivalents aligned with your pricing policy. NGN figures are display-only; they do not alter the Flutterwave order currency or server-verified USD amount.
 
-Diagnosis costs 10 credits; repair proposal costs 20. BYO service fees are 2 credits for Developer and 1 for Creator. Delivered video charging remains idempotent and is performed only on result delivery. Verified Fix costs 3 credits, charged only after a matching GitHub Actions run is confirmed completed by the server.
+| Pack | USD price | Indicative NGN at ₦1,347/USD | Credits |
+|---|---:|---:|---:|
+| Starter | $1.99 | ₦2,681 | 24 |
+| Developer | $4.99 | ₦6,722 | 74 |
+| Professional | $9.99 | ₦13,457 | 158 |
+| Power | $19.99 | ₦26,927 | 324 |
+
+Diagnosis costs 10 credits; repair proposal costs 20. BYO service fees are 2 credits for Developer and 1 for Creator. Developer accounts can choose `Pothub AI` or `My own agent` in Settings; the choice is stored on the server account profile. Pothub AI uses the existing platform usage schedule (10 credits for diagnosis and 20 for repair proposal). Own-agent operations cost 2 credits. Creator configured-agent chat/image operations cost 1 credit. Delivered video charging remains idempotent and is performed only on result delivery. Verified Fix costs 3 credits, charged only after a matching GitHub Actions run is confirmed completed by the server.
 
 ## Planning model
 

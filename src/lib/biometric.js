@@ -99,16 +99,16 @@ async function apiSecurity(path, body) {
   return data;
 }
 
-function promptPin(message) {
-  if (typeof window === 'undefined' || typeof window.prompt !== 'function') throw new Error('Passcode entry is unavailable in this environment.');
-  return window.prompt(message);
+function promptPin(requestPasscode, purpose, message) {
+  if (typeof requestPasscode === 'function') return requestPasscode({ purpose, message });
+  throw new Error('The PotHub passcode dialog is unavailable. Reopen API & Agents and try again.');
 }
 
-async function setupPin(ownerId) {
-  const first = promptPin('Set a device passcode (6–12 digits) for API & Agents access.');
+async function setupPin(ownerId, requestPasscode) {
+  const first = await promptPin(requestPasscode, 'setup', 'Create a 6–12 digit passcode for API & Agents access.');
   if (first === null) throw new Error('Passcode setup was cancelled.');
-  if (!/^\d{6,12}$/.test(first)) throw new Error('Use a passcode containing 6–12 digits.');
-  const second = promptPin('Confirm your device passcode.');
+  if (!/^\d{6,12}$/.test(String(first))) throw new Error('Use a passcode containing 6–12 digits.');
+  const second = await promptPin(requestPasscode, 'confirm', 'Confirm your new passcode.');
   if (second !== first) throw new Error('The passcodes did not match.');
 
   if (!isNative()) {
@@ -125,12 +125,12 @@ async function setupPin(ownerId) {
   return row;
 }
 
-async function verifyPin(ownerId) {
+async function verifyPin(ownerId, requestPasscode) {
   const row = await readLock(ownerId);
   if (!row?.pinHash && !row?.serverVerified) throw new Error('No fallback passcode is configured. Unlock with biometrics, then enable the fallback passcode in API & Agents settings.');
   const now = Date.now();
   if (Number(row.lockedUntil) > now) throw new Error(`Passcode attempts are temporarily paused. Try again in ${Math.ceil((row.lockedUntil - now) / 1000)} seconds.`);
-  const pin = promptPin('Enter your API & Agents device passcode.');
+  const pin = await promptPin(requestPasscode, 'verify', 'Enter your API & Agents passcode.');
   if (pin === null) throw new Error('Verification was cancelled.');
   if (!/^\d{6,12}$/.test(pin)) throw new Error('Enter the 6–12 digit passcode.');
 
@@ -158,16 +158,24 @@ function credentialJSON(credential) {
   return out;
 }
 
-async function browserRegister(ownerId) {
-  const options = await apiSecurity('webauthn/register/options');
-  const publicKey = { ...options, challenge: fromB64url(options.challenge), user: { ...options.user, id: fromB64url(options.user.id) }, excludeCredentials: (options.excludeCredentials || []).map(x => ({ ...x, id: fromB64url(x.id) })) };
-  const credential = await navigator.credentials.create({ publicKey });
-  if (!credential) throw new Error('Device verification setup was cancelled.');
-  const result = await apiSecurity('webauthn/register/verify', { response: credentialJSON(credential) });
-  const pinRow = await setupPin(ownerId);
-  const row = { ...pinRow, id: result.credentialId, createdAt: Date.now(), rpId: location.hostname, enabled: true, mode: 'webauthn', hasPin: true, serverVerified: true };
-  await writeLock(row, ownerId);
-  return row;
+async function browserRegister(ownerId, requestPasscode) {
+  // Establish the fallback first. If the OS passkey sheet is dismissed or the
+  // browser cannot finish WebAuthn, the user still leaves with a working PIN lock.
+  const pinRow = await setupPin(ownerId, requestPasscode);
+  try {
+    const options = await apiSecurity('webauthn/register/options');
+    const publicKey = { ...options, challenge: fromB64url(options.challenge), user: { ...options.user, id: fromB64url(options.user.id) }, excludeCredentials: (options.excludeCredentials || []).map(x => ({ ...x, id: fromB64url(x.id) })) };
+    const credential = await navigator.credentials.create({ publicKey });
+    if (!credential) throw new Error('Passkey setup was cancelled.');
+    const result = await apiSecurity('webauthn/register/verify', { response: credentialJSON(credential) });
+    const row = { ...pinRow, id: result.credentialId, createdAt: Date.now(), rpId: location.hostname, enabled: true, mode: 'webauthn', hasPin: true, serverVerified: true };
+    await writeLock(row, ownerId);
+    return row;
+  } catch (error) {
+    const fallback = { ...pinRow, enabled: true, mode: 'pin', biometricEnabled: false, serverVerified: true };
+    await writeLock(fallback, ownerId);
+    return fallback;
+  }
 }
 
 async function browserVerify() {
@@ -203,41 +211,41 @@ async function nativeVerify() {
   await NativeBiometric.verifyIdentity({ reason: 'Unlock PotHub API keys', title: 'Verify identity', subtitle: 'API & Agents', description: 'Confirm it is you to view or change agent settings.', negativeButtonText: 'Use passcode' });
 }
 
-export async function verifyApiPage(ownerId) {
+export async function verifyApiPage(ownerId, { requestPasscode } = {}) {
   const available = await biometricAvailable();
   const row = await readLock(ownerId);
   const method = chooseVerificationMode({ native: isNative(), mode: row?.mode, available: available.available, hasFallback: !!(row?.pinHash || row?.serverVerified) });
   if (method === 'recovery-required') throw new Error('No fallback passcode is configured. Unlock with your existing authenticator, then enable a fallback passcode.');
-  if (method === 'pin') return verifyPin(ownerId);
+  if (method === 'pin') return verifyPin(ownerId, requestPasscode);
   if (method === 'native-biometric') {
     try {
       await nativeVerify();
       // Upgrade older native installs that had biometric-only locking.
       if (!row?.pinHash) {
-        const fallback = await setupPin(ownerId);
+        const fallback = await setupPin(ownerId, requestPasscode);
         await writeLock({ ...fallback, enabled: true, mode: 'native', biometricEnabled: true, createdAt: row?.createdAt || Date.now() }, ownerId);
       }
       return true;
     } catch (biometricError) {
-      if (row?.pinHash) return verifyPin(ownerId);
+      if (row?.pinHash) return verifyPin(ownerId, requestPasscode);
       throw new Error(`${biometricError?.message || 'Biometric verification failed.'} No fallback passcode is configured on this older installation. Unlock once with biometrics and set a fallback passcode.`);
     }
   }
   try { return await browserVerify(); }
   catch (error) {
     const row = await readLock(ownerId);
-    if (row?.serverVerified) return verifyPin(ownerId);
+    if (row?.serverVerified) return verifyPin(ownerId, requestPasscode);
     throw error;
   }
 }
 
-export async function enableApiPageBiometric(ownerId) {
+export async function enableApiPageBiometric(ownerId, { requestPasscode } = {}) {
   const available = await biometricAvailable();
-  if (!available.available) return setupPin(ownerId);
+  if (!available.available) return setupPin(ownerId, requestPasscode);
   if (isNative()) {
     // Always configure a fallback first; a biometric prompt cancellation must
     // never leave the user with a lock they cannot recover from.
-    const fallback = await setupPin(ownerId);
+    const fallback = await setupPin(ownerId, requestPasscode);
     try {
       await nativeVerify();
       const row = { ...fallback, enabled: true, mode: nativeEnableMode({ biometricPromptSucceeded: true }), biometricEnabled: true, createdAt: Date.now() };
@@ -251,11 +259,11 @@ export async function enableApiPageBiometric(ownerId) {
       return row;
     }
   }
-  return browserRegister(ownerId);
+  return browserRegister(ownerId, requestPasscode);
 }
 
-export async function disableApiPageBiometric(ownerId) {
-  await verifyApiPage(ownerId);
+export async function disableApiPageBiometric(ownerId, options = {}) {
+  await verifyApiPage(ownerId, options);
   if (!isNative()) await apiSecurity('lock/disable');
   await deleteLock(ownerId);
   return true;

@@ -135,3 +135,8 @@ These remain separate compatibility settings in this release; configure all thre
 ## Account workspace sync
 
 PotHub uses Dexie/IndexedDB as its persistent local database and requests browser persistent-storage permission on startup. Authenticated workspace records (saved agents, prompt templates, chats, messages, runs, projects, and attachment/video metadata) are synchronized to the account-scoped `account_workspaces/{userHash}/items` Firestore collection through authenticated server routes. Firestore client rules remain deny-all; only Firebase Admin on the server accesses this collection. Saved provider API keys are decrypted only in the signed-in client, sent over HTTPS to the authenticated sync endpoint, and re-encrypted with AES-256-GCM using `POTHUB_VAULT_ENCRYPTION_KEY` before Firestore storage. Set this key in Vercel Production, Preview, and Development consistently. The same key must be retained during rotations; rotating it requires a migration of existing encrypted agent records. Binary attachment and generated-media blobs remain in the local IndexedDB and should be included in the ZIP backup when moving devices. The service worker caches only immutable static assets; HTML document navigations are network-only and no-store.
+
+
+## Currency display
+
+| `POTHUB_USD_NGN_RATE` | Optional | Indicative USD-to-NGN display conversion rate. Defaults to 1347; update when your published naira equivalents should change. |

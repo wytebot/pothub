@@ -70,3 +70,15 @@
 - Moved native API-page lock records and fallback PIN verifier into Android secure storage; biometric cancellation/unavailability now routes to a valid passcode fallback.
 - Made native agent-key migration preflight all records and commit migrated ciphertexts atomically; made default-agent writes transactional.
 - Added account-cache and biometric-policy regression tests and expanded release audit checks.
+
+## 2026-10-31 — API UI, billing mode and NGN display hardening
+- Branded API-agent success notifications and passcode setup/verify dialogs; removed browser prompt usage from the biometric lock flow.
+- Configured PIN fallback before browser passkey registration so cancelled WebAuthn setup leaves a working PIN lock.
+- Added account-persisted Developer AI mode (Pothub AI vs own agent) and server-authoritative agent selection/billing.
+- Preserved Creator BYO fee at 1 credit and Developer BYO fee at 2 credits; platform diagnosis/repair remain 10/20 credits.
+- Added indicative NGN display equivalents for credit packs, controlled by optional `POTHUB_USD_NGN_RATE`.
+
+## 2026-10-31 — Popup domain redaction
+- Removed deployment hostnames and raw URLs from user-facing error/notice/passcode/action/payment dialogs.
+- Replaced browser-native confirm/prompt interactions with PotHub-styled dialogs for agent removal, fix verification, branch revert and commit-message entry.
+- Added sanitizer regression tests and verified UI JSX syntax, server/script/test syntax and static release audit.
