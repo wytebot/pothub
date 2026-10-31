@@ -292,3 +292,30 @@ textarea{resize:vertical}
 .offline-completion{flex-basis:100%;min-width:0;padding:.65rem;border-radius:10px;background:var(--surface,#fff)}
 .offline-completion pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:10rem;overflow:auto;margin:0 0 .6rem;font-size:.86rem}
 @media(max-width:640px){.offline-autocomplete-tools{align-items:stretch}.offline-autocomplete-tools button{min-height:42px}.offline-autocomplete-tools small{font-size:.8rem}}
+
+/* ChatGPT-like repository conversation: distinct turns, action rows and live progress. */
+.edit-transcript{gap:20px;padding:clamp(12px,3vw,24px);background:var(--bg,#0d1117);border-radius:16px;scroll-behavior:smooth}
+.edit-transcript .message{width:100%;max-width:860px;margin:0 auto 10px;animation:edit-message-in .2s ease-out}
+.edit-transcript .message.user{display:flex;flex-direction:column;align-items:flex-end}
+.edit-transcript .message.user .message-body{max-width:min(92%,680px);background:#252b35;border:1px solid #343b46;border-radius:18px 18px 5px 18px;padding:13px 16px}
+.edit-transcript .message.assistant .message-body{padding:5px 2px 2px;background:transparent;border:0}
+.edit-message-actions{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;opacity:.9}
+.edit-transcript .message.user .edit-message-actions{justify-content:flex-end}
+.edit-message-actions button{min-height:30px;padding:4px 8px;background:transparent;border-color:transparent;color:var(--muted);font-size:11px;border-radius:7px}
+.edit-message-actions button:hover{background:var(--panel2);color:var(--text)}
+.inspected-files{display:block;margin-top:12px;overflow-wrap:anywhere}
+.edit-starters{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+.edit-starters button{font-size:12px;background:var(--panel2)}
+.edit-thinking{display:flex;align-items:flex-start;gap:12px;padding:14px 2px!important}
+.edit-thinking p{font-size:13px;color:var(--muted);margin:6px 0 0}
+.thinking-dots{display:flex;gap:4px;padding-top:7px}
+.thinking-dots i{width:6px;height:6px;background:var(--accent);border-radius:50%;animation:thinking-bounce 1s ease-in-out infinite}
+.thinking-dots i:nth-child(2){animation-delay:.15s}.thinking-dots i:nth-child(3){animation-delay:.3s}
+.thinking-track{height:3px;max-width:300px;background:var(--border);border-radius:10px;overflow:hidden;margin-top:12px}
+.thinking-track i{display:block;width:38%;height:100%;background:var(--accent);animation:thinking-sweep 1.6s ease-in-out infinite}
+@keyframes edit-message-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes thinking-bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+@keyframes thinking-sweep{from{transform:translateX(-110%)}to{transform:translateX(290%)}}
+@media(prefers-reduced-motion:reduce){.edit-transcript .message,.thinking-dots i,.thinking-track i{animation:none}}
+
+.repair-file-hints{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--line,#303640);border-radius:12px;background:rgba(255,255,255,.025);animation:repairHintFade 1.2s ease both}.repair-file-hints span{font-size:12px;opacity:.58}.repair-file-hints code{font-size:12px;opacity:.68;animation:repairHintFade 1.6s ease both}.edit-code-input{max-height:none;min-height:260px;resize:vertical}.edit-thinking .thinking-track i{animation:thinkingSweep 1.4s ease-in-out infinite}@keyframes repairHintFade{0%{opacity:0;transform:translateY(3px)}100%{opacity:.78;transform:translateY(0)}}@keyframes thinkingSweep{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
