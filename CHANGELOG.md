@@ -82,3 +82,10 @@
 - Removed deployment hostnames and raw URLs from user-facing error/notice/passcode/action/payment dialogs.
 - Replaced browser-native confirm/prompt interactions with PotHub-styled dialogs for agent removal, fix verification, branch revert and commit-message entry.
 - Added sanitizer regression tests and verified UI JSX syntax, server/script/test syntax and static release audit.
+
+## 2026-10-31 — Developer repository discovery and mobile picker repair
+- Fixed the mobile repository picker being constrained to the 18px search-icon grid column, which caused option labels to wrap vertically into a long unreadable strip.
+- Rebuilt the repository field as a full-width PotHub custom picker with searchable repository list, visibility labels, count, loading/empty/error states, and a reconnect action.
+- Hardened GitHub repository discovery by checking the connected GitHub identity and OAuth repository scope before paginating owner, collaborator, and organization-member repositories.
+- Added explicit diagnostics for missing repository scope, account mismatch, expired authorization, and organization SSO denial; repository responses are never cached.
+- Added focused policy tests for missing scopes, account mismatch, and successful repository authorization.

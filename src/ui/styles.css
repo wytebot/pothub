@@ -145,3 +145,21 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 .action-dialog p{line-height:1.55;color:var(--muted,#aab4c0);}
 .action-dialog input{width:100%;margin:8px 0 16px;}
 .action-dialog .actions-row{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
+
+/* Developer repository picker: keep the control full-width on narrow screens. */
+.repo-panel{overflow:visible}
+.repo-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.repo-panel-heading label{display:block;font-size:13px;color:#c9d1d9}
+.repo-panel-heading>span{font-size:11px;color:var(--muted);white-space:nowrap}
+.repo-search{display:flex;align-items:center;gap:9px;width:100%;min-width:0;margin:10px 0}
+.repo-search>svg{width:18px;height:18px;flex:0 0 18px;color:var(--muted)}
+.repo-search input{width:100%;min-width:0;flex:1}
+.repo-picker{display:block;width:100%;min-width:0}
+.repo-picker .custom-select{display:block;width:100%;min-width:0}
+.repo-picker .custom-select-trigger{width:100%;min-width:0}
+.repo-picker .custom-select-value,.repo-picker .custom-select-option span:first-child{min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.35}
+.repo-picker .custom-select-menu{left:0;right:0;width:100%;max-height:min(46dvh,360px);overflow-y:auto}
+.repo-picker .custom-select-option{min-height:46px;align-items:center}
+.repo-discovery-error{display:grid;gap:10px;margin-top:12px;padding:12px;border:1px solid #6e3333;border-radius:9px;background:#241516;color:#ffb4ad;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.repo-discovery-error button{justify-self:start;min-height:40px}
+@media(max-width:760px){.repo-select{display:block}.repo-picker{grid-column:auto}.repo-picker .custom-select-menu{max-height:44dvh}.repo-picker .custom-select-option{padding:12px 10px}}
