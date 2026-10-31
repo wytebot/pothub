@@ -44,7 +44,8 @@
     "pdfjs-dist": "^4.10.38",
     "next": "^14.2.31",
     "@simplewebauthn/server": "^13.2.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@mlc-ai/web-llm": "^0.2.79"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.1"
