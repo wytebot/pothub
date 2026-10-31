@@ -7,7 +7,8 @@ import { getStorage } from 'firebase-admin/storage';
 import { grantDocumentId } from './billing-safety.js';
 import { decideOperation } from './operation-state.js';
 import { starterGrantEligibility } from './starter-credit-policy.js';
-import {reserveCreditReservation,commitCreditReservation as commitReservation,releaseCreditReservation as releaseReservation} from './credit-reservations.js';
+import {grantCreditsOnce, reserveCreditReservation,commitCreditReservation as commitReservation,releaseCreditReservation as releaseReservation} from './credit-reservations.js';
+import {storeSignedObject,signStoredObject} from './signed-media.js';
 
 function parseServiceAccount(rawValue){
   if(rawValue && typeof rawValue === 'object') return rawValue;
