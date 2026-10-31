@@ -17,11 +17,12 @@ Set these under **Vercel → Project → Settings → Environment Variables** fo
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Full Firebase service-account JSON, stored as a server-only secret. Do not prefix with `NEXT_PUBLIC_`. |
 | `FIREBASE_PROJECT_ID` | `pothub-ca2a1` (can be inferred from service-account JSON, but set it explicitly for clarity). |
 | `GEMINI_API_KEY` | Pothub-managed server-side Gemini fallback key. The current `/api/health` readiness check expects this to be set. Never expose it to the browser. |
-| `FLW_CLIENT_ID` | Flutterwave v4 client ID for the chosen environment. |
-| `FLW_CLIENT_SECRET` | Flutterwave v4 client secret; server-only. |
-| `FLW_ENCRYPTION_KEY` | Flutterwave v4 encryption key for the same environment. |
+| `FLW_SECRET_KEY` | Flutterwave Standard hosted-checkout secret key for the selected environment; server-only. Required for creating hosted payment links and verifying transactions. |
+| `FLW_WEBHOOK_SECRET_HASH` | Merchant webhook secret configured in Flutterwave. Used for constant-time verification of hosted Standard webhooks; v4 signed webhook events use the HMAC signature branch. |
+| `DEVICE_FINGERPRINT_SECRET` | Optional dedicated HMAC pepper (32+ random characters) for server-derived starter-credit device claims. If omitted, `SESSION_SECRET` is used. Never expose it to the client. |
+| `FIREBASE_STORAGE_BUCKET` | Optional Firebase Storage bucket name. Defaults to `<FIREBASE_PROJECT_ID>.firebasestorage.app`; required IAM permissions must allow object creation and signed URL generation. |
 
-The current `/api/health` endpoint marks the deployment degraded if `APP_URL`, `FRONTEND_URL`, `SESSION_SECRET`, GitHub credentials, `GEMINI_API_KEY`, Flutterwave v4 credentials, or Firebase Admin credentials are missing. This is the code's current readiness contract, even if you do not intend to use every integration immediately.
+The current `/api/health` endpoint marks core readiness based on Firebase Admin/Firestore and `SESSION_SECRET`. Optional integrations are reported separately; hosted Flutterwave checkout is shown as available when `FLW_SECRET_KEY` and `FLW_WEBHOOK_SECRET_HASH` are configured.
 
 ## Frontend build-time variables
 
@@ -40,9 +41,9 @@ Only configure these if you use the corresponding feature or need to override it
 - `AI_MAX_PROMPT_CHARS`, `AI_MAX_OUTPUT_TOKENS`, `AI_MAX_OPERATION_COST_USD` — server-side AI limits.
 - `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` — explicitly allows trusted custom HTTPS agent endpoints; leave unset unless needed.
 - `POTHUB_VIDEO_MAX_BYTES` — video response size limit in bytes; default is 157286400 (150 MiB).
-- `FLW_MODE` — use `production` only with production Flutterwave v4 credentials and a verified production webhook.
+- `FLW_MODE` — retained for legacy v4 charge paths; hosted checkout uses the matching Flutterwave Standard secret key for the same environment.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — native Android server OAuth only, not browser Google login.
-- Vercel diagnostics OAuth: `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET`, or supported aliases `VERCEL_OAUTH_CLIENT_ID` / `VERCEL_OAUTH_CLIENT_SECRET` or `VERCEL_APP_CLIENT_ID` / `VERCEL_APP_CLIENT_SECRET`. The callback is `APP_URL/api/vercel/callback`.
+- Vercel diagnostics OAuth: `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET`, or supported aliases `VERCEL_OAUTH_CLIENT_ID` / `VERCEL_OAUTH_CLIENT_SECRET` or `VERCEL_APP_CLIENT_ID` / `VERCEL_APP_CLIENT_SECRET`. The callback is `https://pothub-self.vercel.app/api/vercel/callback`.
 
 ## OAuth provider setup
 
@@ -67,7 +68,7 @@ Register `APP_URL/api/auth/google/callback` as the redirect URI for the native O
 
 ### Optional Vercel diagnostics connection
 
-Keep these server-only if the **Connect Vercel** feature is used: `VERCEL_CLIENT_ID` and `VERCEL_CLIENT_SECRET`, or the existing supported aliases `VERCEL_OAUTH_CLIENT_ID` / `VERCEL_OAUTH_CLIENT_SECRET` or `VERCEL_APP_CLIENT_ID` / `VERCEL_APP_CLIENT_SECRET`. Register `APP_URL/api/vercel/callback` as the exact callback. Do not put the client secret in a `NEXT_PUBLIC_*` variable.
+Keep these server-only if the **Connect Vercel** feature is used: `VERCEL_CLIENT_ID` and `VERCEL_CLIENT_SECRET`, or the existing supported aliases `VERCEL_OAUTH_CLIENT_ID` / `VERCEL_OAUTH_CLIENT_SECRET` or `VERCEL_APP_CLIENT_ID` / `VERCEL_APP_CLIENT_SECRET`. Register `https://pothub-self.vercel.app/api/vercel/callback` as the exact callback. Do not put the client secret in a `NEXT_PUBLIC_*` variable.
 
 ## Deploy/build settings
 
@@ -89,3 +90,45 @@ Keep these server-only if the **Connect Vercel** feature is used: `VERCEL_CLIENT
 ## Security
 
 Never commit `.env` files or credentials. If any secret is exposed, revoke/rotate it. Automated tests and source audits are not proof of live OAuth, billing, AI provider, or APK behavior; verify those integrations in the deployed environment before release.
+
+## Additional BYOK / recovery / pricing notes
+
+No new environment variable is required for the current provider-registry, live-model-discovery, recovery-sheet, Verified Fix, or local-library additions. Existing `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` remains the opt-in gate for trusted custom public HTTPS endpoints. Keep it unset unless you have reviewed the endpoint. Image adapters support Gemini, OpenAI Images, Stability, Replicate, fal and Black Forest Labs. Video adapters support Gemini, Runway, Luma, Kling and Replicate. Each provider still requires a valid BYOK credential and model ID; provider-specific billing is charged by the upstream provider separately.
+
+The pricing analysis uses an assumed 60% target margin and illustrative provider rate inputs in `server/pricing.js`. It does not change `PACKS`, public prices or credit costs. Reconcile all rate-card inputs with current vendor invoices and actual Flutterwave/Play fee contracts before approving price changes.
+
+
+## Additional integration pass
+
+No new runtime environment variable is required for credit reservations, provider circuit breaking, local passcode fallback, or Verified Fix branch revert. The admin reconciliation script reuses `FIREBASE_SERVICE_ACCOUNT_JSON` (or Application Default Credentials) and optionally `FIREBASE_PROJECT_ID`; run it only from a trusted administrator environment. Starter-credit abuse prevention derives HMAC fingerprints from the HttpOnly server-issued `pothub_device_id` cookie and server-observed user-agent, with a separate server-observed IP/user-agent cap of five new starter grants per day. Never accept a device hash from request JSON or headers. `POTHUB_VIDEO_MAX_BYTES` remains optional and is now capped at 80 MB regardless of a higher configured value.
+
+## Additional image adapters
+
+No new environment variables are required. Image provider credentials are BYOK and remain transient in the authenticated POST request; they are not added to Vercel environment variables or persisted server-side. Custom image API endpoints continue to require `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` and must be public HTTPS endpoints.
+
+## Additional security and asynchronous media configuration
+
+- `APP_ORIGIN` (required for browser WebAuthn) must be the exact HTTPS origin used by the browser app, e.g. `https://your-pothub-domain.example`, with no path. It should match `FRONTEND_URL` for a same-origin deployment. The WebAuthn relying-party ID is derived from this hostname.
+- `POTHUB_VIDEO_MAX_BYTES` (optional) controls the maximum delivered video size in bytes. Default: `83886080` (80 MB). Hard maximum: 150 MB.
+- `@simplewebauthn/server` is installed as an application dependency for server-side registration/assertion verification. The server sets `CBOR_NATIVE_ACCELERATION_DISABLED=true` before loading it to avoid optional native CBOR acceleration issues in serverless bundles.
+
+Firestore Admin must be configured for durable `media_jobs`, provider-health persistence, WebAuthn credentials/challenges and server-verified PIN fallback. Deploy `firebase.json` TTL policies for `expiresAt` on `browser_sessions`, `native_ticket_uses`, `browser_auth_tickets`, `media_jobs`, `webauthn_challenges`, `ai_operations`, `firebase_session_exchanges`, and `vercel_refresh_locks`, plus `resetAt` on `rate_limits`.
+
+### Credit reservation reconciliation
+
+- `CRON_SECRET` — required by `/api/cron/reconcile-credit-reservations`. Vercel Cron sends it as `Authorization: Bearer <CRON_SECRET>`. Use a random secret of at least 32 characters. The scheduled daily route releases only stale reservations whose Firestore `expiresAt` has passed.
+
+### Application origins
+
+- `APP_URL` — canonical public API/application origin used for OAuth callback construction.
+- `FRONTEND_URL` — browser redirect origin after OAuth.
+- `APP_ORIGIN` — allowed browser/native CORS origin. `capacitor://localhost`, `http://localhost`, and `https://localhost` are also allowed for native development/runtime.
+
+These remain separate compatibility settings in this release; configure all three consistently for production.
+
+### Hosted Flutterwave checkout and signed media
+
+- PotHub no longer collects or forwards PAN/CVV. `POST /api/billing/checkout` creates a Flutterwave Standard hosted payment link; the browser navigates to Flutterwave and returns with `tx_ref`/`transaction_id`. Verification is server-side by transaction ID or by `tx_ref` when the ID was lost.
+- Set `FLW_SECRET_KEY` and `FLW_WEBHOOK_SECRET_HASH` for the same environment. The old client encryption key is no longer returned by `/api/billing/config`; remove obsolete `FLW_ENCRYPTION_KEY` from deployment variables after confirming no other legacy service uses it.
+- Set `FIREBASE_STORAGE_BUCKET` if the default bucket name is not correct. Generated images are stored in private Firebase Storage objects and returned as short-lived signed URLs. Apply `storage.cors.json` to the bucket so the browser/Capacitor app can fetch signed image URLs (for example: `gcloud storage buckets update gs://YOUR_BUCKET --cors-file=storage.cors.json`).
+- Kling's current new-model endpoints use `Authorization: Bearer <API_KEY>` (not a legacy AK/SK JWT); use a Kling API key created in the Kling developer console. Legacy endpoints that require AK/SK JWT are not used by this adapter.

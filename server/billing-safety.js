@@ -13,12 +13,20 @@ export function isVerifiedPayment(order, charge) {
     && Number(charge.amount) === Number(order.amount);
 }
 
-/** Constant-time comparison for the Flutterwave verif-hash webhook header. */
-export function isValidWebhookSecret(expected, provided) {
-  if (typeof expected !== 'string' || !expected || typeof provided !== 'string' || !provided) return false;
-  const a = Buffer.from(expected, 'utf8');
-  const b = Buffer.from(provided, 'utf8');
+/** Flutterwave v4 signs the exact raw request body with HMAC-SHA256/base64.
+ * Timestamp is validated separately by the handler to reject stale replays. */
+export function isValidWebhookSecret(secretHash, signature, rawBody) {
+  if (typeof secretHash !== 'string' || !secretHash || typeof signature !== 'string' || !signature || !Buffer.isBuffer(rawBody)) return false;
+  const expected = crypto.createHmac('sha256', secretHash).update(rawBody).digest('base64');
+  const a = Buffer.from(expected, 'utf8'); const b = Buffer.from(signature, 'utf8');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export function isFreshWebhookTimestamp(timestamp, now = Date.now(), windowMs = 5 * 60 * 1000) {
+  const value = Number(timestamp);
+  if (!Number.isFinite(value) || value <= 0) return false;
+  const ms = value < 1e12 ? value * 1000 : value;
+  return Math.abs(now - ms) <= windowMs;
 }
 
 /** Stable marker ID for exactly-once credit grants per account and payment reference. */

@@ -15,7 +15,8 @@
     "check": "node --check server/app.js && node --check server/lib.js && node scripts/release-audit.mjs && npm test",
     "pricing:check": "node scripts/pricing-check.mjs",
     "test": "node --test tests/*.test.mjs",
-    "build:cap": "node scripts/build-capacitor.mjs"
+    "build:cap": "node scripts/build-capacitor.mjs",
+    "credits:reconcile": "node scripts/reconcile-credit-reservations.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
@@ -41,9 +42,14 @@
     "@aparajita/capacitor-secure-storage": "^6.0.0",
     "highlight.js": "^11.11.1",
     "pdfjs-dist": "^4.10.38",
-    "next": "^14.2.31"
+    "next": "^14.2.31",
+    "@simplewebauthn/server": "^13.2.2",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

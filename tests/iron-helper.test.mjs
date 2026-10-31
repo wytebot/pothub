@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {sealData,unsealData} from '../server/iron.js';
+test('session sealing round-trips and rejects modified payloads',async()=>{const password='session-secret-which-is-more-than-32-characters';const sealed=await sealData({kind:'session',user:{id:'123'}},{password,ttl:60000});assert.deepEqual(await unsealData(sealed,{password,ttl:60000}),{kind:'session',user:{id:'123'}});await assert.rejects(unsealData(sealed.slice(0,-2)+'xx',{password,ttl:60000}));});

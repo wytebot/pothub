@@ -76,5 +76,11 @@
     }
   ],
   "framework": "nextjs",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/cron/reconcile-credit-reservations?olderThanMinutes=15&dryRun=false",
+      "schedule": "0 4 * * *"
+    }
+  ]
 }

@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {isPublicAddress,assertSafeHttpsUrl} from '../server/url-safety.js';
+test('SSRF checks reject private IPv4, private IPv6 and hexadecimal IPv4-mapped IPv6',()=>{for(const ip of ['127.0.0.1','10.0.0.1','192.168.1.1','::1','fc00::1','::ffff:7f00:1','0:0:0:0:0:ffff:7f00:1'])assert.equal(isPublicAddress(ip),false,ip);});
+test('SSRF URL validation rejects unsafe schemes and literal IP destinations',async()=>{for(const url of ['http://example.com','https://127.0.0.1','https://[::1]','https://user:pass@example.com'])await assert.rejects(assertSafeHttpsUrl(url));});

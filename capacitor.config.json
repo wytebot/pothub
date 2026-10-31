@@ -9,7 +9,10 @@
       "api.github.com",
       "generativelanguage.googleapis.com",
       "f4bexperience.flutterwave.com",
-      "developersandbox-api.flutterwave.com"
+      "developersandbox-api.flutterwave.com",
+      "idp.flutterwave.com",
+      "flutterwave.com",
+      "developersandbox.flutterwave.com"
     ]
   },
   "plugins": {

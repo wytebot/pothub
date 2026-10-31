@@ -52,7 +52,13 @@ Developer users connect through Vercel OAuth, choose a project and deployment, a
 
 ### Vercel log connection
 
-The Developer workspace has a single **Connect Vercel** button. It redirects the user to Vercel OAuth, then returns to Pothub after approval. Configure the existing server-side `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET` credentials (or the supported OAuth aliases) and register `APP_URL/api/vercel/callback` as the exact callback URL. No access-token paste field is shown; access and refresh tokens remain in the signed HttpOnly session and refresh on the server.
+The Developer workspace has a single **Connect Vercel** button. It redirects the user to Vercel OAuth, then returns to Pothub after approval. Configure the existing server-side `VERCEL_CLIENT_ID` / `VERCEL_CLIENT_SECRET` credentials (or the supported OAuth aliases) and register `https://pothub-self.vercel.app/api/vercel/callback` as the exact callback URL. No access-token paste field is shown; access and refresh tokens remain in the signed HttpOnly session and refresh on the server.
 
 
 For exact variable retrieval steps and the distinction between Vercel API tokens and OAuth client credentials, see [`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md).
+
+## Latest integration build
+
+This build adds Runway, Luma, Kling and Replicate video adapters; Firestore-backed resumable media jobs; cross-instance provider health; server-verified browser WebAuthn/PIN lock; searchable model selection; and lazy workspace/history chunks. See `CHANGELOG.md`, `AUDIT_REPORT.md` and `FINAL_VERIFICATION_REPORT.md`.
+
+**Release gate:** automated checks pass, but production and Capacitor builds still require dependency installation in a network-enabled environment. Live payment/OAuth/provider checks and physical Android testing are not certified by this source-only verification. See `FINAL_VERIFICATION_REPORT.md` before deployment.

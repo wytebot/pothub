@@ -21,3 +21,18 @@ Validation performed
 - Automated Node tests: 53 passed, 0 failed.
 - Static release audit passed.
 - A full Next.js production build, live GitHub/Vercel OAuth, actual Vercel project listing, payments, and Android runtime were NOT executed in this environment because dependencies are not installed here and no live deployment credentials are available. Deploy this ZIP and test against the real Vercel OAuth app/environment before treating it as live-verified.
+
+
+Deep picker/UI pass (2026-10-29):
+- Replaced every native <select> in the React UI with the shared Pothub CustomSelect component, including repository, Vercel project/deployment, GitHub Actions run, source file, agent provider, billing authorization, and video aspect-ratio pickers.
+- Custom listbox uses Pothub theme, animated menu, keyboard navigation (arrows, Home/End, Enter/Space, Escape), outside-click dismissal, mobile sizing, light/dark themes, and scrollable option lists.
+- Added regression tests to ensure native select elements do not return.
+- Vercel OAuth callback URL: https://pothub-self.vercel.app/api/vercel/callback
+- Tests in this environment: 55 passed, 0 failed; static release audit passed. Production build and live OAuth were not run here.
+
+Server error fixes (2026-10-30):
+- server/iron.js: sealData/unsealData were imported from @hapi/iron, which only exports seal/unseal. That crashed every route importing server/lib.js (auth/me, health, github/repos, vercel/*, GitHub callback). Added a wrapper and switched all imports.
+- server/lib.js: Firestore ignoreUndefinedProperties enabled; Firebase init retries on later requests; databaseReady/firestore are live bindings.
+- server/app.js: cost.chargedAmount was undefined, so failed-patch refunds threw and users were charged without a result. Fixed. GitHub file paths are now URL-encoded in repo context.
+- pages/api/vercel/[...action].js: deployment logs are now passed through redactSecrets.
+- Not run here: npm install/next build (no network). Run `npm install && npm test && npm run build`, then check /api/health after deploy.

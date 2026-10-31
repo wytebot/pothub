@@ -1,20 +1,2 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-const read = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-
-test('GitHub OAuth start signs state with Node crypto without dynamic session helper calls', async () => {
-  const route = await read('pages/api/auth/github.js');
-  assert.match(route, /crypto\.createHmac\('sha256'/);
-  assert.match(route, /const sealed = signState\(/);
-  assert.doesNotMatch(route, /await import\(['"]@hapi\/iron['"]\)/);
-  assert.match(route, /github\.com\/login\/oauth\/authorize/);
-});
-
-test('GitHub callback verifies signed state and rejects tampering/expiry', async () => {
-  const route = await read('pages/api/auth/github/callback.js');
-  assert.match(route, /function verifyState\(/);
-  assert.match(route, /crypto\.timingSafeEqual\(/);
-  assert.match(route, /Date\.now\(\) - payload\.createdAt > 600000/);
-  assert.match(route, /verifyState\(decodeURIComponent\(sealed\), secret\)/);
-});
+import test from 'node:test';import assert from 'node:assert/strict';import {sealData,unsealData} from '../server/iron.js';
+test('GitHub OAuth state is sealed, authenticated and expires instead of accepting client-edited state',async()=>{const password='test-session-secret-that-is-at-least-32-characters';const payload={state:'state-123',verifier:'pkce-verifier',deviceId:'server-issued-device'};const sealed=await sealData(payload,{password,ttl:600000});assert.deepEqual(await unsealData(sealed,{password,ttl:600000}),payload);await assert.rejects(unsealData(`${sealed}x`,{password,ttl:600000}));await assert.rejects(unsealData(sealed,{password:'wrong-session-secret-that-is-long-enough',ttl:600000}));});

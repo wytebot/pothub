@@ -1,44 +1,36 @@
-import { access, copyFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, cp, mkdir, readFile, writeFile, rm, symlink, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const config = path.join(root, 'next.config.mjs');
-const apiRoute = path.join(root, 'pages', 'api', '[...path].js');
-const savedConfig = path.join(root, '.next.config.capacitor-backup.mjs');
-const savedApi = path.join(root, '.next-api-route.capacitor-backup.js');
-const worker = path.join(root, 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
-const workerTarget = path.join(root, 'public', 'pdf.worker.mjs');
-let configBackedUp = false;
-let apiBackedUp = false;
-let exitCode = 0;
-
+const temp = await mkdtemp(path.join(os.tmpdir(), 'pothub-cap-'));
+const excluded = new Set(['api', '.next', 'node_modules']);
 try {
-  await access(worker, constants.R_OK);
-  await copyFile(worker, workerTarget);
-  const stamp = spawnSync(process.execPath, [path.join(root, 'scripts', 'stamp-service-worker.mjs')], { cwd: root, stdio: 'inherit' });
-  if (stamp.status !== 0) throw new Error('Could not stamp service worker for Capacitor build.');
-
-  await rename(config, savedConfig); configBackedUp = true;
-  await writeFile(config, `const nextConfig = { output: 'export', trailingSlash: false, images: { unoptimized: true }, poweredByHeader: false, reactStrictMode: true };\nexport default nextConfig;\n`);
-  await rename(apiRoute, savedApi); apiBackedUp = true;
-  const build = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['next', 'build'], { cwd: root, stdio: 'inherit', env: process.env });
-  exitCode = build.status ?? 1;
-} catch (error) {
-  console.error(`[Capacitor build] ${error.message}`);
-  exitCode = 1;
-} finally {
-  if (apiBackedUp) {
-    await rm(apiRoute, { force: true });
-    await rename(savedApi, apiRoute);
+  await mkdir(path.join(temp, 'pages'), { recursive: true });
+  for (const name of ['src','public','components','styles']) {
+    try { await cp(path.join(root,name),path.join(temp,name),{recursive:true,filter:src=>!src.split(path.sep).some(part=>excluded.has(part))}); } catch (e) { if(e.code!=='ENOENT') throw e; }
   }
-  if (configBackedUp) {
-    await rm(config, { force: true });
-    await rename(savedConfig, config);
+  for (const name of ['pages/index.jsx','pages/_app.jsx']) await cp(path.join(root,name),path.join(temp,name));
+  for (const name of ['package.json','capacitor.config.json']) await cp(path.join(root,name),path.join(temp,name));
+  await writeFile(path.join(temp,'next.config.mjs'),`export default { output:'export', trailingSlash:false, images:{unoptimized:true}, poweredByHeader:false, reactStrictMode:true };\n`);
+  await symlink(path.join(root,'node_modules'),path.join(temp,'node_modules'),'dir');
+  const worker=path.join(root,'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
+  await access(worker,constants.R_OK);
+  await cp(worker,path.join(temp,'public/pdf.worker.mjs'));
+  const stamp=await readFile(path.join(root,'public/sw.js'),'utf8');
+  await writeFile(path.join(temp,'public/sw.js'),stamp);
+  const nextBin=path.join(root,'node_modules/next/dist/bin/next');
+  const build=spawnSync(process.execPath,[nextBin,'build'],{cwd:temp,stdio:'inherit',env:process.env});
+  if(build.status!==0)process.exitCode=build.status??1;
+  else {
+    const out=path.join(temp,'out');
+    await rm(path.join(root,'out'),{recursive:true,force:true});
+    await cp(out,path.join(root,'out'),{recursive:true});
+    console.log('Capacitor static frontend exported to out/. Source API routes and tracked files were not modified.');
   }
-}
-
-if (exitCode !== 0) process.exit(exitCode);
-console.log('Capacitor static frontend exported to out/. API calls use NEXT_PUBLIC_API_BASE; server API routes are restored in source.');
+} catch(error) {
+  console.error(`[Capacitor build] ${error.message}`);process.exitCode=1;
+} finally { await rm(temp,{recursive:true,force:true}); }

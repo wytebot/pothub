@@ -1,21 +1,59 @@
 # Pothub compatibility matrix
 
-**Verification legend:** Source = inspected; Static = syntax/audit/test; Live = exercised with a real provider/device. No live credentials or Android device were available in this environment.
+**Verification legend:** Source = inspected; Static = automated source test; Live = exercised with real credentials/device. No production credentials or Android device were available during this update.
 
-| Action | Browser / PWA | Standalone Capacitor Android | Status |
-|---|---|---|---|
-| GitHub sign-in | OAuth authorization-code flow, state + PKCE, HTTP-only session cookie | System browser and `ai.pothub.app://auth` one-time ticket | Static only; real OAuth callback still needs test |
-| Google sign-in | Firebase redirect and server session/profile provisioning | System-browser Google OAuth and deep-link ticket | Static only; requires Google OAuth/Firebase config |
-| Diagnosis / fix | Repo picker, workflow job/step summary, file selection, progress, unified diff | Same React code path | Static only; GitHub repository test required |
-| Commit / PR | Creates a new branch and supports explicit PR creation | Same remote API | Static only; disposable repo test required |
-| Creator chat | Markdown/code highlighting, text/image attachments, history, media cards | Same UI, native share/save adapter | Static only; provider tests required |
-| Image generation | Gemini image adapter; generated images persisted as Blobs | Same remote API and local Blob storage | Static only; valid image-capable model required |
-| Video generation | Gemini Interactions API background job, polling, authenticated Vercel API streaming, local job persistence, result Blob and idempotent delivery charge | Same API, job resume on relaunch, cancel route | Static only; live Gemini Omni Flash operation and local-cancel behavior need testing |
-| Agents / API keys | AES-GCM + non-extractable WebCrypto key in IndexedDB | AES-GCM key stored using Keystore-backed secure storage | Static only; native plugin sync and device test required |
-| API page lock | Optional WebAuthn platform authenticator | Optional native biometric prompt | Static only; device verification required |
-| Backup | JSON metadata or ZIP with media Blobs; preview before restore | Uses native save adapter | ZIP unit-tested; full IndexedDB round-trip not yet live-tested |
-| Payments | Flutterwave v4 encrypted card payload, authorization and server verification | Same flow for current APK distribution | Static only; sandbox transaction and webhook replay tests required |
-| Offline start | Cached PWA shell; local history/media available | Cached Capacitor web assets and IndexedDB | Static only; offline launch test required |
+| Action | Desktop Chrome/Firefox/Safari | Mobile Chrome/Safari | Installed PWA | Capacitor Android | Status |
+|---|---|---|---|---|---|
+| GitHub OAuth | Cookie session + state/PKCE | Redirect return | Redirect return | Browser + one-time deep-link ticket | Static only |
+| Google OAuth | Firebase redirect + session restore | Redirect result awaited during restoration | Same-origin auth proxy | Native OAuth/deep-link flow | Static only |
+| Diagnosis/Fix | Repo/logs, AI output, commit/PR | Responsive React shell | Same shell | Same shell + API origin | Static only |
+| BYOK text/vision | Gemini + OpenAI-compatible + Anthropic-compatible protocol families | Same API | Same API | Same API; keys encrypted locally | Static only; provider contract tests required |
+| Image/video | Existing Gemini adapters | Same API | Same API | Same API | Gemini-specific; live test required |
+| Verified Fix | Polls next Actions run and charges after completion | Same API | Same API | Same API | Static only; Actions repository test required |
+| Local workspace library | Dexie Build Health / Prompt Library | Same UI | Same local DB | Same local DB | Static only |
+| API key storage | WebCrypto AES-GCM | WebCrypto AES-GCM | WebCrypto AES-GCM | Keystore-backed AES key + AES-GCM data | Static only; device test required |
+| API page lock | WebAuthn platform authenticator | WebAuthn if supported | WebAuthn if supported | Native biometric plugin | Partial; browser PIN fallback/security hardening remains |
+| Backups | JSON / ZIP, media, prompts | Same | Same | Native save adapter | ZIP unit-tested; round-trip device test required |
+| Flutterwave | v4 checkout/verify/webhook | Same | Same | Same API | Static only; sandbox + webhook replay required |
+| Offline shell | Service worker static shell | Same | Cached shell | Bundled assets | Static only; offline test required |
 
-## Limits
-Remote diagnosis, AI, GitHub operations, payments and video polling require connectivity. The Actions run selector attempts bounded extraction of raw logs from GitHub's log archive and appends job/step summaries; users can still paste raw logs if the archive is unavailable. No row is marked Live until exercised against actual credentials and a device.
+## Viewport and interaction checklist
+
+- 320px through ultrawide, portrait and landscape.
+- Safe-area top/bottom padding; no modal under the Android gesture bar.
+- Soft keyboard does not cover the active field or primary action.
+- 44px minimum touch targets for primary actions and navigation.
+- Android system back closes the active recovery sheet before leaving the page.
+- Reduced-motion preference suppresses decorative animation.
+- Service worker never caches `/api` or auth responses; shell invalidation/update prompt remains functional.
+- Downloads use browser download behavior or the native platform adapter; test large files and interrupted transfers.
+
+No row is marked Live until exercised with real provider credentials and physical devices.
+
+## Remaining release verification
+
+- [ ] Verify all image provider adapters against real provider accounts; only Gemini image generation is active in this build.
+- [ ] Verify all video provider adapters against real provider accounts; only Gemini video generation is active in this build.
+- [ ] Verify WebAuthn platform authenticator on supported HTTPS browsers and Capgo biometric prompt on physical Android. Local PBKDF2 passcode fallback is implemented for devices without platform biometrics; verify the five-attempt cooldown and two-minute relock on each target. It is local-device protection, not server-side account authentication.
+- [ ] Verify provider health behavior across warm and cold Vercel instances (the breaker is process-local).
+- [ ] Verify credit reservation transactions against a staging Firestore project under concurrent requests and webhook/verify races.
+- [ ] Verify APK OAuth, media downloads, background relock, offline mode and soft-keyboard behavior on physical devices.
+
+## Image provider adapter status (source wired; live provider verification required)
+
+- Gemini image generation remains supported through the existing Gemini response format.
+- OpenAI Images uses the Images API and returns validated base64 image data.
+- Stability AI uses the Stable Image multipart endpoint and validates the returned media type and size.
+- Black Forest Labs, Replicate and fal use bounded queue polling and approved HTTPS result-host checks. If a job exceeds the bounded request window, the UI receives a clear retry-later error; these adapters should be moved to durable job/status polling before relying on long-running generation under Vercel Hobby limits.
+- Image API keys remain in the transient request body and are never written to Firestore or server logs. Failed Pothub delivery releases the BYO service-fee reservation.
+
+Runway, Luma, Kling and Replicate video are selectable through the async media adapter layer. Live provider credentials and physical device delivery still require end-to-end verification before production rollout.
+
+### Latest integration additions
+
+- Creator video supports Gemini, Runway, Luma, Kling and Replicate through provider adapters and owner-bound Firestore media-job records. Jobs are resumable when the app returns online; the BYOK key is re-supplied from the device and is never persisted server-side.
+- Agent model selection uses a searchable combobox with keyboard navigation and manual model-ID entry. Live discovery is shown for protocols with supported model-list endpoints; other providers use curated suggestions/manual IDs.
+- The main Developer/Creator workspace, API & Agents page, and History/Library pages are lazy route chunks. History is windowed (virtualized) and the searchable model picker is loaded with the Agents chunk. PDF.js, syntax highlighting, and backup ZIP parsing remain deferred until used.
+- Browser Fingerprint lock now verifies WebAuthn assertions server-side against a one-time Firestore challenge and stores credential public keys/counters. Browser PIN fallback is scrypt-hashed server-side and attempt-limited. Capacitor uses the native biometric prompt; local passcode fallback remains available when native biometrics are unavailable.
+
+Automated checks do not substitute for live provider credentials, Firebase domain configuration, payment/OAuth sandbox runs, or physical Android device verification.

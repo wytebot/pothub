@@ -1,6 +1,68 @@
 {
   "firestore": {
     "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "indexes": "firestore.indexes.json",
+    "fieldOverrides": [
+      {
+        "collectionGroup": "browser_sessions",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "native_ticket_uses",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "browser_auth_tickets",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "media_jobs",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "webauthn_challenges",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "rate_limits",
+        "fieldPath": "resetAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "ai_operations",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "firebase_session_exchanges",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "vercel_refresh_locks",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      },
+      {
+        "collectionGroup": "starter_ip_claims",
+        "fieldPath": "expiresAt",
+        "ttl": true,
+        "indexes": []
+      }
+    ]
   }
 }

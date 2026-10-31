@@ -54,3 +54,41 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 :root[data-theme="light"] select option,
 :root[data-theme="light"] select optgroup { background: #fff; color: #1f2328; }
 .repo-select select, .diagnosis-sources select, .vercel-panel select { width: 100%; min-width: 0; }
+
+/* Pothub-native custom pickers: avoid the browser/Android native select popup. */
+.custom-select{position:relative;display:block;width:100%;min-width:0;color:var(--text);font-size:13px;isolation:isolate}
+.custom-select-trigger{width:100%;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;text-align:left;border:1px solid var(--border);border-radius:9px;background:linear-gradient(180deg,var(--panel),var(--panel2));color:var(--text);font:inherit;font-weight:500;box-shadow:0 1px 0 #ffffff08 inset;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
+.custom-select-trigger:hover:not(:disabled){border-color:#596b80;background:var(--panel)}
+.custom-select-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-color:var(--accent)}
+.custom-select-value{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.custom-select-value.placeholder{color:var(--muted);font-weight:450}
+.custom-select-chevron{width:17px;height:17px;flex:0 0 17px;color:var(--muted);transition:transform .16s ease}
+.custom-select.is-open{z-index:80}
+.custom-select.is-open .custom-select-trigger{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent)}
+.custom-select.is-open .custom-select-chevron{transform:rotate(180deg);color:var(--accent)}
+.custom-select-menu{position:absolute;z-index:1000;left:0;right:0;bottom:calc(100% + 7px);max-height:min(310px,48dvh);overflow-y:auto;overscroll-behavior:contain;padding:5px;background:var(--panel);border:1px solid var(--border);border-radius:11px;box-shadow:0 16px 42px #0009;animation:picker-in .12s ease-out;scrollbar-width:thin;scrollbar-color:#59636e transparent}
+.custom-select-option{display:flex;width:100%;min-height:40px;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--text);font:inherit;font-weight:450;text-align:left;overflow-wrap:anywhere;white-space:normal}
+.custom-select-option span:first-child{min-width:0;overflow-wrap:anywhere}
+.custom-select-option:hover:not(:disabled),.custom-select-option:focus-visible{background:var(--panel2);border-color:var(--border);outline:none}
+.custom-select-option.selected{background:color-mix(in srgb,var(--accent) 16%,var(--panel));border-color:color-mix(in srgb,var(--accent) 42%,var(--border));color:var(--text)}
+.custom-select-check{flex:0 0 auto;color:var(--accent);font-weight:800}
+.custom-select-option:disabled{opacity:.45;cursor:not-allowed}
+.custom-select-empty{padding:12px;color:var(--muted);font-size:12px}
+@keyframes picker-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+:root[data-theme="light"] .custom-select-trigger{background:linear-gradient(180deg,#fff,#f6f8fa);color:#1f2328}
+:root[data-theme="light"] .custom-select-menu{background:#fff;box-shadow:0 16px 42px #1f232826}
+:root[data-theme="light"] .custom-select-option{color:#1f2328}
+:root[data-theme="light"] .custom-select-option.selected{background:#ddf4ff;border-color:#80ccff;color:#1f2328}
+.repo-select .custom-select,.vercel-panel label .custom-select,.diagnosis-sources .custom-select,.agent-form .custom-select,.payment-followup .custom-select,.composer-footer .custom-select{width:100%;min-width:0}
+.composer-footer .custom-select{width:92px;flex:0 0 92px}
+@media(max-width:760px){.custom-select-trigger{min-height:43px;padding:9px 10px}.custom-select-menu{max-height:42dvh}.composer-footer .custom-select{width:86px;flex-basis:86px}}
+@media(prefers-reduced-motion:reduce){.custom-select-trigger,.custom-select-chevron,.custom-select-menu{transition:none;animation:none}}
+
+/* Accessible recovery sheet and local-first workspace library. */
+.ai-fallback-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));background:rgba(4,8,14,.72);backdrop-filter:blur(8px)}
+.ai-fallback-sheet{width:min(100%,460px);max-height:calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow:auto;padding:24px;display:flex;flex-direction:column;gap:14px;box-shadow:0 24px 80px rgba(0,0,0,.38)}
+.ai-fallback-sheet>.icon-button{align-self:flex-end;min-width:44px;min-height:44px}.ai-fallback-sheet h2{margin:0}.ai-fallback-sheet p{line-height:1.6;color:var(--muted)}
+.library-page,.backup-page{min-width:0}.library-page textarea{min-height:140px;resize:vertical}.library-page .history-row{gap:14px;align-items:flex-start}.library-page .history-row p{overflow-wrap:anywhere}
+@media(max-width:600px){.ai-fallback-backdrop{align-items:flex-end;padding:8px 8px calc(8px + env(safe-area-inset-bottom))}.ai-fallback-sheet{width:100%;border-radius:22px 22px 12px 12px;padding:22px 18px}.ai-fallback-sheet button{min-height:48px}.library-page .row-actions{flex-wrap:wrap}}
+.model-picker{position:relative;width:100%;min-width:0}.model-picker-input{display:flex;gap:8px;align-items:center}.model-picker-input input{min-width:0;flex:1}.model-picker-menu{position:absolute;z-index:80;top:calc(100% + 6px);left:0;right:0;max-height:min(320px,50vh);overflow:auto;padding:6px;border:1px solid var(--border,#30363d);border-radius:12px;background:var(--panel,#161b22);box-shadow:0 14px 34px #0008}.model-picker-menu button{display:block;width:100%;min-height:44px;text-align:left;padding:10px 12px;border:0;border-radius:8px;background:transparent;color:inherit}.model-picker-menu button.active,.model-picker-menu button:hover{background:var(--hover,#263244)}.model-picker-menu p{padding:10px}.model-picker small{display:block;margin-top:6px;color:var(--muted,#8b949e)}.virtual-history{overflow:auto;overscroll-behavior:contain;contain:content}.virtual-history .history-row{margin:0 0 8px;min-height:132px;box-sizing:border-box}
+@media(max-width:760px){.model-picker-menu{position:fixed;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));top:auto;bottom:max(12px,env(safe-area-inset-bottom));max-height:min(52dvh,460px);border-radius:18px;padding:8px}.model-picker-menu button{min-height:48px}}
