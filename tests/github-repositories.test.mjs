@@ -21,3 +21,38 @@ test('GitHub repository discovery stops at the first short page and caps page co
   assert.equal(result.count,0);
   assert.match(result.note,/organization access/);
 });
+
+
+test('GitHub identity and first repository page are fetched concurrently', async () => {
+  const {fetchGithubRepositoryBootstrap}=await import('../server/github-repositories.js');
+  const calls=[];
+  let release;
+  const gate=new Promise(resolve=>{release=resolve});
+  const fetchJson=async path=>{calls.push(path);if(calls.length===2)release();await gate;return path==='/user'?{data:{id:7,login:'owner'},headers:new Headers({'x-oauth-scopes':'repo'})}:{data:[{id:1,name:'one',owner:{login:'owner'}}],headers:new Headers()};};
+  const result=await fetchGithubRepositoryBootstrap(fetchJson,'/user/repos?per_page=100&page=1');
+  assert.deepEqual(new Set(calls),new Set(['/user','/user/repos?per_page=100&page=1']));
+  assert.equal(result.identity.data.id,7);
+  assert.equal(result.firstPage.data.length,1);
+});
+
+test('GitHub bootstrap rejects malformed responses rather than rendering an empty list', async () => {
+  const {fetchGithubRepositoryBootstrap}=await import('../server/github-repositories.js');
+  await assert.rejects(()=>fetchGithubRepositoryBootstrap(async path=>path==='/user'?{data:{id:1},headers:new Headers()}:{data:null,headers:new Headers()},'/user/repos?per_page=100&page=1'),/invalid first repository page/);
+});
+
+test('GitHub repository pages are fetched concurrently after a full first page', async () => {
+  const started = [];
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const full = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, name: `repo-${i + 1}`, owner: { login: 'owner' } }));
+  const pending = discoverGithubRepositories(async page => {
+    started.push(page);
+    if (page === 1) return full;
+    if (started.length === 5) release();
+    await gate;
+    return page === 2 ? [{ id: 101, name: 'extra', owner: { login: 'owner' } }] : [];
+  }, 5);
+  const result = await pending;
+  assert.deepEqual(started.sort(), [1, 2, 3, 4, 5]);
+  assert.equal(result.count, 101);
+});

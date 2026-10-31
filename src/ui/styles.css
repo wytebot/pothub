@@ -163,3 +163,5 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 .repo-discovery-error{display:grid;gap:10px;margin-top:12px;padding:12px;border:1px solid #6e3333;border-radius:9px;background:#241516;color:#ffb4ad;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
 .repo-discovery-error button{justify-self:start;min-height:40px}
 @media(max-width:760px){.repo-select{display:block}.repo-picker{grid-column:auto}.repo-picker .custom-select-menu{max-height:44dvh}.repo-picker .custom-select-option{padding:12px 10px}}
+
+.repo-discovery-error,.repo-refresh-note{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:#111820;color:#c9d1d9;font-size:13px;line-height:1.5;overflow-wrap:anywhere}.repo-discovery-error{border-color:#6b3535;background:#211719;color:#ffb4ae}.repo-refresh-note{border-color:#66552c;background:#201d14;color:#e3c77c}.repo-discovery-error button,.repo-refresh-note button{flex-shrink:0}
