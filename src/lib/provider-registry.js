@@ -5,9 +5,9 @@ const VISION = [...TEXT,'vision'];
 const OPENAI = (id,label,baseUrl,models,extra={})=>({id,label,protocol:'openai-compatible',auth:'bearer',baseUrl,models,capabilities:VISION,streaming:true,implemented:true,...extra});
 const ANTHROPIC = (id,label,baseUrl,models,extra={})=>({id,label,protocol:'anthropic-compatible',auth:'x-api-key',baseUrl,models,capabilities:VISION,streaming:true,implemented:true,...extra});
 // Keep defaults in one place and prefer the documented stable Gemini 2.5 model family.
-export const DEFAULT_MODELS = { text: 'gemini-3.8-flash' };
+export const DEFAULT_MODELS = { text: 'gemini-2.5-flash' };
 export const PROVIDERS = [
- {id:'gemini',label:'Google Gemini',protocol:'gemini',auth:'x-goog-api-key',baseUrl:'https://generativelanguage.googleapis.com',models:['gemini-3.8-flash','gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash-lite','gemini-2.5-pro'],modelsByFunction:{Image:['gemini-nano-banana-2.1','gemini-3.1-flash-image','gemini-3-pro-image']},capabilities:[...VISION,'image','video','embeddings'],streaming:true,implemented:true},
+ {id:'gemini',label:'Google Gemini',protocol:'gemini',auth:'x-goog-api-key',baseUrl:'https://generativelanguage.googleapis.com',models:['gemini-2.5-flash','gemini-2.5-pro','gemini-2.0-flash'],modelsByFunction:{Image:['gemini-2.0-flash-preview-image-generation']},capabilities:[...VISION,'image','video','embeddings'],streaming:true,implemented:true},
  OPENAI('openai','OpenAI','https://api.openai.com/v1',['gpt-4.1','gpt-4.1-mini','gpt-4o','gpt-4o-mini'],{capabilities:[...VISION,'image','embeddings'],modelsByFunction:{Image:['gpt-image-2','gpt-image-2.5-sunburst','gpt-image-2.5-flare']}}),
  ANTHROPIC('anthropic','Anthropic','https://api.anthropic.com/v1',['claude-sonnet-4-5','claude-haiku-4-5','claude-opus-4-1']),
  OPENAI('mistral','Mistral','https://api.mistral.ai/v1',['mistral-large-latest','mistral-small-latest','codestral-latest']),
@@ -36,4 +36,4 @@ export function providerById(id){return PROVIDERS.find(p=>p.id===id)||null}
 export function providersForFunction(fn){const need=FUNCTIONS[fn]||FUNCTIONS.Diagnosis;return PROVIDERS.filter(p=>p.implemented!==false&&need.every(c=>p.capabilities.includes(c)))}
 export function providerLabel(id){return providerById(id)?.label||id}
 export function modelsForFunction(providerId,fn){const p=providerById(providerId);return p?.modelsByFunction?.[fn]||p?.models||[]}
-export function normalizeProvider(value){const s=String(value||'').toLowerCase();if(s==='gemini')return 'gemini';if(s==='openai-compatible')return 'openai-compatible';if(s==='anthropic-compatible')return 'anthropic-compatible';return providerById(s)?.id||null}
+export function normalizeProvider(value){const s=String(value||'').trim().toLowerCase().replace(/[_ ]+/g,'-');if(['gemini','google-gemini','google'].includes(s))return 'gemini';if(['openai-compatible','openai-compatible-custom-endpoint'].includes(s))return 'openai-compatible';if(['anthropic-compatible','anthropic-compatible-custom-endpoint'].includes(s))return 'anthropic-compatible';const exact=providerById(s);if(exact)return exact.id;const byLabel=PROVIDERS.find(p=>p.label.toLowerCase()===s);return byLabel?.id||null}
