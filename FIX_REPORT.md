@@ -48,3 +48,11 @@ The missing PDF.js worker is a downstream symptom of the absent `node_modules` i
 7. Test Gemini/OpenAI image models, Kling 3.0, Runway, Luma, Replicate and Fal using real provider credentials; confirm each provider's current response and CDN host.
 8. Test DNS-rebinding and redirect cases against a controlled DNS lab; test video streaming and client disconnect/retry on a deployed Vercel function.
 9. Run all newly added Express/Firestore integration tests after dependency installation, then install the APK on a physical Android device and verify OAuth, CORS, signed image fetches and video streaming.
+
+## Production crash follow-up — 2026-10-31
+
+- **Reported runtime error:** `ReferenceError: native is not defined` while rendering the workspace.
+- **Root cause:** `src/ui/WorkspaceSection.jsx` referenced `native` in the Vercel-panel conditional, but the component did not destructure `native` from its `ctx` prop. The check also treated the function as a boolean instead of invoking it.
+- **Fix:** destructure `native` from `ctx` and use `!native()` so browser users see the Vercel panel while native Android users do not.
+- **Validation:** `tsc --noEmit --allowJs --checkJs false --jsx preserve --noResolve --skipLibCheck --target ES2022 --module ESNext src/ui/WorkspaceSection.jsx` passed; `node --check server/app.js` passed.
+- **Deployment note:** this fixes the source project only. The production URL must be redeployed from this ZIP before the live crash is resolved. The live deployment could not be fetched from this environment to verify its post-deploy behavior.
