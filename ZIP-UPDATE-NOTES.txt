@@ -1,3 +1,17 @@
+POTHUB — APP ICON & COLOR PAGE (2026-10-31)
+
+Added
+- New "App icon" item in the collapsible menu: 8 pot shapes x 9 colors. Picking one recolors the app, the top-bar logo, the browser-tab/Apple touch icon and the web-app manifest.
+- Android APK: AppIcon plugin + generated launcher aliases. Re-run `npm run android:configure` after `npx cap add android` / `cap sync`, then rebuild the APK.
+- Files: src/lib/app-icon-data.js, src/lib/app-icon.js, src/ui/AppIconWorkspace.jsx, scripts/android-app-icons.mjs, android-template/.../AppIconPlugin.java, public/icons/themes/*, docs/APP_ICONS.md, tests/app-icon.test.mjs.
+
+Validation
+- tests/app-icon.test.mjs: PASS (5 tests). JSX/JS syntax check of App.jsx, AppIconWorkspace.jsx, index.jsx, platform.js and app-icon modules: PASS.
+- Page layout checked in headless Chromium (mobile dark/light, desktop). Android configure script run against a mock Capacitor project twice (idempotent, all generated XML well-formed).
+- NOT run here: `next build`, a real Android Gradle build and a physical-device launcher-icon switch (no network / Android SDK in this environment).
+
+----- previous notes -----
+
 POTHUB — DEVELOPER WORKSPACE AND API AUTH FIXES (2026-10-31)
 
 Implemented
