@@ -82,9 +82,9 @@ Open a normal workspace without code blocks and confirm the highlighter chunk is
 - [ ] Repeat with Luma `ray-2`, Kling `kling-3.0`/`kling-4.0`, and a Replicate `owner/model` or explicit `owner/model:version` video model.
 - [ ] Confirm a failed provider job has no credit charge; confirm a delivered result has one idempotent charge; interrupt a download and confirm the reservation is released.
 - [ ] Confirm provider API keys are absent from Firestore `media_jobs`, server logs, and exported backups.
-- [ ] On HTTPS browser, enable Fingerprint lock, register a platform authenticator, set fallback PIN, verify successful/failed assertions, then test PIN fallback after disabling platform authentication.
+- [ ] On HTTPS browser, enable API & Agents protection with a passkey only; verify successful and failed assertions, relock on background/idle, and document the recovery path if the passkey is unavailable.
 - [ ] Confirm five incorrect PIN attempts trigger a five-minute server-side pause; verify a successful PIN resets the counter.
-- [ ] On Android APK, test native biometric prompt, background relock, app resume, device passcode fallback and API & Agents-only scope.
+- [ ] On Android APK, test native biometric prompt, background relock, app resume, failed/cancelled enrollment, and API & Agents-only scope. No PIN setup should be required.
 - [ ] Verify model picker filtering, keyboard navigation, search and manual model entry at 320 px and desktop widths.
 - [ ] Populate more than 1,000 local history records and scroll the virtual list without mounting all rows.
 
