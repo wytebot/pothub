@@ -17,7 +17,7 @@
 
 - Run `npm run check` with dependencies installed and record the complete output.
 - Build the browser/PWA and Capacitor export with `NEXT_PUBLIC_API_BASE` set; confirm `out/pdf.worker.mjs` exists.
-- Test Google redirect with Firebase Authorized Domains and the OAuth redirect URI `https://<host>/__/auth/handler`.
+- Test Google redirect with Firebase Authorized Domains and the Firebase-provisioned OAuth redirect URI `https://pothub-ca2a1.firebaseapp.com/__/auth/handler`. The app hostname is an authorized return domain, not the authDomain by default.
 - Test GitHub OAuth, cookie session, cross-origin bearer session, native cold-start deep link and logout revocation.
 - Test real BYOK model catalogs and all supported image/video providers against current official provider APIs. Curated IDs are not a substitute for live account testing.
 - Test concurrent credit reservations and Flutterwave webhook/verify races against staging Firestore and payment sandbox.

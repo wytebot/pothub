@@ -25,7 +25,7 @@ Candidates are attempted in the saved order with the default first. Server calls
 
 ## API & Agents page lock
 
-The optional lock currently uses the native biometric plugin on Android and WebAuthn platform authentication on HTTPS browsers. It affects only the API & Agents page. The lock does not gate sign-in, app launch, workspaces or navigation elsewhere. A secure, server-verified WebAuthn credential ceremony and a PIN fallback are still required before treating browser lock as a high-assurance security boundary.
+The optional lock currently uses the native biometric plugin on Android and WebAuthn platform authentication on HTTPS browsers. It affects only the API & Agents page. The lock does not gate sign-in, app launch, workspaces or navigation elsewhere. A secure, server-verified WebAuthn credential ceremony The current API-page lock uses one platform-appropriate authenticator (Android biometric prompt in Capacitor, browser passkey on HTTPS). New enrollment does not require PIN enrollment. Treat authenticator loss as a recovery risk and test recovery before enabling it on a primary account.
 
 ## Testing
 

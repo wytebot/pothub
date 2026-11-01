@@ -39,7 +39,7 @@ Pothub is a React 18 + Next.js application for browser deployment on Vercel, wit
 - GitHub accounts use the GitHub OAuth authorization-code flow with state + PKCE and an HTTP-only session cookie in browsers. Native Android uses a one-time deep-link ticket exchanged with the API.
 - Creator accounts use Firebase Google popup in browsers (with redirect fallback when popups are blocked) and system-browser Google OAuth in the APK. The server verifies the Firebase ID token, provisions the Google profile and starter credit ledger, and establishes an HTTP-only session cookie.
 - Native session tokens and the AES key used for agent secrets are stored through Android Keystore-backed secure storage. Browser agent secrets are AES-GCM encrypted with a non-extractable WebCrypto key in IndexedDB.
-- Optional device verification is scoped to the API & Agents page only. It is off by default and does not gate app launch, sign-in, or other screens. Browser WebAuthn/PIN state is account-scoped; native biometric/PIN state is stored in Android secure storage. Native biometric enrollment always establishes a passcode fallback first.
+- Optional device verification is scoped to the API & Agents page only. It is off by default and does not gate app launch, sign-in, or other screens. Browser WebAuthn/PIN state is account-scoped; native biometric/PIN state is stored in Android secure storage. API & Agents uses one platform-appropriate authenticator: native device biometrics in Capacitor or a browser passkey in web/PWA; PIN enrollment is not required. Keep a trusted recovery path for authenticator loss.
 - API keys are sent in the request body only for the operation that uses them. Configure hosting/proxy logs to avoid capturing request bodies.
 
 ## Important release status

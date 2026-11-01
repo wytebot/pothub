@@ -11,15 +11,15 @@ The production API is an Express app mounted through the Next.js catch-all at `p
 ## Creator — Google
 
 1. Browser/PWA Creator sign-in uses Firebase Auth redirect. Startup waits for `firebaseAuth.authStateReady()` before checking the restored user. Redirect intent uses a localStorage TTL and the `pothub_google_redirect=1` URL marker. `getRedirectResult` and Firebase's auth state are authoritative; a return without a user displays an actionable error.
-2. `src/lib/firebase.js` selects the app's own host as `authDomain` on non-local, non-Vercel-preview hosts so `/__/auth/*` can be proxied same-origin. Localhost and Vercel previews use `pothub-ca2a1.firebaseapp.com` unless `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` is explicitly set.
+2. `src/lib/firebase.js` uses Firebase's provisioned `pothub-ca2a1.firebaseapp.com` as `authDomain`. The Vercel hostname is the application return/authorized domain, not the Firebase auth helper domain. This avoids registering a custom helper URI unless a transparent same-origin proxy is intentionally configured and verified.
 3. Firebase ID-token exchange is single-flight per token. A missing IndexedDB preferred-role row does not override an authenticated Google provider. Browser API requests include credentials so the same-origin session cookie is sent.
 4. Capacitor uses the backend Google OAuth flow and the same one-time deep-link code handoff as GitHub. The app validates `ai.pothub.app:` and `auth`, handles error parameters, and checks `CapacitorApp.getLaunchUrl()` for cold starts.
 
 ## Firebase console configuration
 
 - Add every production app host to Firebase Authentication → Settings → Authorized domains.
-- Register the OAuth redirect URI `https://<host>/__/auth/handler` for the Firebase web handler where the OAuth client setup requires it.
-- Keep the `/__/auth/:path*` rewrite to `https://pothub-ca2a1.firebaseapp.com/__/auth/:path*` and verify the route returns a non-404 response after deployment.
+- For the Firebase Google OAuth web client, use `https://pothub-ca2a1.firebaseapp.com/__/auth/handler` as the authorized redirect URI. Add `pothub-self.vercel.app` to Firebase Authentication → Authorized domains as the app's return domain.
+- `vercel.json` retains an `/__/auth/*` proxy, but the SDK uses Firebase's own authDomain by default; do not register `https://pothub-self.vercel.app/__/auth/handler` unless deliberately switching to a verified same-origin authDomain.
 - Keep `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`, and vault encryption configuration server-side. Firebase Web SDK config is public project config, not an authorization boundary.
 
 ## Session and deployment caveats
