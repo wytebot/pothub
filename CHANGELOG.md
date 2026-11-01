@@ -98,3 +98,5 @@
 - Hardened GitHub repository discovery by checking the connected GitHub identity and OAuth repository scope before paginating owner, collaborator, and organization-member repositories.
 - Added explicit diagnostics for missing repository scope, account mismatch, expired authorization, and organization SSO denial; repository responses are never cached.
 - Added focused policy tests for missing scopes, account mismatch, and successful repository authorization.
+
+- Final routing pass: free live model discovery/configuration; best-effort provider-catalog preflight with short-lived cache; skip configured models absent from a successfully retrieved live catalog and fall through only to other user-configured candidates.

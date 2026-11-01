@@ -1,8 +1,6 @@
-# BYOK credit rules repair
+# BYOK credit rules — final routing pass
 
-- BYOK agent diagnosis/repair/chat operations now use a one-credit reservation and commit only when the workflow succeeds; failures release reservations.
-- Automatic provider model discovery charges one credit only after the provider successfully returns a non-empty model list. A caller can pass `operationId` to make retries idempotent.
-- Provider inference remains performed using the user's supplied provider key; this credit is a PotHub workflow/discovery credit, not payment for provider tokens.
-- Creator image generation retains its one-credit successful-operation reservation. Video delivery retains its separate delivery reservation in this pass; verify whether the product should treat submission plus delivery as a single workflow before production, to avoid double charging across those two endpoints.
-- Checks passed: `node --check server/app.js`, `node --check server/billing-policy.js`, targeted billing/backup tests (6/6), and static release audit.
-- Not certified: full dependency install, Next production build, live provider requests, browser end-to-end, Capacitor export/Android device, and payment/webhook integration.
+- Live model discovery and agent configuration are free. They do not reserve, commit, or spend PotHub credits.
+- A BYOK agent workflow costs one credit only when the workflow completes successfully. Failed workflows release their reservation; retrying a fallback model inside the same workflow adds no extra credit.
+- Provider inference charges, if any, are billed by the user's own provider account. PotHub must not silently replace a user's configured model with a PotHub-funded model.
+- Model catalogs are fetched live where the provider exposes a compatible catalog endpoint. If the catalog is reachable and the configured model is absent, routing skips it and tries the next configured candidate. If catalog discovery itself is unavailable, inference is attempted normally rather than being blocked by a discovery outage.

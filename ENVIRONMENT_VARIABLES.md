@@ -41,7 +41,7 @@ Only configure these if you use the corresponding feature or need to override it
 - `AI_FALLBACK_BASE_URL`, `AI_FALLBACK_API_KEY`, `AI_FALLBACK_MODEL` — server-side OpenAI-compatible fallback provider. Keep the key private. The current readiness check still expects `GEMINI_API_KEY`.
 - `AI_MAX_PROMPT_CHARS`, `AI_MAX_OUTPUT_TOKENS`, `AI_MAX_OPERATION_COST_USD` — server-side AI limits.
 - `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` — explicitly allows trusted custom HTTPS agent endpoints; leave unset unless needed.
-- `POTHUB_VIDEO_MAX_BYTES` — video response size limit in bytes; default is 157286400 (150 MiB).
+- `POTHUB_VIDEO_MAX_BYTES` — video response size limit in bytes; default is 26214400 (25 MiB), with a hard maximum of 25 MiB.
 - `FLW_MODE` — retained for legacy v4 charge paths; hosted checkout uses the matching Flutterwave Standard secret key for the same environment.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — native Android server OAuth only, not browser Google login.
 
