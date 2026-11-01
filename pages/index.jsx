@@ -21,6 +21,20 @@ export default function HomePage() {
       .catch(error => console.warn('Pothub offline support unavailable', error));
     if (document.readyState === 'complete') register();
     else window.addEventListener('load', register, { once: true });
+    // Re-check on return from background/sleep so installed PWAs discover
+    // deployments promptly instead of continuing with a stale controller.
+    const checkForUpdate = () => {
+      if (document.visibilityState === 'visible' && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.getRegistration('/').then(reg => reg?.update()).catch(() => {});
+      }
+    };
+    window.addEventListener('focus', checkForUpdate);
+    document.addEventListener('visibilitychange', checkForUpdate);
+    return () => {
+      window.removeEventListener('load', register);
+      window.removeEventListener('focus', checkForUpdate);
+      document.removeEventListener('visibilitychange', checkForUpdate);
+    };
   }, []);
   return <><Head><title>Pothub</title><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" /><meta name="theme-color" content="#0d1117" /><link rel="manifest" href="/manifest.webmanifest" /></Head><App /></>;
 }
