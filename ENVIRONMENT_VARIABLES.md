@@ -150,11 +150,29 @@ PotHub uses Sign in with Vercel OAuth so each developer connects their own Verce
 |---|---|
 | `VERCEL_CLIENT_ID` | Client ID from the Vercel OAuth app |
 | `VERCEL_CLIENT_SECRET` | Client Secret from the same Vercel OAuth app; keep server-only |
-| `VERCEL_REDIRECT_URI` | `https://YOUR-POTHUB-DOMAIN/api/vercel/callback` (must exactly match an Authorization Callback URL in the Vercel app) |
+| `VERCEL_REDIRECT_URI` | `https://YOUR-POTHUB-DOMAIN/api/vercel/callback` (required for production; must match exactly) |
+
+**Fix for “Invalid redirect URL”:** use the same canonical production hostname everywhere. If PotHub is deployed at `https://pothub-self.vercel.app`, set `APP_URL=https://pothub-self.vercel.app`, `FRONTEND_URL=https://pothub-self.vercel.app`, `APP_ORIGIN=https://pothub-self.vercel.app`, and `VERCEL_REDIRECT_URI=https://pothub-self.vercel.app/api/vercel/callback`. Replace that example hostname with your actual deployed domain. In the Vercel OAuth app's settings, add that exact full callback URL as an allowed/redirect URL—same scheme, host, path, and no trailing slash or query string. Do not register the Vercel dashboard URL, `/api/vercel/connect`, a preview deployment URL, or a different custom domain. If you change domains, update both sides and redeploy. The code rejects non-HTTPS, localhost, query-string, and wrong-path callback values with a clearer configuration error. `VERCEL_REDIRECT_URI` is the only new/explicit variable for this callback; no new API token variable is required.
 
 In the Vercel app's Manage settings, enable the `openid`, `email`, `profile`, and `offline_access` identity scopes and the read permissions needed for listing projects, reading deployments, and reading deployment events/logs. The app's available API permissions are controlled by its Vercel dashboard configuration; the OAuth scopes alone do not grant deployment API permissions. PotHub uses PKCE and a short-lived, HttpOnly, signed state cookie, stores per-user access/refresh tokens encrypted in Firestore, and rotates refresh tokens server-side. Keep `SESSION_SECRET`, `POTHUB_VAULT_ENCRYPTION_KEY` (or the existing strong `SESSION_SECRET` fallback), and Firebase Admin/Firestore configured.
 
 After redeploying, open Developer workspace → Deployment logs → Connect Vercel. Authorize the account, select a project from the discovered list, then choose a deployment. If Vercel reports insufficient permissions, update the OAuth app's permissions and reconnect. The callback URL to register is `https://YOUR-POTHUB-DOMAIN/api/vercel/callback`.
+
+
+## Active-model catalogue (hides deprecated models)
+
+PotHub can use a web search API to find each provider's official deprecation pages and hide deprecated or retired models from the model picker. Only provider names and model IDs are sent to the search API; user API keys never are. Without `MODEL_SEARCH_API_KEY` the feature is passive and the normal lists are shown.
+
+| Variable | Required | Description |
+|---|---|---|
+| `MODEL_SEARCH_API_KEY` | Optional | Brave Search API key (default) or Tavily key. Enables automatic deprecation checks. |
+| `MODEL_SEARCH_PROVIDER` | Optional | `brave` (default) or `tavily`. |
+| `MODEL_CATALOG_TTL_HOURS` | Optional | How often each provider is re-checked. Default 24, range 1-168. |
+| `MODEL_CATALOG_ENABLED` | Optional | Set `false` to turn filtering off. |
+| `MODEL_CATALOG_HIDE` | Optional | Comma-separated models to always hide: `model` or `provider:model`. |
+| `MODEL_CATALOG_KEEP` | Optional | Comma-separated models to never hide (wins over search results and `MODEL_CATALOG_HIDE`). |
+
+Results are cached in Firestore (`model_catalog` collection, Admin SDK only; keep client rules deny-all). New routes: `GET /api/models/active?provider=&function=` (free) and the existing `POST /api/agent/models` now returns `hiddenModelIds`, `hiddenCount`, `catalogVerified`.
 
 
 # Shared Flutterwave webhook is owned by WyBuild; authenticate its server-to-server PotHub settlement callback.
