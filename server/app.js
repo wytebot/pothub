@@ -2,7 +2,8 @@ import { Readable } from 'node:stream';
 import { isVerifiedPayment, isValidWebhookSecret, isFreshWebhookTimestamp, isValidWyBuildSettlement, isValidSharedWebhookSecret } from './billing-safety.js';
 import { FirestoreRateLimitStore } from './firestore-rate-limit-store.js';
 import { assertSafeHttpsUrl, fetchPinnedHttps } from './url-safety.js';import { boundPrompt, parseModelJson, preprocessLogs, redactProviderError } from './ai-safety.js';
-import { providerById, normalizeProvider, modelsForFunction } from '../src/lib/provider-registry.js';
+import { providerById, normalizeProvider, modelsForFunction, normalizeConfiguredModel } from '../src/lib/provider-registry.js';
+import { interleaveAgentCandidates } from '../src/lib/agent-routing.js';
 import { openAiRequestParams } from './provider-params.js';
 import { assertValidSourceSyntax } from './source-validation.js';
 import { isVerifiedHostedPayment,hostedFlutterwaveRequest } from './flutterwave-hosted.js';
@@ -64,24 +65,25 @@ function parseJson(t){return parseModelJson(t)}
 function requestAgentConfig(req) {
   if (!req || (!req.body?.agentConfig && !req.body?.useAgent && !req.headers['x-pothub-agent-config'])) return [];
   try {
-    // Prefer the transient POST body over headers so provider keys are not exposed to
-    // common proxy/header diagnostics. Never persist this request payload.
+    // Prefer transient POST body data. Never persist these keys or read platform
+    // environment credentials. Older clients may send one agent with `models[]`;
+    // round-robin those model variants across configured keys so one agent cannot
+    // consume the whole fallback budget before another key is attempted.
     const parsed = req.body?.agentConfig && typeof req.body.agentConfig === 'object'
       ? req.body.agentConfig
       : JSON.parse(Buffer.from(String(req.headers['x-pothub-agent-config'] || ''), 'base64').toString('utf8'));
     if (!Array.isArray(parsed.keys)) return [];
-    const route=String(req.path||'');const task=(route.includes('/diagnose')?'diagnosis':route.includes('/repair/')?'repair':route.includes('/creator/image')?'image':(route.includes('/agent/chat')||route.includes('/developer/chat'))?'chat':'all');
-    const mapped = parsed.keys.flatMap((item) => {
+    const route=String(req.path||'');
+    const task=(route.includes('/diagnose')?'diagnosis':route.includes('/repair/')?'repair':route.includes('/creator/image')?'image':(route.includes('/agent/chat')||route.includes('/developer/chat'))?'chat':'all');
+    const mapped = parsed.keys.map((item) => {
       const key=String(item.key || '').trim();
-      // Treat the user's saved model list as authoritative. Never append a stale
-      // built-in model to an explicitly configured list; that can route work to a
-      // retired or incompatible model after the user has updated their settings.
       const configuredModels=Array.isArray(item.models)?item.models:[];
-      const models=[...new Set([...(configuredModels.length?configuredModels:[]),item.model||parsed.model||(!configuredModels.length?item.defaultModel||'':'')].map(x=>String(x||'').trim()).filter(Boolean))].slice(0,8);
-      return models.map(model=>({key,model,provider:String(item.provider||parsed.provider||''),baseUrl:String(item.baseUrl||parsed.baseUrl||'').trim(),task:String(item.task||'all'),source:'user'}));
-    }).filter(item => item.key && item.key.length < 300 && !/[\r\n\t\s]/.test(item.key)).slice(0,8);
+      const models=[...new Set([...(configuredModels.length?configuredModels:[]),item.model||parsed.model||(!configuredModels.length?item.defaultModel||'':'')].map(x=>normalizeConfiguredModel(item.provider||parsed.provider,x)).filter(Boolean))].slice(0,8);
+      return {key,models,provider:String(item.provider||parsed.provider||''),baseUrl:String(item.baseUrl||parsed.baseUrl||'').trim(),task:String(item.task||'all'),source:'user'};
+    }).filter(item => item.key && item.key.length < 300 && !/[\r\n\t\s]/.test(item.key) && item.models.length && item.provider);
     const specific = mapped.filter(item => item.task === task);
-    return [...specific, ...mapped.filter(item => item.task === 'all' && !specific.includes(item))].slice(0,8);
+    const eligible = [...specific, ...mapped.filter(item => item.task === 'all')];
+    return interleaveAgentCandidates(eligible,8).map(item=>({...item,source:'user'}));
   } catch { return []; }
 }
 async function safeAgentEndpoint(raw,defaultOrigin){let u;try{u=new URL(raw)}catch{throw Error('Agent endpoint must be a valid HTTPS URL.')}const host=u.hostname.toLowerCase(),bare=host.replace(/^\[|\]$/g,'');const privateV4=/^(0\.|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)/.test(bare);const privateV6=bare.includes(':')&&(bare==='::'||bare==='::1'||bare.startsWith('fc')||bare.startsWith('fd')||bare.startsWith('fe80:')||bare.startsWith('::ffff:127.'));if(u.protocol!=='https:'||u.username||u.password||bare==='localhost'||bare.endsWith('.local')||bare==='metadata.google.internal'||privateV4||privateV6)throw Error('Agent endpoint must be a public HTTPS endpoint.');if(u.origin!==defaultOrigin&&String(process.env.POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS||'').toLowerCase()!=='true')throw Error('Custom agent endpoints are disabled. Set POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true only if you trust the endpoint.');await assertSafeHttpsUrl(u.toString());return u.toString()}
