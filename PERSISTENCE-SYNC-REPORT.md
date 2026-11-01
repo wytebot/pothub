@@ -45,6 +45,6 @@ The app document is not cached by the service worker or the root HTTP response. 
 
 ## Biometric and native-key hardening (31 October 2026)
 
-- Native API-page lock metadata and PIN verifier now use Android secure storage. A passcode fallback is enrolled before the native biometric prompt, and passcode-only mode is retained if the biometric prompt is cancelled or unavailable.
+- Native API-page lock metadata uses Android secure storage. New enrollment uses a single native biometric method; cancellation does not silently downgrade to a PIN-only lock.
 - Native key migration now preflights every saved agent record before writing new ciphertext, then updates records and removes the old key in one Dexie transaction. If the key is missing while encrypted agents exist, it fails closed instead of generating a replacement.
 - Default-agent changes are transactional. See `FACT-CHECK-PERSISTENCE-BIOMETRIC.md` for the validation matrix and unverified device checks.

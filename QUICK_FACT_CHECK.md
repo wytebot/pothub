@@ -27,7 +27,7 @@ No failing automated tests or JavaScript syntax/JSON/XML errors were found. The 
 ## 31 October 2026 persistence/biometric follow-up
 
 - Dexie v5 account partitioning preserves offline rows during account changes; account sync manifests are scoped by account.
-- Native biometric lock metadata and PIN verifier use Android secure storage. Native biometric enrollment establishes a PIN fallback first; cancelled/unavailable biometric prompts leave a PIN-only lock.
+- Native biometric lock metadata uses Android secure storage. New enrollment uses the device biometric authenticator alone; if enrollment is cancelled or unavailable, the lock is not enabled.
 - Browser lock records are scoped by Pothub account. Native agent-key migration preflights all records and commits replacement rows + old-key deletion in one Dexie transaction.
 - Release audit PASS; JS/MJS syntax PASS; all UI JSX syntax checks PASS; focused persistence/biometric/vault tests 10/10 PASS.
 - Full suite 64 PASS / 16 blocked by missing runtime dependencies. `npm install` timed out; no `node_modules` or `package-lock.json` exists. `npm run build` stops because the PDF.js worker package file is unavailable.
