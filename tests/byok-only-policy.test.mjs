@@ -10,11 +10,19 @@ test('AI candidate selection never builds routes from platform environment keys'
   assert.match(app, /PotHub does not use platform-funded AI/);
 });
 test('failed user agent routes return a bounded BYOK-only diagnostic', () => {
-  assert.match(app, /No configured user-agent route completed successfully/);
-  assert.match(app, /PotHub did not substitute a platform key or model/);
+  assert.match(app, /Your configured agent did not complete this request/);
+  assert.match(app, /PotHub never substitutes a platform model/);
+  assert.match(app, /interleaveAgentCandidates\(eligible,8\)/);
 });
 test('repository source remains GitHub-backed and Codelab does not implement server-side repository storage', () => {
   const codelab = fs.readFileSync(new URL('../src/ui/CodelabWorkspace.jsx', import.meta.url), 'utf8');
   assert.match(app, /app\.post\('\/api\/github\/create-repo'/);
   assert.doesNotMatch(codelab, /localStorage\.setItem\(|indexedDB|upload.*repo/i);
+});
+
+test('frontend sends configured BYOK agents through round-robin model/key fallback', () => {
+  const ui = fs.readFileSync(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
+  assert.match(ui, /import \{interleaveAgentCandidates\} from '\.\.\/lib\/agent-routing'/);
+  assert.match(ui, /interleaveAgentCandidates\(prepared,8\)/);
+  assert.match(ui, /const models=\[\.\.\.new Set\(\[a\.model,\.\.\.\(Array\.isArray\(a\.models\)/);
 });
