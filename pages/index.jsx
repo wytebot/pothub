@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import { readStoredIcon, applyAppIcon } from '../src/lib/app-icon';
+import { Capacitor } from '@capacitor/core';
 
 // The existing app is deliberately client-rendered: Firebase Auth, Capacitor,
 // IndexedDB and browser storage must not be initialized during Next.js SSR.
@@ -14,7 +15,7 @@ export default function HomePage() {
   // Apply the saved pot icon + accent color immediately, before the app bundle and IndexedDB are ready.
   useEffect(() => { applyAppIcon(readStoredIcon(), document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'); }, []);
   useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    if (typeof window === 'undefined' || Capacitor.isNativePlatform() || !('serviceWorker' in navigator)) return;
     const register = () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
       .then(registration => registration.update().catch(() => {}))
       .catch(error => console.warn('Pothub offline support unavailable', error));
