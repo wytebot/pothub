@@ -1,14 +1,14 @@
 /** Pricing assumptions, not a guarantee. Review against live invoices before launch. */
 export const PACKS = [
-  { id: 'spark', name: 'Starter', usd: 1.99, credits: 24, maxCreditsAtTarget: 24 },
-  { id: 'builder', name: 'Developer', usd: 4.99, credits: 74, maxCreditsAtTarget: 74 },
-  { id: 'pro', name: 'Professional', usd: 9.99, credits: 158, maxCreditsAtTarget: 158 },
-  { id: 'power', name: 'Power', usd: 19.99, credits: 324, maxCreditsAtTarget: 324 }
+  { id: 'spark', name: 'Starter', usd: 1.99, credits: 36, maxCreditsAtTarget: 36 },
+  { id: 'builder', name: 'Developer', usd: 4.99, credits: 110, maxCreditsAtTarget: 110 },
+  { id: 'pro', name: 'Professional', usd: 9.99, credits: 240, maxCreditsAtTarget: 240 },
+  { id: 'power', name: 'Power', usd: 19.99, credits: 500, maxCreditsAtTarget: 500 }
 ];
 export const OPERATIONS = { diagnosis: 10, repair: 20 };
 export const BYO_SERVICE_FEES = { developer: 1, creator: 1 }; // One credit per successful BYOK agent workflow; no separate PotHub AI fee.
 export const ASSUMPTIONS = {
-  targetMargin: 0.60,
+  targetMargin: 0.50,
   // Conservative planning estimate: $0.003 variable provider cost per credit, doubled for model/token variance. Replace with measured provider invoices after launch.
   aiCostPerCreditUsd: 0.003,
   aiSafetyFactor: 2,

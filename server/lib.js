@@ -260,7 +260,20 @@ export async function getSession(req){try{const auth=String(req.headers.authoriz
 export function clearSession(res){appendSetCookie(res,`kithub_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure()}`);appendSetCookie(res,`pothub_sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure()}`)}
 export function redactSecrets(t=''){return String(t).slice(0,25000).replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g,'[REDACTED_GITHUB_TOKEN]').replace(/AIza[0-9A-Za-z_-]{30,}/g,'[REDACTED_GOOGLE_KEY]').replace(/FLWSECK[^\s"']+/g,'[REDACTED_FLUTTERWAVE_KEY]').replace(/(Bearer\s+)[A-Za-z0-9._-]{20,}/gi,'$1[REDACTED]').replace(/((?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi,'$1[REDACTED]')}
 export async function requireUser(req,res){const s=await getSession(req);if(!s?.user?.id||(!s?.githubToken&&s?.authProvider!=='google')){res.status(401).json({error:'Sign in to Pothub to continue.'});return null}return s}
-export async function getCredits(id){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Configure Firebase Admin and Firestore.');const{data,error}=await db.from('profiles').select('credits,starter_credits_remaining').eq('github_id',String(id)).maybeSingle();if(error)throw error;if(!data)throw Error('Your Pothub profile is not initialized. Sign out and reconnect GitHub.');return{credits:Number(data.credits||0),starter_credits_remaining:Number(data.starter_credits_remaining||0),demo:false}}
+export async function getCredits(id){
+  if(!ensureDatabase())throw Error('Credit accounting is unavailable. Configure Firebase Admin and Firestore.');
+  const userId=String(id||'');if(!userId)throw Error('A signed-in account is required to check credits.');
+  // Daily free credits are granted separately from purchases and starter grants.
+  // A deterministic per-account/per-UTC-day reference makes concurrent balance
+  // checks idempotent and ensures buying a pack never disables the daily grant.
+  const day=new Date().toISOString().slice(0,10),dailyReference=`daily-free-10:${day}`;
+  const {data:profile,error:profileError}=await db.from('profiles').select('credits,starter_credits_remaining').eq('github_id',userId).maybeSingle();
+  if(profileError)throw profileError;if(!profile)throw Error('Your Pothub profile is not initialized. Sign out and reconnect.');
+  await grantCreditsOnce(db,userId,5,dailyReference,'Daily free credits');
+  const {data,error}=await db.from('profiles').select('credits,starter_credits_remaining').eq('github_id',userId).maybeSingle();
+  if(error)throw error;if(!data)throw Error('Your Pothub profile is not initialized. Sign out and reconnect.');
+  return{credits:Number(data.credits||0),starter_credits_remaining:Number(data.starter_credits_remaining||0),daily_free_credits:5,daily_free_grant_day:day,demo:false}
+}
 export async function spendCredits(id,amount,reason,metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');const{data,error}=await db.rpc('spend_credits',{p_github_id:String(id),p_amount:amount,p_reason:reason,p_metadata:metadata});if(error)throw Error(error.message||'Unable to reserve credits.');if(!data?.ok)throw Error(data?.message||'Not enough credits.');return{credits:Number(data.credits),demo:false}}
 export async function beginOperation(userId,operationId,payloadHash,{ttlMs=20*60*1000,store=firestore}={}){
   if(store===firestore&&!ensureDatabase())throw new Error('Operation storage is unavailable.');if(!store)throw new Error('Operation storage is unavailable.');
