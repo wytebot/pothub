@@ -1,12 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { authDomainForHost } from './auth-domain';
 
 // Public Firebase Web SDK configuration for Pothub. These values identify the
 // Firebase project and are intended to be included in browser builds; security
 // must be enforced with Firebase Auth/Firestore rules and server-side IAM.
 const config = {
   apiKey: "AIzaSyArzD6DL51vblo79g4J6WwHunULfIedIDU",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "pothub-ca2a1.firebaseapp.com",
+  authDomain: authDomainForHost(typeof window !== 'undefined' ? window.location.hostname : '', process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || ''),
   projectId: "pothub-ca2a1",
   storageBucket: "pothub-ca2a1.firebasestorage.app",
   messagingSenderId: "518294365386",
