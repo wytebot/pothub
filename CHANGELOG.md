@@ -1,102 +1,64 @@
-# Changelog
+# One-pass audit changelog — 2026-11-01
 
-## 2026-10-31 — App icon & color page
+**Important honesty note:** “Fixed (source)” means a source change and a focused regression assertion exist; it does not mean the browser, provider, OAuth, Firestore, billing or APK flow was live-tested. “Needs live test” includes items whose source change is incomplete or whose behavior requires credentials/device verification; the evidence column says which. No item is silently represented as complete.
 
-- Added an **App icon** page to the collapsible menu (sidebar on desktop, drawer on mobile). Pick one of 8 pot shapes (Classic, Cauldron, Stock pot, Saucepan, Dutch oven, Tagine, Teapot, Plant pot) in one of 9 colors.
-- The chosen color recolors the whole app (`--accent` variables, dark and light themes) and the top-bar logo follows the chosen pot.
-- The choice also swaps the browser-tab icon, Apple touch icon and web-app manifest (72 pre-rendered icon sets in `public/icons/themes/`).
-- Android APK: new `AppIcon` Capacitor plugin switches the launcher icon through generated activity-aliases (`npm run android:configure` generates the resources; no extra PNGs needed).
-- The choice is stored in IndexedDB (`settings: app-icon`) with a localStorage mirror so it applies before the app finishes loading.
-- Added `design/icons/render-icons.py` and `measure-fit.py` to regenerate the PNG sets; see `docs/APP_ICONS.md`.
-
-## 2026-10-30 — audit-driven hardening update
-
-- Added a shared provider catalogue for Gemini, major OpenAI-compatible text/vision services, Anthropic-compatible services, and explicit catalogue-only media providers.
-- Added best-effort live model discovery for Gemini, Anthropic-compatible and OpenAI-compatible endpoints, retaining manual model IDs.
-- Normalized provider routing for text/vision-compatible agents and retained custom HTTPS SSRF opt-in checks.
-- Added log ANSI/noise removal, repeated-line de-duplication, error-context-aware prompt trimming, tolerant fenced/trailing/truncated JSON parsing and key scrubbing.
-- Added operation IDs to diagnosis/fix requests, idempotent credit spending and before/after balance fields in credit ledger entries.
-- Added a platform-AI recovery sheet for diagnosis/fix failures; adding a BYO agent retries the interrupted operation and waives the BYO service fee for that rescue.
-- Added Verified Fix: watches for a new GitHub Actions run on the committed branch and charges 3 credits only after the server independently confirms that matching run completed.
-- Added local Developer Build Health/Error Library and Creator Prompt Library; prompt records are included in backups while agents/keys remain excluded.
-- Expanded pricing analysis and provider usage sensitivity without changing public prices or credit costs.
-- Updated agent, pricing, compatibility and device-test documentation.
-- Added regression tests for provider registry, prompt/log safety, JSON parser hardening, capability filtering, Verified Fix and local-library backup behavior (68 tests total).
-
-## Known incomplete items
-
-- Production image/video adapters beyond the existing Gemini implementation are catalogue-only, not wired to generation APIs.
-- Persistent provider health scoring/circuit breakers, server-side response-schema repair retry, strict output schemas for all tasks, full route-by-route async wrapping, React route splitting, comprehensive request deduplication/compression, browser PIN fallback and server-verified WebAuthn challenge validation remain outstanding.
-- Full physical-device/browser/provider/payment verification was not possible in this environment.
-
-## Additional integration pass — 2026-10-30
-
-- Added Firestore-backed credit reservation states (`reserved`, `committed`, `released`) with deterministic operation IDs and append-only before/after ledger entries.
-- Diagnosis, Fix and Chat outputs now use strict Zod schemas with one structured repair retry; invalid output releases the reservation.
-- Empty/unsafe Fix results release the original reservation rather than issuing a random grant.
-- Image generation now uses an idempotent reservation and settles only after the response finishes; interrupted responses release the fee.
-- Video delivery now uses the same reserve/commit/release response lifecycle and an 80 MB bounded delivery ceiling.
-- Added process-local provider circuit breaker (two consecutive failures, 60-second cooldown) and success recovery.
-- Added async Express route rejection forwarding to the final JSON error handler.
-- Sanitized Firebase health diagnostics and added API & Agents idle relock plus re-authentication before key test/edit/delete.
-- Added fallback-sheet keyboard focus trapping and documented remaining provider/device verification gaps.
-- Added a branch-scoped Verified Fix revert: it verifies the branch still points at the exact Pothub-created commit, then writes a revert commit only to that repair branch; it never mutates the repository default branch.
-- Added optional local PBKDF2 passcode fallback for API & Agents when platform biometrics/WebAuthn are unavailable, five-attempt cooldown, and two-minute idle relock. Lock remains scoped to API & Agents.
-- Added an admin-only stale credit-reservation reconciliation script (dry-run by default; explicit `--release --confirm` required) and its Firestore composite index.
-- Reduced the maximum buffered video result to 80 MB to reduce serverless memory pressure.
-
-## 2026-10-30 — Remaining adapter and performance wiring pass
-
-- Added provider-specific image adapters for OpenAI Images, Stability AI, Black Forest Labs, Replicate and fal.ai alongside Gemini.
-- Added bounded queue polling and HTTPS result-host validation for asynchronous image providers; image output MIME type and size are validated before delivery.
-- Expanded Image agent provider selection while keeping Video restricted to the currently wired Gemini job lifecycle.
-- Added lazy-loaded syntax highlighting so highlight.js and language grammars are not part of the initial App shell chunk.
-- Added adapter normalization tests and expanded provider capability regression coverage.
-- No public credit prices or pack values changed.
-
-## 2026-10-30 — Durable media, provider health, searchable models and server-verified lock
-
-- Added provider adapters for Runway text-to-video, Luma Dream Machine, Kling 3.x/4.x task APIs and Replicate asynchronous predictions, alongside Gemini.
-- Added Firestore-backed owner-bound media job persistence. Only provider/model/task metadata is persisted; BYOK keys remain transient and are re-supplied for status, cancellation and result retrieval.
-- Added result URL safety checks, bounded redirects, video size caps and response-finish credit settlement.
-- Added cross-instance Firestore provider-health persistence with transactional circuit-breaker updates.
-- Added searchable keyboard-accessible model picker with manual IDs and capability-specific Replicate suggestions.
-- Split Developer/Creator workspace, Agents and History/Library into lazy route chunks; history lists are virtualized and backup ZIP parsing is deferred.
-- Added virtualized local history, lazy picker/history chunks and deferred backup ZIP parsing.
-- Added server-verified WebAuthn registration/assertion challenges and server-hashed, rate-limited browser PIN fallback using `@simplewebauthn/server`.
-- Added regression tests for adapters, durable job ownership, safe asset URLs, WebAuthn/PIN verification and virtualization.
-- Live provider credentials, Firebase production configuration, payment/OAuth sandbox tests and physical Android tests remain deployment/device verification tasks.
-
-## 2026-10-31 — Focused fact check
-- Re-ran release audit and the complete automated test suite: 93/93 passed.
-- Re-ran pricing validation; checked all JavaScript/MJS syntax and JSON/XML parsing.
-- Added `QUICK_FACT_CHECK.md` and updated the verification report with the production-build dependency limitation and untested live integrations.
-
-## 2026-10-31 — Persistence and biometric hardening
-
-- Added Dexie v5 account-partitioned cache to preserve unsynced local records when switching Pothub accounts.
-- Scoped cloud-sync known-item manifests per account.
-- Moved native API-page lock records and fallback PIN verifier into Android secure storage; biometric cancellation/unavailability now routes to a valid passcode fallback.
-- Made native agent-key migration preflight all records and commit migrated ciphertexts atomically; made default-agent writes transactional.
-- Added account-cache and biometric-policy regression tests and expanded release audit checks.
-
-## 2026-10-31 — API UI, billing mode and NGN display hardening
-- Branded API-agent success notifications and passcode setup/verify dialogs; removed browser prompt usage from the biometric lock flow.
-- Configured PIN fallback before browser passkey registration so cancelled WebAuthn setup leaves a working PIN lock.
-- Added account-persisted Developer AI mode (Pothub AI vs own agent) and server-authoritative agent selection/billing.
-- Preserved Creator BYO fee at 1 credit and Developer BYO fee at 2 credits; platform diagnosis/repair remain 10/20 credits.
-- Added indicative NGN display equivalents for credit packs, controlled by optional `POTHUB_USD_NGN_RATE`.
-
-## 2026-10-31 — Popup domain redaction
-- Removed deployment hostnames and raw URLs from user-facing error/notice/passcode/action/payment dialogs.
-- Replaced browser-native confirm/prompt interactions with PotHub-styled dialogs for agent removal, fix verification, branch revert and commit-message entry.
-- Added sanitizer regression tests and verified UI JSX syntax, server/script/test syntax and static release audit.
-
-## 2026-10-31 — Developer repository discovery and mobile picker repair
-- Fixed the mobile repository picker being constrained to the 18px search-icon grid column, which caused option labels to wrap vertically into a long unreadable strip.
-- Rebuilt the repository field as a full-width PotHub custom picker with searchable repository list, visibility labels, count, loading/empty/error states, and a reconnect action.
-- Hardened GitHub repository discovery by checking the connected GitHub identity and OAuth repository scope before paginating owner, collaborator, and organization-member repositories.
-- Added explicit diagnostics for missing repository scope, account mismatch, expired authorization, and organization SSO denial; repository responses are never cached.
-- Added focused policy tests for missing scopes, account mismatch, and successful repository authorization.
-
-- Final routing pass: free live model discovery/configuration; best-effort provider-catalog preflight with short-lived cache; skip configured models absent from a successfully retrieved live catalog and fall through only to other user-configured candidates.
+| ID | Status | Evidence / current result | Files touched | Test |
+|---|---|---|---|---|
+| A1 | Fixed (source); needs live test | Startup now waits for `authStateReady()` before Creator restore. | `src/ui/App.jsx` | A3/A4 source test covers readiness; live PWA relaunch needed |
+| A2 | Fixed (source); needs live test | Firebase auth domain uses the app host on non-local/non-preview hosts; proxy rewrite retained. | `src/lib/firebase.js`, `src/lib/auth-domain.js`, `docs/AUTH_FLOW.md` | A2 auth-domain pure test; verify Firebase console/live redirect |
+| A3 | Fixed (source); needs live test | Redirect intent moved to localStorage with 10-minute TTL; URL marker is also checked and missing auth shows actionable error. | `src/ui/App.jsx` | A3 source test |
+| A4 | Fixed (source); needs live test | Firebase exchange is single-flight per ID token; Google provider can infer Creator role if preferred-role row is absent. | `src/ui/App.jsx` | A4 source test |
+| A5 | Needs live test | Startup error no longer swallows `Failed to fetch`, but startup stages are not yet fully isolated from every auth/database failure. | `src/ui/App.jsx` | No dedicated independent-stage regression test; live fault injection needed |
+| A6 | Fixed (source); needs live test | Same-origin GitHub browser exchange sets HttpOnly `pothub_sid`; cross-origin returns opaque bearer ID; GitHub token is encrypted in Firestore session records. | `server/app.js`, `server/lib.js`, `src/ui/App.jsx`, `docs/AUTH_FLOW.md` | A6 source test; needs Firestore cookie/session/revocation test |
+| A7 | Partial; needs live test | GitHub and Google native callback/start failures can deep-link with error codes; native state/error return needs live OAuth validation. | `server/app.js`, `src/ui/App.jsx` | A8 source test; no live Custom Tab test |
+| A8 | Partial; needs live test | Native exchange is rate-limited; app URL handling checks scheme/host, error parameter, cancellation and cold-start launch URL. Native opaque session is returned by exchange. Some server-side native ticket/session cleanup and full logout revocation remain unverified. | `server/app.js`, `src/ui/App.jsx`, `tests/one-pass-regressions.test.mjs` | A8 source test; live device test required |
+| A9 | Needs live test | Two Capacitor back-button listeners remain in source; modal/nav/root priority is not fully unified. | `src/ui/App.jsx`, `src/ui/WorkspaceSection.jsx` | No regression test; Android back test required |
+| A10 | Needs live test | Logout still awaits sync before clearing all account-bound state and local Dexie rows; complete account-switch purge/time-box remains incomplete. | `src/ui/App.jsx`, `src/lib/cloud-sync.js` | Existing account-partition tests only; logout race test needed |
+| A11 | Partial; needs live test | Creator sidebar/profile menu hides Developer-only Codelab/Launchpad/Free tools; Vercel panel is role-gated. Direct-section/server route guard still needs live role-boundary testing. | `src/ui/App.jsx`, `src/ui/WorkspaceSection.jsx`, `docs/CODELAB-NOTES.md` | Source check only; live Google/GitHub role test needed |
+| A12 | Partial; needs live test | `read:org` was removed. Repository deletion remains dependent on an explicit `delete_repo` reauthorization flow and must not be considered wired. | `server/app.js`, `docs/AUTH_FLOW.md` | A12 source test; GitHub permission test needed |
+| A13 | Fixed (source); needs live test | Global handlers preserve actual error text where available; auth/session/OAuth messages do not auto-dismiss. | `src/ui/App.jsx` | A13 source test |
+| B1 | Needs live test | Create flow now keeps success visible, but transient tree retry/backoff and “Initializing repository…” state are not complete. | `src/ui/CodelabWorkspace.jsx`, `src/ui/App.jsx` | No transient GitHub API test |
+| B2 | Partial; needs live test | Create response includes normalized owner/id/description; held repo refresh lock now shows a notice rather than silently returning. Optimistic insertion/eventual-consistency reconciliation is incomplete. | `server/app.js`, `src/ui/App.jsx` | B3 name tests; live GitHub creation test needed |
+| B3 | Partial; needs live test | Client/server reject `.`/`..`/`.git` names; refresh failure after creation is non-fatal and success panel remains mounted. Copy is corrected to describe Vercel as conditional. | `src/ui/CodelabWorkspace.jsx`, `server/app.js`, `docs/CODELAB-NOTES.md` | B3 name pure test; live create test needed |
+| B4 | Partial; needs live test | Slash-separated branch refs are allowed and unsafe segments rejected. Tree truncation/cap reporting and a virtualized searchable file picker are not complete. | `server/app.js`, `src/lib/auth-domain.js`, `tests/one-pass-regressions.test.mjs` | B4 branch pure test |
+| B5 | Partial; needs live test | Chat history strips fenced code and is bounded; “Fix it in chat” log context reduced to fit route limits. Server history cap and all edge-size cases still need tests. | `src/ui/WorkspaceSection.jsx`, `server/app.js` | No dedicated payload-boundary test |
+| B6 | Needs live test | Zod error formatter still needs field/message-specific verification and test coverage. | `server/app.js` | No regression test |
+| B7 | Partial; needs live test | Developer chat prompt now requests JSON `{text}` to match JSON-mode schema. Truncation/finish-reason detection, syntax validation and commit gating are not complete. | `server/app.js`, `src/ui/WorkspaceSection.jsx` | Source-only; no model truncation/commit test |
+| B8 | Fixed (source); needs live test | Off-topic words only refuse when developer intent is not detected; refusal path returns zero credits. | `server/app.js` | B8 source test; add route-level billing test |
+| B9 | Partial; needs live test | “Propose repair” is wired and requires an explicit selected target file when diagnosis lacks one. Review/commit path still needs integration tests. | `src/ui/App.jsx`, `src/ui/WorkspaceSection.jsx` | Source-level only; GitHub repair test needed |
+| B10 | Needs live test | Branch-name mismatch and Actions run matching by head SHA/created time are not fully repaired in this pass. | `server/app.js`, `src/ui/App.jsx` | Existing route not exercised; GitHub Actions test needed |
+| B11 | Fixed (source); needs live test | Diagnosis/video click handlers use wrappers instead of passing the click event as an operation argument. | `src/ui/WorkspaceSection.jsx` | Source-level inspection; React interaction test needed |
+| B12 | Needs live test | Credits/image-count context is still not comprehensively audited; progress timer behavior remains unverified. | `src/ui/App.jsx`, `src/ui/WorkspaceSection.jsx` | No React integration test |
+| B13 | Needs live test | Binary-safe GitHub commit, mode preservation, deletes/renames and base-blob SHA conflict protection remain incomplete. | `server/app.js` | No Git object mutation test |
+| B14 | Needs live test | Creator prompt library is still duplicated between localStorage and Dexie in `WorkspaceSection`; unification is incomplete. | `src/ui/WorkspaceSection.jsx`, `src/lib/db.js` | No migration regression test |
+| C1 | Fixed (source); needs live test | Video prompt override accepts only strings; click events fall back to the controlled prompt. | `src/ui/App.jsx`, `src/ui/WorkspaceSection.jsx` | Source-level inspection; video provider test needed |
+| C2 | Fixed (source); needs live test | Edit is shown only for user messages; assistant regenerate resends the preceding user prompt. | `src/ui/WorkspaceSection.jsx` | C2 source test |
+| C3 | Partial; needs live test | Failed chat requests restore the prompt and chat upsert preserves title/createdAt. Persist-before-request and full message ordering still need completion. | `src/ui/App.jsx` | No failure-injection chat test |
+| C4 | Fixed (source); needs live test | Creator and repository-edit composers guard IME composition; touch keyboards keep Enter as newline and Ctrl/Cmd+Enter sends. | `src/ui/WorkspaceSection.jsx` | C4 source test; Android IME test needed |
+| C5 | Partial; needs live test | Attachment selection appends, resets input value and accepts extension fallback. PDF Android open/download fallback and APK `out/pdf.worker.mjs` verification are not complete. | `src/ui/WorkspaceSection.jsx`, `scripts/build-capacitor.mjs` | Source-level only; build/device test needed |
+| C6 | Partial; needs live test | UI defaults no longer suggest the reported invalid Gemini model IDs; video setup uses a declared Replicate video model. Registry still contains model IDs that require official/live catalog verification and is not fully unified across adapters. | `src/ui/WorkspaceSection.jsx` | Existing provider registry tests; official/live catalog test needed |
+| C7 | Needs live test | Agent test task/protocol branch order remains to be audited and tested for image/video providers. | `server/app.js`, `src/ui/AgentsWorkspace.jsx` | No provider test matrix run |
+| C8 | Needs live test | Gemini thinkingConfig compatibility retry is not implemented/verified in this pass. | `server/app.js`, `src/lib/provider-registry.js` | Existing provider parameter tests do not cover live Gemini 2.5/2.0 |
+| C9 | Needs live test | Provider catalog pagination and warning-only catalog mismatch behavior are not implemented/verified in this pass. | `server/app.js`, `src/lib/provider-registry.js`, `src/ui/SearchableModelPicker.jsx` | No paginated catalog tests |
+| C10 | Needs live test | Capacitor Flutterwave checkout/return deep link and payload-hash-bound idempotency remain unverified and incomplete. | `src/ui/App.jsx`, `capacitor.config.json`, `scripts/configure-android.mjs`, `server/app.js` | No Flutterwave sandbox/device test |
+| C11 | Partial; needs live test | Service-worker cache stamping now replaces any cache version; registration is skipped in Capacitor. Update-prompt semantics and old `/_next/static` eviction still need live verification. | `scripts/stamp-service-worker.mjs`, `pages/index.jsx`, `tests/one-pass-regressions.test.mjs` | C11 source test; PWA update test needed |
+| C12 | Needs live test | Backup restore transaction/row validation and skipping account/device-specific settings remain incomplete. | `src/lib/backup.js`, `src/ui/App.jsx` | Existing ZIP helper tests do not cover atomic Dexie restore |
+| C13 | Partial; needs live test | Production CORS excludes plain `http://localhost`; Capacitor build fails without `NEXT_PUBLIC_API_BASE`; native service-worker registration is skipped. CI/Vercel double-deploy configuration and full method reflection remain incomplete. | `server/app.js`, `scripts/build-capacitor.mjs`, `pages/index.jsx` | C13 source test; CI/deploy/device test needed |
+| D1 | Needs live test | `src/lib/biometric.js` still requires a full race/error/Capacitor-vs-browser audit. | `src/lib/biometric.js` | Existing biometric unit tests; physical device test needed |
+| D2 | Needs live test | `src/lib/agents.js` still requires full stale-closure, key migration and cross-account audit. | `src/lib/agents.js`, `src/lib/cloud-sync.js` | Existing key-vault tests; account-switch tests needed |
+| D3 | Needs live test | `src/lib/backup.js` ZIP helper has tests; restore transaction and hostile-row validation remain incomplete. | `src/lib/backup.js`, `src/ui/App.jsx` | Existing backup ZIP tests only |
+| D4 | Needs live test | `src/lib/video-adapters/gemini.js` has not been verified against a live provider. | `src/lib/video-adapters/gemini.js` | Provider credential test needed |
+| D5 | Needs live test | `src/ui/AgentsWorkspace.jsx` model testing and capability-filtering paths remain incomplete. | `src/ui/AgentsWorkspace.jsx`, `src/lib/provider-registry.js` | Existing provider tests only |
+| D6 | Needs live test | `src/ui/FreeToolsWorkspace.jsx` requires route/error and role-isolation audit. | `src/ui/FreeToolsWorkspace.jsx`, `src/ui/App.jsx` | No route integration test |
+| D7 | Needs live test | `src/ui/GrowthLabWorkspace.jsx` requires all button and image-count interaction audit. | `src/ui/GrowthLabWorkspace.jsx`, `src/ui/App.jsx` | No component interaction test |
+| D8 | Needs live test | `src/ui/HistoryLibraryWorkspace.jsx` requires account-scoping and empty/error state audit. | `src/ui/HistoryLibraryWorkspace.jsx`, `src/lib/db.js` | Existing Dexie tests only |
+| D9 | Needs live test | `src/ui/SearchableModelPicker.jsx` needs catalog pagination, keyboard and large-list performance testing. | `src/ui/SearchableModelPicker.jsx` | No browser performance test |
+| D10 | Needs live test | `src/ui/styles.css` needs viewport/safe-area/keyboard/touch-target testing from 320px through tablet. | `src/ui/styles.css` | No visual/device test |
+| D11 | Needs live test | `server/lib.js` credits/reservation logic requires concurrent Firestore transaction and replay tests. | `server/lib.js`, `server/app.js` | Existing pure credit tests; staging concurrency test needed |
+| D12 | Needs live test | Flutterwave webhook handler requires signed live sandbox webhook and replay tests. | `server/app.js`, `tests/webhook-handler.test.mjs` | Tests could not load without dependencies; sandbox test needed |
+| D13 | Needs live test | `src/lib/security-lock.js` and server lock routes need browser/native lockout, cancellation and account-switch tests. | `src/lib/security-lock.js`, `server/security-lock.js` | Existing isolated tests; physical device test needed |
+| D14 | Needs live test | `server/media-jobs.js` needs concurrent job-state, retry, cancellation and ownership tests. | `server/media-jobs.js`, `server/app.js` | No live provider job test |
+| D15 | Needs live test | `server/video-adapters.js` needs per-provider API contract and timeout/retry testing. | `server/video-adapters.js`, `server/video-adapters/` | Live provider credentials needed |
+| D16 | Needs live test | `server/image-adapters.js` needs per-provider response, size and settlement tests. | `server/image-adapters.js` | Live provider credentials needed |
+| D17 | Needs live test | `android-template/*.java` plugins need generated-project compile and physical Android tests. | `android-template/`, `scripts/configure-android.mjs` | Android SDK/device unavailable |
+| D18 | Needs live test | `scripts/release-audit.mjs` remains a static guard, not a runtime certification; its assertions need alignment with current source and updated checks. | `scripts/release-audit.mjs`, `tests/` | Static audit ran before final edits; rerun with dependencies |
