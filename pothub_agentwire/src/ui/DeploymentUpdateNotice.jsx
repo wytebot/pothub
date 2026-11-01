@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { CLIENT_BUILD, isNativeApp, isStaleBuild, fetchServerBuild, mayAutoReload, markAutoReload, hardRefresh } from '../lib/version-check';
 
 /** Shows only when an already-controlled page detects a newer service worker. */
 export default function DeploymentUpdateNotice() {
@@ -52,15 +53,36 @@ export default function DeploymentUpdateNotice() {
     };
   }, [refreshing]);
 
+  // Build-id staleness check: independent of the service worker, so it also covers installed PWAs, TWAs and
+  // WebViews that keep an old bundle alive in memory or cache. Cold start/long-background resume refreshes
+  // automatically (once per build); short foreground checks only show the dialog.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !CLIENT_BUILD || isNativeApp()) return;
+    let stopped = false, lastCheck = 0, hiddenAt = 0;
+    const check = async mode => {
+      if (stopped || (mode !== 'load' && Date.now() - lastCheck < 30000)) return;
+      lastCheck = Date.now();
+      const serverBuild = await fetchServerBuild();
+      if (stopped || !isStaleBuild(serverBuild)) return;
+      if ((mode === 'load' || mode === 'resume') && mayAutoReload(serverBuild)) { markAutoReload(serverBuild); hardRefresh(); return; }
+      setAvailable(true);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+      const away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0;
+      check(away >= 60000 ? 'resume' : 'foreground');
+    };
+    check('load');
+    document.addEventListener('visibilitychange', onVisibility);
+    const timer = window.setInterval(() => check('foreground'), 5 * 60 * 1000);
+    return () => { stopped = true; document.removeEventListener('visibilitychange', onVisibility); window.clearInterval(timer); };
+  }, []);
+
   if (!available) return null;
   const refresh = () => {
     setRefreshing(true);
-    const waiting = registration?.waiting;
-    if (waiting) {
-      const timeout = window.setTimeout(() => window.location.reload(), 2500);
-      navigator.serviceWorker.addEventListener('controllerchange', () => { window.clearTimeout(timeout); window.location.reload(); }, { once: true });
-      waiting.postMessage({ type: 'POTHUB_SKIP_WAITING' });
-    } else window.location.reload();
+    registration?.waiting?.postMessage({ type: 'POTHUB_SKIP_WAITING' });
+    hardRefresh();
   };
   return <div className="deployment-update-backdrop" role="presentation"><section className="deployment-update-dialog" role="dialog" aria-modal="true" aria-labelledby="deployment-update-title"><span className="deployment-update-mark" aria-hidden="true">↻</span><h2 id="deployment-update-title">Pothub has been updated</h2><p>A new deployment is ready. Refresh to load the latest fixes and features. Your locally saved project history stays on this device.</p><div className="deployment-update-actions"><button type="button" className="secondary" onClick={() => setAvailable(false)}>Later</button><button type="button" className="primary" onClick={refresh} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh now'}</button></div></section></div>;
 }
