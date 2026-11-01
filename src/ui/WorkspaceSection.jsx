@@ -1,5 +1,6 @@
 import React,{useEffect,useState,useRef} from 'react';
 import {db} from '../lib/db';
+import {modelsForFunction,DEFAULT_MODELS} from '../lib/provider-registry';
 
 export default function WorkspaceSection({ctx}){
  const [editOpen,setEditOpen]=useState(false),[editPrompt,setEditPrompt]=useState(''),[editBusy,setEditBusy]=useState(false),[editMessages,setEditMessages]=useState([]),[editProgress,setEditProgress]=useState('Reading repository context…'),[editBlocks,setEditBlocks]=useState([]),[autoSendText,setAutoSendText]=useState(''),[repairFiles,setRepairFiles]=useState([]),[planMode,setPlanMode]=useState(false),[promptLibrary,setPromptLibrary]=useState([]),[promptName,setPromptName]=useState(''),[showPromptLibrary,setShowPromptLibrary]=useState(false),[mentionsOpen,setMentionsOpen]=useState(false),[mentionDetail,setMentionDetail]=useState(null),[modelsOpen,setModelsOpen]=useState(false),[vercelDeployments,setVercelDeployments]=useState([]),[vercelProjects,setVercelProjects]=useState([]),[selectedProjectId,setSelectedProjectId]=useState(''),[vercelConnected,setVercelConnected]=useState(false),[selectedDeployment,setSelectedDeployment]=useState(''),[vercelNote,setVercelNote]=useState(''),[redeployBusy,setRedeployBusy]=useState(false),[redeployStatus,setRedeployStatus]=useState('');
