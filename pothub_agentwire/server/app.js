@@ -324,6 +324,7 @@ app.post('/api/creator/image', async (req,res) => {
     err(res,e,e instanceof z.ZodError?422:400);
   }
 });
+app.get('/api/version',(req,res)=>{res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Pragma','no-cache');res.json({build:String(process.env.VERCEL_DEPLOYMENT_ID||process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||'')})});
 app.get('/api/health',async(req,res)=>{
   // Health must be diagnostic JSON even when one or more integrations are broken.
   const statusOf=(value,valid=true)=>!String(value||'').trim()?'missing':valid?'configured':'invalid';
