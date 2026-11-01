@@ -1,0 +1,95 @@
+TAP version 13
+# Subtest: A2 Firebase auth domain uses app host but preserves localhost and preview default
+ok 1 - A2 Firebase auth domain uses app host but preserves localhost and preview default
+  ---
+  duration_ms: 3.095765
+  type: 'test'
+  ...
+# Subtest: B3 GitHub repository name validation rejects special and .git names
+ok 2 - B3 GitHub repository name validation rejects special and .git names
+  ---
+  duration_ms: 0.552602
+  type: 'test'
+  ...
+# Subtest: B4 branch refs allow slash-separated names but reject unsafe path segments
+ok 3 - B4 branch refs allow slash-separated names but reject unsafe path segments
+  ---
+  duration_ms: 0.301653
+  type: 'test'
+  ...
+# Subtest: A3 redirect restore uses localStorage TTL and actionable marker error
+ok 4 - A3 redirect restore uses localStorage TTL and actionable marker error
+  ---
+  duration_ms: 11.368244
+  type: 'test'
+  ...
+# Subtest: A4 Firebase exchanges are single-flight by ID token and Google provider can restore role
+ok 5 - A4 Firebase exchanges are single-flight by ID token and Google provider can restore role
+  ---
+  duration_ms: 1.808362
+  type: 'test'
+  ...
+# Subtest: A6 browser exchange supports HttpOnly cookie sessions and encrypts GitHub token at rest
+ok 6 - A6 browser exchange supports HttpOnly cookie sessions and encrypts GitHub token at rest
+  ---
+  duration_ms: 9.385905
+  type: 'test'
+  ...
+# Subtest: A8 native auth exchange is rate limited and native URL handling is scheme-guarded
+ok 7 - A8 native auth exchange is rate limited and native URL handling is scheme-guarded
+  ---
+  duration_ms: 3.683697
+  type: 'test'
+  ...
+# Subtest: A12 GitHub OAuth no longer requests read:org
+ok 8 - A12 GitHub OAuth no longer requests read:org
+  ---
+  duration_ms: 2.344868
+  type: 'test'
+  ...
+# Subtest: A13 auth errors are not automatically dismissed and global handlers preserve error detail
+ok 9 - A13 auth errors are not automatically dismissed and global handlers preserve error detail
+  ---
+  duration_ms: 2.94093
+  type: 'test'
+  ...
+# Subtest: B8 developer-intent questions are not refused by off-topic keyword alone
+ok 10 - B8 developer-intent questions are not refused by off-topic keyword alone
+  ---
+  duration_ms: 3.480237
+  type: 'test'
+  ...
+# Subtest: C2 assistant replies regenerate from preceding user message and only user messages can be edited
+ok 11 - C2 assistant replies regenerate from preceding user message and only user messages can be edited
+  ---
+  duration_ms: 6.258956
+  type: 'test'
+  ...
+# Subtest: C4 composers respect IME composition and touch keyboard newline behavior
+ok 12 - C4 composers respect IME composition and touch keyboard newline behavior
+  ---
+  duration_ms: 2.269047
+  type: 'test'
+  ...
+# Subtest: C11 service worker build stamp is independent of a hard-coded shell version
+ok 13 - C11 service worker build stamp is independent of a hard-coded shell version
+  ---
+  duration_ms: 1.584914
+  type: 'test'
+  ...
+# Subtest: C13 Capacitor build refuses to ship without a configured API origin and skips SW in native shell
+ok 14 - C13 Capacitor build refuses to ship without a configured API origin and skips SW in native shell
+  ---
+  duration_ms: 1.280301
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 147.68593
+Focused regression exit=0
