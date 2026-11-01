@@ -1,0 +1,11 @@
+# Changelog — Google Auth Restore
+
+| ID | Status | Change | Files | Test |
+|---|---|---|---|---|
+| AUTH-RESTORE-01 | Fixed in source | Restore authenticated Google Firebase users even when `preferred-role` is missing | `src/ui/App.jsx` | `Google Firebase user restoration does not depend solely on preferred-role Dexie row` |
+| AUTH-RESTORE-02 | Fixed in source | Ensure token listener validates the returned PotHub user and reports session-exchange failure | `src/ui/App.jsx` | `ID token listener recognizes Google provider and validates returned PotHub user` |
+| AUTH-RESTORE-03 | Preserved + regression-tested | Keep Firebase exchange single-flight per ID token | `src/ui/App.jsx` | `Firebase session exchange remains single-flight per ID token` |
+| AUTH-RESTORE-LIVE | Needs live test | Verify Google redirect, Firebase ID token, Vercel exchange endpoint, and Creator restore in production | Firebase/Vercel runtime | Manual browser/PWA/Capacitor test required |
+| AUTH-FIX-GH-01 | Fixed in source | GitHub sign-in ended with "Saved API key is empty or exceeds the supported length": `/api/auth/browser-exchange` re-encrypted `session.githubToken`, but the sealed ticket only stores `githubTokenEncrypted`. It now reuses the sealed value. | `server/app.js` | `GitHub browser-exchange reuses the sealed encrypted token...` |
+| AUTH-FIX-GOOGLE-01 | Fixed in source, needs Google/Firebase console step | Google redirect returned no user because authDomain pointed at firebaseapp.com while the app runs on another origin (storage partitioning in PWA/TWA/WebView). authDomain now follows the page host; `vercel.json` already proxies `/__/auth/*`. | `src/lib/auth-domain.js`, `src/ui/App.jsx` | `A2 Firebase auth domain is same-origin...` |
+| BYOK-FALLBACK-01 | Fixed in source | AI routing is restricted to agents saved on API & Agents and now falls back in three passes (preferred order, deferred catalog/breaker-skipped pairs, one transient retry); Gemini thinking-budget 400s retry on the same model; Gemini model catalog is fully paged; client sends task agents first then sibling text agents. | `server/app.js`, `src/lib/agent-routing.js`, `src/ui/App.jsx` | `tests/byok-fallback-strength.test.mjs` |
