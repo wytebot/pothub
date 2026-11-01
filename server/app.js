@@ -117,17 +117,20 @@ async function modelJson(prompt, req, extraParts = [], explicitCandidates = null
   prompt = boundPrompt(prompt, promptLimit);
   const maxOutputTokens = Math.max(512, Math.min(4096, Number(process.env.AI_MAX_OUTPUT_TOKENS) || 3072));
   const maxCost = Number(process.env.AI_MAX_OPERATION_COST_USD) || 0.12;
-  const requestDeadline=req?setRequestDeadline(req,48000):(Date.now()+48000);const remainingMs=()=>Math.max(0,requestDeadline-Date.now());const providerSignal=()=>AbortSignal.timeout(Math.max(1,Math.min(40000,remainingMs())));
+  const requestDeadline=req?setRequestDeadline(req,48000):(Date.now()+48000);const remainingMs=()=>Math.max(0,requestDeadline-Date.now());let attemptCapMs=40000;const providerSignal=()=>AbortSignal.timeout(Math.max(1,Math.min(attemptCapMs,remainingMs())));
   // Strict BYOK boundary: every AI operation must be routed only through the
   // authenticated user's explicitly selected/configured agents. Server platform
   // keys are deliberately never candidates, even when present in deployment env.
   const userCandidates = Array.isArray(explicitCandidates) ? explicitCandidates : requestAgentConfig(req);
-  const candidates = userCandidates.map(x => ({...x, model: String(x.model||'').trim()})).filter(x=>x.model && String(x.key||'').trim());
-  const failures = [];
+  const candidates = userCandidates.map(x => ({...x, model: String(x.model||'').trim()})).filter(x=>x.model && String(x.key||'').trim()).filter((x,i,a)=>a.findIndex(y=>y.key===x.key&&y.model===x.model&&String(y.provider||'')===String(x.provider||'')&&String(y.baseUrl||'')===String(x.baseUrl||''))===i);
+  const failures = [];const failureInfo=[];const deadKeys=new Set();
   if(!candidates.length) throw Object.assign(new Error('No usable user-configured agent is selected for this task. Open API & Agents, add a provider key, choose a compatible model for this task, and save it. PotHub does not use platform-funded AI.'),{status:422,code:'NO_CONFIGURED_MODEL'});
   const inputTokensEstimate = Math.ceil(prompt.length / 3.5);
-  for (const c of candidates) {
+  for (const [candidateIndex,c] of candidates.entries()) {
     if(remainingMs()<1500){failures.push('Request deadline reached before another provider attempt.');break;}
+    if(deadKeys.has(c.key)){failures.push(`${c.model}: skipped because this API key was rejected.`);continue;}
+    // Leave time for the next configured model: a hanging model may use at most ~60% of what remains.
+    attemptCapMs=candidateIndex<candidates.length-1?Math.max(8000,Math.min(40000,Math.floor(remainingMs()*0.6))):40000;
     const providerId=normalizeProvider(c.provider||'gemini');if(!providerId) { failures.push('Unknown provider rejected.'); continue; }const providerMeta=providerById(providerId);const liveModels=await liveProviderModelCatalog(c,providerMeta);if(liveModels&&!liveModels.includes(c.model)){failures.push(`${c.model}: not present in the provider's current accessible model catalog; trying the next configured model.`);continue;}const keyFingerprint=crypto.createHash('sha256').update(String(c.key||'')).digest('hex').slice(0,20);const healthKey=providerHealthKey(providerId,c.model,c.baseUrl||'',keyFingerprint);if(!await providerAvailablePersistent(healthKey)){failures.push(`${c.model}: temporarily skipped by provider circuit breaker`);continue;}const startedAt=Date.now();
     const estimatedCost = (inputTokensEstimate * (Number(process.env.GEMINI_INPUT_USD_PER_MILLION) || 0.3) + maxOutputTokens * (Number(process.env.GEMINI_OUTPUT_USD_PER_MILLION) || 2.5)) / 1_000_000;
     try {
@@ -145,16 +148,16 @@ async function modelJson(prompt, req, extraParts = [], explicitCandidates = null
       }
       if(providerMeta?.protocol!=='gemini')throw Object.assign(new Error(`Provider ${provider} does not support text/JSON generation in this route.`),{status:400});
       const ai = new GoogleGenerativeAI(c.key);
-      const m = ai.getGenerativeModel({ model: c.model, generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens:Math.max(512,maxOutputTokens), thinkingConfig: { thinkingBudget: 0 } } }, { timeout: Math.max(1,Math.min(40000,remainingMs())) });
+      const m = ai.getGenerativeModel({ model: c.model, generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens:Math.max(512,maxOutputTokens), thinkingConfig: { thinkingBudget: 0 } } }, { timeout: Math.max(1,Math.min(attemptCapMs,remainingMs())) });
       const r = await m.generateContent(extraParts.length ? [...extraParts, { text: prompt }] : prompt);
       const parsed=parseJson(r.response.text());await recordProviderSuccessPersistent(healthKey,Date.now()-startedAt);return parsed;
     } catch (e) {
-      if(![400,401,403].includes(Number(e?.status||e?.statusCode)))await recordProviderFailurePersistent(healthKey);failures.push(`${c.model}: ${redactProviderError(e?.message || 'provider error',[c.key])}`);
+      const st=Number(e?.status||e?.statusCode||0),msg=String(e?.message||''),kind=(e?.name==='AbortError'||e?.name==='TimeoutError'||/abort|timed? ?out|ETIMEDOUT|ECONNRESET|fetch failed/i.test(msg))?'timeout':(st===401||st===403||/api key|permission denied|unauthori/i.test(msg))?'auth':(st===404||/not found|not supported|unknown model/i.test(msg))?'model':(st===429||/quota|rate.?limit|resource.?exhausted/i.test(msg))?'quota':'error';if(kind==='auth')deadKeys.add(c.key);if(![400,401,403,404].includes(st))await recordProviderFailurePersistent(healthKey);failureInfo.push({model:c.model,kind});const why={timeout:'no response in time',auth:'API key rejected or not permitted',model:'model not available for this key',quota:'quota or rate limit reached'}[kind]||redactProviderError(msg||'provider error',[c.key]).slice(0,120);failures.push(`${c.model}: ${why}`);
       console.warn('[Pothub AI fallback]', redactSecrets(failures.at(-1)).slice(0,220));
     }
   }
-  const detail=failures.slice(-6).join(' | ');
-  throw Object.assign(new Error(`No configured user-agent route completed successfully.${detail?` Attempt details: ${detail}`:''} Check your provider key, exact model ID, endpoint, task assignment and quota. PotHub did not substitute a platform key or model.`),{status:502,code:'AGENT_ROUTES_FAILED'});
+  const detail=failures.slice(-4).join('; ');
+  throw Object.assign(new Error(`Your configured agent did not complete this request.${detail?` (${detail})`:''} Open API & Agents to check the key and model, or add another agent. PotHub never substitutes a platform model.`),{status:502,code:'AGENT_ROUTES_FAILED',failures:failureInfo});
 }
 
 const AI_OUTPUT_SCHEMAS={
