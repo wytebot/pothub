@@ -2,7 +2,7 @@ import { Readable } from 'node:stream';
 import { isVerifiedPayment, isValidWebhookSecret, isFreshWebhookTimestamp } from './billing-safety.js';
 import { FirestoreRateLimitStore } from './firestore-rate-limit-store.js';
 import { assertSafeHttpsUrl, fetchPinnedHttps } from './url-safety.js';import { boundPrompt, parseModelJson, preprocessLogs, redactProviderError } from './ai-safety.js';
-import { providerById, normalizeProvider, modelsForFunction, DEFAULT_MODELS } from '../src/lib/provider-registry.js';
+import { providerById, normalizeProvider, modelsForFunction } from '../src/lib/provider-registry.js';
 import { openAiRequestParams } from './provider-params.js';
 import { assertValidSourceSyntax } from './source-validation.js';
 import { isVerifiedHostedPayment,hostedFlutterwaveRequest } from './flutterwave-hosted.js';
@@ -93,20 +93,18 @@ async function modelJson(prompt, req, extraParts = [], explicitCandidates = null
   const maxOutputTokens = Math.max(512, Math.min(4096, Number(process.env.AI_MAX_OUTPUT_TOKENS) || 3072));
   const maxCost = Number(process.env.AI_MAX_OPERATION_COST_USD) || 0.12;
   const requestDeadline=req?setRequestDeadline(req,48000):(Date.now()+48000);const remainingMs=()=>Math.max(0,requestDeadline-Date.now());const providerSignal=()=>AbortSignal.timeout(Math.max(1,Math.min(40000,remainingMs())));
+  // Strict BYOK boundary: every AI operation must be routed only through the
+  // authenticated user's explicitly selected/configured agents. Server platform
+  // keys are deliberately never candidates, even when present in deployment env.
   const userCandidates = Array.isArray(explicitCandidates) ? explicitCandidates : requestAgentConfig(req);
-  const userMode = Array.isArray(explicitCandidates) ? true : userCandidates.length > 0;
-  const candidates = (userMode ? userCandidates : String(process.env.GEMINI_API_KEY || '').split(',').map(x=>x.trim()).filter(Boolean).map((key,index)=>({key,model:process.env[`GEMINI_MODEL_${index+1}`]||process.env.GEMINI_MODEL||DEFAULT_MODELS.text,provider:'gemini',source:'pothub'}))).map(x => ({...x, model: String(x.model||'').trim()})).filter(x=>x.model);
+  const candidates = userCandidates.map(x => ({...x, model: String(x.model||'').trim()})).filter(x=>x.model && String(x.key||'').trim());
   const failures = [];
-  if(userMode&&!candidates.length) throw Object.assign(new Error('No usable model is configured for this task. Open AI settings, select an active model for this provider, and save it. PotHub will not silently substitute a different model.'),{status:422,code:'NO_CONFIGURED_MODEL'});
+  if(!candidates.length) throw Object.assign(new Error('No usable user-configured agent is selected for this task. Open API & Agents, add a provider key, choose a compatible model for this task, and save it. PotHub does not use platform-funded AI.'),{status:422,code:'NO_CONFIGURED_MODEL'});
   const inputTokensEstimate = Math.ceil(prompt.length / 3.5);
   for (const c of candidates) {
     if(remainingMs()<1500){failures.push('Request deadline reached before another provider attempt.');break;}
     const providerId=normalizeProvider(c.provider||'gemini');if(!providerId) { failures.push('Unknown provider rejected.'); continue; }const providerMeta=providerById(providerId);const liveModels=await liveProviderModelCatalog(c,providerMeta);if(liveModels&&!liveModels.includes(c.model)){failures.push(`${c.model}: not present in the provider's current accessible model catalog; trying the next configured model.`);continue;}const keyFingerprint=crypto.createHash('sha256').update(String(c.key||'')).digest('hex').slice(0,20);const healthKey=providerHealthKey(providerId,c.model,c.baseUrl||'',keyFingerprint);if(!await providerAvailablePersistent(healthKey)){failures.push(`${c.model}: temporarily skipped by provider circuit breaker`);continue;}const startedAt=Date.now();
     const estimatedCost = (inputTokensEstimate * (Number(process.env.GEMINI_INPUT_USD_PER_MILLION) || 0.3) + maxOutputTokens * (Number(process.env.GEMINI_OUTPUT_USD_PER_MILLION) || 2.5)) / 1_000_000;
-    if (!userMode && estimatedCost > maxCost) {
-      failures.push(`${c.model}: estimated maximum cost exceeds AI_MAX_OPERATION_COST_USD`);
-      continue;
-    }
     try {
       const provider=normalizeProvider(c.provider);
       const providerMeta=providerById(provider);
@@ -130,32 +128,8 @@ async function modelJson(prompt, req, extraParts = [], explicitCandidates = null
       console.warn('[Pothub AI fallback]', redactSecrets(failures.at(-1)).slice(0,220));
     }
   }
-  if (!userMode && process.env.AI_FALLBACK_BASE_URL && process.env.AI_FALLBACK_API_KEY && process.env.AI_FALLBACK_MODEL) {
-    const estimatedCost = (inputTokensEstimate * (Number(process.env.AI_FALLBACK_INPUT_USD_PER_MILLION) || 0.3) + maxOutputTokens * (Number(process.env.AI_FALLBACK_OUTPUT_USD_PER_MILLION) || 2.5)) / 1_000_000;
-    if (!userMode && estimatedCost > maxCost) {
-      failures.push('AI fallback: estimated maximum cost exceeds AI_MAX_OPERATION_COST_USD');
-    } else {
-      try {
-        const base = process.env.AI_FALLBACK_BASE_URL.replace(/\/$/, '');
-        const endpoint = /\/chat\/completions$/.test(base) ? base : `${base}/chat/completions`;
-        const r = await fetchPinnedHttps(endpoint, {
-          method: 'POST', signal: providerSignal(),
-          headers: { Authorization: `Bearer ${process.env.AI_FALLBACK_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: process.env.AI_FALLBACK_MODEL, ...openAiRequestParams({provider:'openai-compatible',model:process.env.AI_FALLBACK_MODEL,maxTokens:maxOutputTokens,jsonMode:true}), messages: [{ role: 'system', content: 'Return valid JSON only. Do not include markdown fences.' }, { role: 'user', content: prompt }] })
-        });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw Error(d.error?.message || `fallback provider returned ${r.status}`);
-        const content = d.choices?.[0]?.message?.content;
-        if (!content) throw Error('Fallback provider returned no content.');
-        return parseJson(content);
-      } catch (e) {
-        failures.push(`AI fallback: ${String(e?.message || 'provider error').slice(0, 160)}`);
-      }
-    }
-  }
-  if (!candidates.length && !userMode && !process.env.AI_FALLBACK_API_KEY) throw Error('Pothub AI is temporarily unavailable. Configure your own agent to continue without waiting for a Pothub AI fix.');
-  if (userMode) throw Error('Your configured agent keys did not respond. Open Use your agent to test your keys or add another provider key, then retry.');
-  throw Error(`All configured AI routes failed. ${failures.join(' | ')}`);
+  const detail=failures.slice(-6).join(' | ');
+  throw Object.assign(new Error(`No configured user-agent route completed successfully.${detail?` Attempt details: ${detail}`:''} Check your provider key, exact model ID, endpoint, task assignment and quota. PotHub did not substitute a platform key or model.`),{status:502,code:'AGENT_ROUTES_FAILED'});
 }
 
 const AI_OUTPUT_SCHEMAS={
@@ -287,7 +261,7 @@ app.get('/api/health',async(req,res)=>{
   const missing=Object.entries(checks).filter(([key,value])=>['FIREBASE_SERVICE_ACCOUNT_JSON','SESSION_SECRET'].includes(key)&&['missing','invalid: must be at least 32 characters'].some(x=>String(value).startsWith(x))).map(([key])=>key);
   const ok=databaseReady&&firebase.ready&&sessionSecret.length>=32;
   res.setHeader('Cache-Control','no-store');
-  return res.status(ok?200:503).json({ok,app:'Pothub',status:ok?'ready':'degraded',checks,missing,database:databaseReady?'initialized':'unavailable',firebaseError:firebase.ready?undefined:'Firebase Admin is unavailable. Check server configuration and function logs.',integrations:{github:github.ok,vercelOAuth:vercel.ok,google:!!(process.env.GOOGLE_CLIENT_ID&&process.env.GOOGLE_CLIENT_SECRET),ai:!!String(process.env.GEMINI_API_KEY||'').trim()||!!(process.env.AI_FALLBACK_BASE_URL&&process.env.AI_FALLBACK_API_KEY&&process.env.AI_FALLBACK_MODEL),flutterwave:!!(process.env.FLW_SECRET_KEY&&process.env.FLW_WEBHOOK_SECRET_HASH)}});
+  return res.status(ok?200:503).json({ok,app:'Pothub',status:ok?'ready':'degraded',checks,missing,database:databaseReady?'initialized':'unavailable',firebaseError:firebase.ready?undefined:'Firebase Admin is unavailable. Check server configuration and function logs.',integrations:{github:github.ok,vercelOAuth:vercel.ok,google:!!(process.env.GOOGLE_CLIENT_ID&&process.env.GOOGLE_CLIENT_SECRET),ai:'user-configured-agents-only',flutterwave:!!(process.env.FLW_SECRET_KEY&&process.env.FLW_WEBHOOK_SECRET_HASH)}});
 });
 function safeRequestOrigin(req){
   try { return apiOrigin(req); } catch { const host=String(req?.headers?.['x-forwarded-host']||req?.headers?.host||'').split(',')[0].trim(); return host&&/^[A-Za-z0-9.:[\]-]+$/.test(host)?`https://${host}`:'https://localhost'; }
@@ -342,6 +316,7 @@ app.get('/api/vercel/deployment-logs',async(req,res)=>{const s=await requireUser
 app.get('/api/github/actions-run',async(req,res)=>{const s=await requireUser(req,res);if(!s)return;try{const owner=String(req.query.owner||''),repo=String(req.query.repo||''),runId=String(req.query.runId||'');if(!/^[A-Za-z0-9_.-]{1,100}$/.test(owner)||!/^[A-Za-z0-9_.-]{1,100}$/.test(repo)||!/^[0-9]{1,20}$/.test(runId))throw Error('Choose a valid workflow run.');const d=await gh(s,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/jobs?per_page=100`);const lines=[];for(const j of d.jobs||[]){lines.push(`Job: ${j.name} | status=${j.status} | conclusion=${j.conclusion||'pending'}`);for(const st of j.steps||[])lines.push(`  Step: ${st.name} | status=${st.status} | conclusion=${st.conclusion||'pending'}`)}let rawLogs='',note='GitHub returned job and step summaries only; paste raw logs for detailed stack traces.';try{const response=await fetch(`${GH}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/logs`,{signal:AbortSignal.timeout(15000),headers:{Authorization:`Bearer ${s.githubToken}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});if(response.ok){const archive=Buffer.from(await response.arrayBuffer());if(archive.length<=25*1024*1024){rawLogs=extractGitHubLogText(archive);if(rawLogs)note='Raw workflow logs and job summaries were included.'}}}catch{}res.setHeader('Cache-Control','no-store');res.json({runId,logs:rawLogs?`Raw workflow logs:\n${rawLogs}\n\nJob summary:\n${lines.join('\n')}`:lines.join('\n'),jobs:d.jobs||[],note})}catch(e){err(res,e)}});
 app.get('/api/github/files',async(req,res)=>{const s=await requireUser(req,res);if(!s)return;try{const owner=String(req.query.owner||''),repo=String(req.query.repo||''),branch=String(req.query.branch||'');if(!/^[A-Za-z0-9_.-]{1,100}$/.test(owner)||!/^[A-Za-z0-9_.-]{1,100}$/.test(repo)||!/^[A-Za-z0-9_.-]{1,250}$/.test(branch))throw Error('Choose a valid repository and branch.');const d=await gh(s,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${branch.split('/').map(encodeURIComponent).join('/')}?recursive=1`);res.json({files:(d.tree||[]).filter(f=>f.type==='blob'&&f.size<=1200000&& !/(^|\/)\.env($|\.)|secret|credential|private.key/i.test(f.path)).slice(0,5000).map(f=>({path:f.path,size:f.size}))})}catch(e){err(res,e)}});
 app.get('/api/github/file',async(req,res)=>{const s=await requireUser(req,res);if(!s)return;try{const owner=String(req.query.owner||''),repo=String(req.query.repo||''),path=String(req.query.path||''),branch=String(req.query.branch||'');if(!/^[A-Za-z0-9_.-]{1,100}$/.test(owner)||!/^[A-Za-z0-9_.-]{1,100}$/.test(repo)||!path||path.length>240||path.startsWith('/')||path.split('/').includes('..')||/(^|\/)\.env($|\.)|secret|credential|private.key/i.test(path))throw Error('This file path is not allowed.');const d=await gh(s,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${branch.split('/').map(encodeURIComponent).join('/')}`);if(d.encoding!=='base64'||!d.content||Number(d.size)>1200000)throw Error('The selected file is binary or exceeds the 1 MB inspection limit.');res.json({path,content:Buffer.from(d.content,'base64').toString('utf8')})}catch(e){err(res,e)}});
+app.post('/api/github/create-repo',async(req,res)=>{const s=await requireUser(req,res);if(!s)return;try{if(!s.githubToken||s.authProvider==='google')throw Object.assign(new Error('Connect GitHub as a Developer before creating a repository.'),{status:403});const i=z.object({name:z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),description:z.string().max(350).default(''),visibility:z.enum(['public','private']).default('private'),license:z.string().max(40).default('none'),autoInit:z.boolean().default(true)}).parse(req.body);const body={name:i.name,description:i.description,private:i.visibility==='private',auto_init:i.autoInit};if(i.license&&i.license!=='none'){const licenseMap={'mit':'mit','apache-2.0':'apache-2.0','gpl-3.0':'gpl-3.0','mpl-2.0':'mpl-2.0','unlicense':'unlicense'};if(!licenseMap[i.license])throw Error('Choose a supported repository license.');body.license_template=licenseMap[i.license];}const response=await fetch(`${GH}/user/repos`,{method:'POST',signal:AbortSignal.timeout(15000),headers:{Authorization:`Bearer ${s.githubToken}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'},body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));if(!response.ok)throw Object.assign(new Error(data.message||`GitHub repository creation failed (${response.status}). Check your OAuth permissions and repository name.`),{status:response.status});res.status(201).json({ok:true,name:data.name,full_name:data.full_name,html_url:data.html_url,private:data.private,default_branch:data.default_branch});}catch(e){err(res,e,e instanceof z.ZodError?422:e.status||400)}});
 app.get('/api/github/repos',async(req,res)=>{
  const s=await requireUser(req,res);if(!s)return;
  if(s.authProvider==='google'||!s.githubToken)return res.status(403).json({error:'Connect GitHub as a Developer to discover repositories.',code:'GITHUB_ACCOUNT_REQUIRED',reconnect:true});
@@ -435,8 +410,10 @@ app.post('/api/developer/chat',async(req,res)=>{
  try{
   if(!s.githubToken||s.authProvider==='google')throw Object.assign(new Error('Connect GitHub as a Developer before using repository-aware Edit.'),{status:403});
   const i=z.object({owner:z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),repo:z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),branch:z.string().max(250).optional(),message:z.string().min(1).max(12000),history:z.array(z.object({role:z.enum(['user','assistant']),content:z.string().max(8000)})).max(12).optional()}).parse(req.body);
-  const outOfScope=/\b(weather|forecast|recipe|cook(ing)?|dating|relationship advice|politics|election|celebrity|sports scores|football scores|medical diagnosis|symptoms|stock tips|crypto price|homework|write me a poem|joke of the day)\b/i.test(i.message);
-  if(outOfScope)throw Object.assign(new Error('PotHub Edit only handles questions and tasks about the connected repository: its code, architecture, dependencies, configuration, security, tests and deployment. Ask a repository-related question instead.'),{status:422,code:'REPOSITORY_SCOPE_ONLY'});
+  const developerIntent=/\b(repo(?:sitory)?|code|coding|program|programming|app|application|website|site|webapp|debug|bug|error|stack trace|build|deploy|deployment|vercel|github|git|commit|branch|pull request|dependency|package|api|endpoint|database|firebase|supabase|html|css|javascript|typescript|react|next\.js|python|java|flutter|android|ios|test|testing|refactor|function|component|file|folder|project|server|frontend|backend|oauth|workflow|ci\/cd|license|readme|repository)\b/i.test(i.message);
+  const explicitOffTopic=/\b(weather|forecast|recipe|cook(ing)?|dating|relationship advice|politics|election|celebrity|sports scores|football scores|medical diagnosis|symptoms|stock tips|crypto price|homework|write me a poem|joke of the day)\b/i.test(i.message);
+  const outOfScope=explicitOffTopic||(!developerIntent&&/\b(what is|who is|tell me about|how do i|how can i|give me|write me|explain|recommend|suggest|calculate|translate|summari[sz]e)\b/i.test(i.message));
+  if(outOfScope){res.setHeader('Cache-Control','no-store');return res.json({ok:true,text:"I’m only built to assist with this repository or its app and website—such as code, debugging, architecture, tests, GitHub, and deployment. Tell me what you’d like to build or fix here.",filesInspected:[],scopeLimited:true,creditsSpent:0});}
   const context=await repoContext(s,i.owner,i.repo);
   const words=String(i.message).toLowerCase().split(/[^a-z0-9_.-]+/).filter(x=>x.length>2);
   const mentioned=[...String(i.message).matchAll(/@file\s+([A-Za-z0-9_.\/-]+)/g)].map(m=>m[1]).filter(p=>!p.startsWith('/')&&!p.split('/').includes('..')).slice(0,8);
