@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { authDomainForHost, validGithubRepositoryName, validGitBranchRef } from '../src/lib/auth-domain.js';
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-test('A2 Firebase auth domain uses app host but preserves localhost and preview default', () => {
-  assert.equal(authDomainForHost('pothub.example.com'), 'pothub.example.com');
+test('A2 Firebase auth domain uses Firebase-provisioned handler unless an explicit custom proxy is configured', () => {
+  assert.equal(authDomainForHost('pothub-self.vercel.app'), 'pothub-ca2a1.firebaseapp.com');
   assert.equal(authDomainForHost('localhost'), 'pothub-ca2a1.firebaseapp.com');
   assert.equal(authDomainForHost('pot-preview.vercel.app'), 'pothub-ca2a1.firebaseapp.com');
-  assert.equal(authDomainForHost('pothub-self.vercel.app'), 'pothub-self.vercel.app');
-  assert.equal(authDomainForHost('pothub.example.com', 'custom.firebaseapp.com'), 'custom.firebaseapp.com');
+  assert.equal(authDomainForHost('pothub.example.com'), 'pothub-ca2a1.firebaseapp.com');
+  assert.equal(authDomainForHost('pothub.example.com', 'pothub-self.vercel.app'), 'pothub-ca2a1.firebaseapp.com');
 });
 test('B3 GitHub repository name validation rejects special and .git names', () => {
   assert.equal(validGithubRepositoryName('my-app'), true);
@@ -81,4 +81,33 @@ test('C13 Capacitor build refuses to ship without a configured API origin and sk
   const page = await read('pages/index.jsx');
   assert.match(build, /NEXT_PUBLIC_API_BASE is required/);
   assert.match(page, /Capacitor\.isNativePlatform\(\)/);
+});
+
+test('Creator chat hides stale configure-agent prompt when a compatible creator agent exists and groups history by date', async () => {
+  const ui = await read('src/ui/WorkspaceSection.jsx');
+  assert.match(ui, /missingAgentFunction&&!\(role==='Creator'&&agents\.some/);
+  assert.match(ui, /chat-history-group-title/);
+  assert.match(ui, /creator-chat-header/);
+});
+test('API page lock uses a single platform authenticator without requiring PIN enrollment', async () => {
+  const biometric = await read('src/lib/biometric.js');
+  const agents = await read('src/ui/AgentsWorkspace.jsx');
+  assert.match(biometric, /async function browserRegister\(ownerId\)/);
+  assert.doesNotMatch(biometric, /const pinRow = await setupPin\(ownerId, requestPasscode\)/);
+  assert.match(agents, /one authenticator/);
+});
+test('Firebase auth domain stays on the Firebase-provisioned domain by default', async () => {
+  const firebase = await read('src/lib/firebase.js');
+  const authDomain = await read('src/lib/auth-domain.js');
+  assert.match(authDomain, /return 'pothub-ca2a1\.firebaseapp\.com'/);
+  assert.match(firebase, /authDomain: authDomainForHost/);
+});
+
+test('Creator chat Get credits button opens the real credit checkout and welcome actions are creation-focused', async () => {
+  const app = await read('src/ui/App.jsx');
+  const ui = await read('src/ui/WorkspaceSection.jsx');
+  assert.match(app, /setCheckoutOpen,shareText/);
+  assert.match(ui, /creator-plus-button" onClick=\{\(\)=>setCheckoutOpen\(true\)\}/);
+  assert.match(ui, /Create an image/);
+  assert.match(ui, /Write or edit/);
 });

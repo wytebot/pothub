@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PROVIDERS,providersForFunction,normalizeProvider,providerById,modelsForFunction,DEFAULT_MODELS} from '../src/lib/provider-registry.js';
+import {PROVIDERS,providersForFunction,normalizeProvider,providerById,modelsForFunction,DEFAULT_MODELS,normalizeConfiguredModel} from '../src/lib/provider-registry.js';
 
 test('registry includes the requested text providers and both custom protocols',()=>{
   for(const id of ['openai','anthropic','gemini','mistral','groq','deepseek','xai','cohere','perplexity','together','fireworks','openrouter','azure-openai','huggingface','openai-compatible','anthropic-compatible'])assert.ok(providerById(id),`missing ${id}`);
@@ -31,4 +31,10 @@ test('legacy provider labels normalize without breaking saved agents',()=>{
 test('provider declarations remain unique and carry capabilities',()=>{
   const ids=PROVIDERS.map(p=>p.id);assert.equal(new Set(ids).size,ids.length);
   assert.ok(PROVIDERS.every(p=>p.label&&p.protocol&&Array.isArray(p.capabilities)));
+});
+
+test('legacy saved Gemini model is migrated before requests are routed',()=>{
+  assert.equal(normalizeConfiguredModel('gemini','gemini-3.8-flash'),'gemini-2.5-flash');
+  assert.equal(normalizeConfiguredModel('Gemini','gemini-2.5-pro'),'gemini-2.5-pro');
+  assert.equal(normalizeConfiguredModel('openai','gemini-3.8-flash'),'gemini-3.8-flash');
 });
