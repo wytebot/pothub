@@ -156,3 +156,6 @@ In the Vercel app's Manage settings, enable the `openid`, `email`, `profile`, an
 
 After redeploying, open Developer workspace → Deployment logs → Connect Vercel. Authorize the account, select a project from the discovered list, then choose a deployment. If Vercel reports insufficient permissions, update the OAuth app's permissions and reconnect. The callback URL to register is `https://YOUR-POTHUB-DOMAIN/api/vercel/callback`.
 
+
+# Shared Flutterwave webhook is owned by WyBuild; authenticate its server-to-server PotHub settlement callback.
+WYBUILD_WEBHOOK_SHARED_SECRET=replace-with-the-same-random-secret-configured-in-WyBuild
