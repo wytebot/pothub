@@ -7,6 +7,7 @@ test('A2 Firebase auth domain uses app host but preserves localhost and preview 
   assert.equal(authDomainForHost('pothub.example.com'), 'pothub.example.com');
   assert.equal(authDomainForHost('localhost'), 'pothub-ca2a1.firebaseapp.com');
   assert.equal(authDomainForHost('pot-preview.vercel.app'), 'pothub-ca2a1.firebaseapp.com');
+  assert.equal(authDomainForHost('pothub-self.vercel.app'), 'pothub-self.vercel.app');
   assert.equal(authDomainForHost('pothub.example.com', 'custom.firebaseapp.com'), 'custom.firebaseapp.com');
 });
 test('B3 GitHub repository name validation rejects special and .git names', () => {
