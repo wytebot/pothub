@@ -34,3 +34,24 @@ export function grantDocumentId(userId, reference) {
   if (!String(userId || '') || !String(reference || '')) throw new TypeError('User ID and reference are required.');
   return crypto.createHash('sha256').update(`${String(userId)}:${String(reference)}`).digest('hex');
 }
+
+/** Validate a settlement forwarded by the registered WyBuild webhook after its
+ * direct Flutterwave v4 charge lookup. The shared secret is checked separately. */
+export function isValidWyBuildSettlement(order, payload) {
+  if (!order || !payload) return false;
+  const reference = String(payload.reference || '');
+  const id = String(payload.id || '');
+  return /^kh[a-f0-9]{32}$/i.test(reference)
+    && reference === String(order.reference || '')
+    && id.length > 0 && id.length <= 160
+    && String(payload.status || '').toLowerCase() === 'succeeded'
+    && Number.isFinite(Number(payload.amount))
+    && Number(payload.amount) === Number(order.amount)
+    && String(payload.currency || '').toUpperCase() === String(order.currency || '').toUpperCase();
+}
+
+export function isValidSharedWebhookSecret(expected, supplied, minLength = 32) {
+  if (typeof expected !== 'string' || typeof supplied !== 'string' || expected.length < minLength || !supplied) return false;
+  const a = Buffer.from(expected), b = Buffer.from(supplied);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
