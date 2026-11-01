@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (!String(process.env.NEXT_PUBLIC_API_BASE || '').trim()) { console.error('[Capacitor build] NEXT_PUBLIC_API_BASE is required for online APK functionality.'); process.exit(1); }
 const temp = await mkdtemp(path.join(os.tmpdir(), 'pothub-cap-'));
 const excluded = new Set(['api', '.next', 'node_modules']);
 try {
