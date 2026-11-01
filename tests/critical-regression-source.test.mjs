@@ -13,7 +13,8 @@ test('credit and signed-media helpers are explicitly imported by server library'
 test('agent model routing passes selected BYOK candidates without cloning Express request', () => {
   assert.match(app, /modelReq=req;return\{\.\.\.pricing,mode:selection\.mode,modelReq,candidates:selection\.candidates\}/);
   assert.match(app, /modelJson\(prompt,agentContext\.modelReq,extraParts,agentContext\.candidates\)/);
-  assert.match(app, /const userMode = Array\.isArray\(explicitCandidates\) \? true : userCandidates\.length > 0/);
+  assert.match(app, /const candidates = userCandidates\.map/);
+  assert.doesNotMatch(app, /process\.env\.GEMINI_API_KEY\s*\|\|/);
 });
 
 test('video Buffer response uses module-scope Readable import', () => {
