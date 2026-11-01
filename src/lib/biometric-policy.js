@@ -9,5 +9,5 @@ export function chooseVerificationMode({ native = false, mode = '', available = 
 }
 
 export function nativeEnableMode({ biometricPromptSucceeded = false } = {}) {
-  return biometricPromptSucceeded ? 'native' : 'pin';
+  return biometricPromptSucceeded ? 'native' : null;
 }
