@@ -63,11 +63,21 @@
 | D17 | Needs live test | `android-template/*.java` plugins need generated-project compile and physical Android tests. | `android-template/`, `scripts/configure-android.mjs` | Android SDK/device unavailable |
 | D18 | Needs live test | `scripts/release-audit.mjs` remains a static guard, not a runtime certification; its assertions need alignment with current source and updated checks. | `scripts/release-audit.mjs`, `tests/` | Static audit ran before final edits; rerun with dependencies |
 \n## Deployment freshness / stale-cache prevention\n- Service worker cache is build-stamped; HTML, API/auth and Next.js chunks are network-only. Activation removes legacy shell/static caches and stale cached HTML/chunks.\n- Browser/PWA checks for worker updates on focus and visibility return. Capacitor continues to skip service-worker registration.\n- Regression tests: `tests/service-worker-freshness.test.mjs`.\n
-## 2026-11-01 — AI agent fallback routing
+## 2026-11-01 — BYOK model and API-key fallback routing
+
+| ID | Status | Files touched | Regression test |
+|---|---|---|---|
+| BYOK-FALLBACK-1 | Fixed in source; live provider test needed | `src/lib/agent-routing.js`, `src/ui/App.jsx`, `server/app.js` | `tests/agent-routing.test.mjs` — primary models across configured keys are attempted before model variants |
+| BYOK-FALLBACK-2 | Fixed in source; deployed PWA/APK test needed | `src/ui/App.jsx`, `server/app.js` | `tests/agent-routing.test.mjs` — each fallback stays paired with its saved key, provider, endpoint, and task |
+| BYOK-FALLBACK-3 | Fixed in source | `src/ui/App.jsx`, `tests/agent-routing.test.mjs` | API & Agents Test covers configured model variants and reports fallback model success |
+| BYOK-FALLBACK-4 | Fixed in source | `server/app.js`, `tests/byok-only-policy.test.mjs` | server accepts only user-configured candidates; no platform AI keys are candidates |
+
+## 2026-11-01 — Creator chat and auth lock update
 
 | ID | Status | Files touched | Test |
 |---|---|---|---|
-| AI-FALLBACK-1 | Fixed in source: round-robin fallback plan keeps multiple configured API keys in the bounded request candidate list | `src/lib/agent-routing.js`, `src/ui/App.jsx` | `agent fallback tries primary models across configured keys before secondary models crowd them out` |
-| AI-FALLBACK-2 | Fixed in source: normalize known retired Gemini model IDs and preserve only configured provider/model pairs; no platform AI keys introduced | `src/lib/agent-routing.js` | `fallback plan only uses explicitly configured valid providers/models and obeys limit`; `legacy saved Gemini model is migrated before requests are routed` |
-| AI-FALLBACK-3 | Needs live test: actual model/key failover against real provider APIs and browser/Capacitor deployments | no additional files | live provider request required |
-| AI-FALLBACK-4 | Needs environment repair: full `npm run check` did not pass because dependencies are absent and an existing source-level BYOK diagnostic assertion expects old wording | `AI-AGENT-FALLBACK-WIRING.md` | `npm run check` (not passed) |
+| UI-CREATOR-CHAT | Fixed in source; needs visual/live verification | `src/ui/App.jsx`, `src/ui/WorkspaceSection.jsx`, `src/ui/styles.css` | `Creator chat hides stale configure-agent prompt when a compatible creator agent exists and groups history by date` |
+| API-LOCK-METHOD | Fixed in source; needs device/browser verification | `src/lib/biometric.js`, `src/ui/AgentsWorkspace.jsx` | `API page lock uses a single platform authenticator without requiring PIN enrollment` |
+| FIREBASE-AUTH-DOMAIN | Fixed in source; needs live OAuth verification | `src/lib/auth-domain.js`, `src/lib/firebase.js`, `tests/one-pass-regressions.test.mjs`, `docs/AUTH_FLOW.md`, `AUTH-ISOLATION-DEPLOYMENT.md` | `Firebase auth domain stays on the Firebase-provisioned domain by default` |
+
+Security note: removing the PIN fallback means losing access to the configured device biometric/passkey can prevent unlocking the API page. Users should disable the lock from a trusted session before losing that authenticator.

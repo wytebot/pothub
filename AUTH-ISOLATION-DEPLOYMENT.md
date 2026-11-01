@@ -46,8 +46,8 @@ Set its **Authorization callback URL** to exactly:
 
 The local automated source tests cover routing contracts and provider separation. They do not substitute for a live Vercel deployment, actual GitHub/Google OAuth credentials, Firebase Admin access, or an Android device test.
 
-## Google redirect: same-origin auth domain (2026-11-01)
-`pothub-self.vercel.app` now uses itself as Firebase `authDomain` (the `/__/auth` proxy in `vercel.json` serves the helper). This fixes "Google returned to PotHub without an authenticated account" caused by third-party-storage blocking. Required once:
-1. Google Cloud Console → APIs & Services → Credentials → the OAuth Web client Firebase uses → Authorized redirect URIs: add `https://pothub-self.vercel.app/__/auth/handler` (keep the firebaseapp.com one).
-2. Firebase → Authentication → Settings → Authorized domains: `pothub-self.vercel.app` present.
-3. Redeploy, then clear site data / reopen the installed PWA once.
+## Google redirect: Firebase-provisioned auth domain (2026-11-01)
+The frontend now explicitly uses `pothub-ca2a1.firebaseapp.com` as `authDomain`. The app hostname is not substituted for the Firebase handler host. Required console settings:
+1. Google Cloud Console → APIs & Services → Credentials → the OAuth Web client used by Firebase → Authorized redirect URIs: `https://pothub-ca2a1.firebaseapp.com/__/auth/handler`. Remove `https://pothub-self.vercel.app/__/auth/handler` unless you intentionally configure and verify the Vercel proxy as a custom authDomain.
+2. Firebase → Authentication → Settings → Authorized domains: ensure `pothub-self.vercel.app` is present as the application return domain.
+3. Redeploy and retest redirect result plus Firebase auth-state restoration. This configuration choice needs live OAuth verification.
