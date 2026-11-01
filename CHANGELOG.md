@@ -63,3 +63,11 @@
 | D17 | Needs live test | `android-template/*.java` plugins need generated-project compile and physical Android tests. | `android-template/`, `scripts/configure-android.mjs` | Android SDK/device unavailable |
 | D18 | Needs live test | `scripts/release-audit.mjs` remains a static guard, not a runtime certification; its assertions need alignment with current source and updated checks. | `scripts/release-audit.mjs`, `tests/` | Static audit ran before final edits; rerun with dependencies |
 \n## Deployment freshness / stale-cache prevention\n- Service worker cache is build-stamped; HTML, API/auth and Next.js chunks are network-only. Activation removes legacy shell/static caches and stale cached HTML/chunks.\n- Browser/PWA checks for worker updates on focus and visibility return. Capacitor continues to skip service-worker registration.\n- Regression tests: `tests/service-worker-freshness.test.mjs`.\n
+## 2026-11-01 — AI agent fallback routing
+
+| ID | Status | Files touched | Test |
+|---|---|---|---|
+| AI-FALLBACK-1 | Fixed in source: round-robin fallback plan keeps multiple configured API keys in the bounded request candidate list | `src/lib/agent-routing.js`, `src/ui/App.jsx` | `agent fallback tries primary models across configured keys before secondary models crowd them out` |
+| AI-FALLBACK-2 | Fixed in source: normalize known retired Gemini model IDs and preserve only configured provider/model pairs; no platform AI keys introduced | `src/lib/agent-routing.js` | `fallback plan only uses explicitly configured valid providers/models and obeys limit`; `legacy saved Gemini model is migrated before requests are routed` |
+| AI-FALLBACK-3 | Needs live test: actual model/key failover against real provider APIs and browser/Capacitor deployments | no additional files | live provider request required |
+| AI-FALLBACK-4 | Needs environment repair: full `npm run check` did not pass because dependencies are absent and an existing source-level BYOK diagnostic assertion expects old wording | `AI-AGENT-FALLBACK-WIRING.md` | `npm run check` (not passed) |
