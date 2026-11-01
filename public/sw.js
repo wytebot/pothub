@@ -38,8 +38,19 @@ self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     const hadPreviousShell = keys.some(key => key.startsWith('pothub-shell-') && key !== CACHE);
-    await Promise.all(keys.filter(key => key.startsWith('pothub-shell-') && key !== CACHE)
+    // Remove all prior PotHub shell caches and any legacy app caches that may
+    // contain old Next.js chunks. Hashed Next assets are fetched from network.
+    await Promise.all(keys.filter(key => key.startsWith('pothub-shell-') && key !== CACHE || key.startsWith('pothub-static-') || key === 'pothub-cache-v1')
       .map(key => caches.delete(key)));
+    for (const key of await caches.keys()) {
+      const cache = await caches.open(key);
+      for (const request of await cache.keys()) {
+        const path = new URL(request.url).pathname;
+        if (path.startsWith('/_next/static/') || path.endsWith('.html') || path === '/' || path === '/sw.js') {
+          await cache.delete(request);
+        }
+      }
+    }
     await self.clients.claim();
     if (hadPreviousShell) {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -61,8 +72,12 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Next.js static assets are content-hashed; icons are immutable shell resources.
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/')) {
+  // Never serve JavaScript/CSS chunks from Cache Storage. This prevents an
+  // old app bundle surviving deployments; Next.js hashed assets are network-only.
+  if (url.pathname.startsWith('/_next/static/')) { return; }
+
+  // Only fixed icons are cache-first shell resources.
+  if (url.pathname.startsWith('/icons/')) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
       const cached = await cache.match(request);
