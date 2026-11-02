@@ -2,6 +2,8 @@ import React from 'react';
 import '../src/ui/styles.css';
 import '../src/ui/codelab/codelab.css';
 import '../src/ui/byte-bounce.css';
+import '../src/ui/penalty-shootout.css';
+import '../src/ui/arcade-hub.css';
 import DeploymentUpdateNotice from '../src/ui/DeploymentUpdateNotice.jsx';
 
 class AppErrorBoundary extends React.Component {
