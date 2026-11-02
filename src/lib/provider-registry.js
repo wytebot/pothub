@@ -11,9 +11,22 @@ export const DEFAULT_MODELS = {};
 // and narrow: never silently substitute arbitrary provider/model combinations.
 export function normalizeConfiguredModel(provider, model) {
   const id = normalizeProvider(provider);
-  const value = String(model || '').trim();
-  return value;
+  const value = String(model || '').trim().replace(/^models\//, '');
+  return id === 'gemini' && RETIRED_GEMINI_MODELS[value] ? RETIRED_GEMINI_MODELS[value] : value;
 }
+// Gemini models Google has shut down (a retired model answers HTTP 404) and the replacement Google recommends.
+// Agents saved by older PotHub versions still carry these IDs.
+const RETIRED_GEMINI_MODELS = {
+  'gemini-2.5-flash-image': 'gemini-3.1-flash-image',
+  'gemini-2.5-flash-image-preview': 'gemini-3.1-flash-image',
+  'gemini-3.1-flash-image-preview': 'gemini-3.1-flash-image',
+  'gemini-2.5-flash': 'gemini-3.6-flash',
+  'gemini-2.5-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-2.5-pro': 'gemini-3.1-pro-preview',
+  'imagen-4.0-generate-001': 'gemini-3.1-flash-image',
+  'imagen-4.0-fast-generate-001': 'gemini-3.1-flash-image',
+  'imagen-4.0-ultra-generate-001': 'gemini-3.1-flash-image'
+};
 
 export const PROVIDERS = [
  {id:'gemini',label:'Google Gemini',protocol:'gemini',auth:'x-goog-api-key',baseUrl:'https://generativelanguage.googleapis.com',models:['gemini-3.8-flash','gemini-3.5-flash-lite','gemini-3.6-flash'],modelsByFunction:{Image:['gemini-3.1-flash-image','gemini-3-pro-image']},capabilities:[...VISION,'image','video','embeddings'],streaming:true,implemented:true},
