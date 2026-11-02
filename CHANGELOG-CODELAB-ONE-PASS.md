@@ -19,7 +19,7 @@
 
 ## Credit policy preserved
 
-AI jobs retain the shared three-successful-workflow meter: one credit is reserved at the first job in each batch of three successful AI jobs; the following two successful jobs are covered. Failed jobs release reservations and do not advance the count. The same meter applies to text, image and delivered-video workflows.
+AI jobs retain the shared per-successful-agent-action meter: one credit is charged per successful agent action. Each generated image, delivered video, and generated file consumes one credit per output. Failed jobs release reservations and do not advance the count. The same meter applies to text, image and delivered-video workflows.
 
 ## Verification performed
 

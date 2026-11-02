@@ -6,7 +6,7 @@
 - Passes external cancellation through the API helper while retaining the request timeout.
 - Adds server-side disconnect cancellation signals to AI routes and uses the combined deadline/disconnect signal for fetch-based provider calls.
 - Adds static regression tests for Creator cancellation wiring.
-- Preserves the existing BYOK-only model routing and shared three-successful-AI-workflows-per-credit accounting policy.
+- Preserves the existing BYOK-only model routing and one-credit-per-successful-agent-action policy.
 
 ## Verification performed
 - `node --check server/app.js` passed.
