@@ -4,9 +4,9 @@ import {isVerifiedHostedPayment,hostedFlutterwaveRequest} from '../server/flutte
 
 test('hosted checkout verification binds transaction ID, reference, amount, currency and successful status',()=>{
   const order={reference:'kh123456',amount:9.99,currency:'USD'};
-  const good={id:123,status:'successful',tx_ref:'kh123456',amount:10,currency:'USD'};
+  const good={id:123,status:'successful',tx_ref:'kh123456',amount:9.99,currency:'USD'};
   assert.equal(isVerifiedHostedPayment(order,good,'123'),true);
-  for(const bad of [{...good,id:124},{...good,tx_ref:'other'},{...good,amount:9},{...good,currency:'NGN'},{...good,status:'pending'}])assert.equal(isVerifiedHostedPayment(order,bad,'123'),false);
+  for(const bad of [{...good,id:124},{...good,tx_ref:'other'},{...good,amount:9},{...good,amount:10},{...good,currency:'NGN'},{...good,status:'pending'}])assert.equal(isVerifiedHostedPayment(order,bad,'123'),false);
 });
 
 test('hosted checkout HTTP client pins the official v3 origin and keeps secret in server Authorization header',async()=>{
