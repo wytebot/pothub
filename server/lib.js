@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { DAILY_FREE_CREDITS, DAILY_FREE_INTERVAL_MS, shouldChargeForAiWorkflow } from './credit-policy.js';
 import { sealData, unsealData } from './iron.js';
 import { getApps, initializeApp, applicationDefault, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -263,16 +264,56 @@ export async function requireUser(req,res){const s=await getSession(req);if(!s?.
 export async function getCredits(id){
   if(!ensureDatabase())throw Error('Credit accounting is unavailable. Configure Firebase Admin and Firestore.');
   const userId=String(id||'');if(!userId)throw Error('A signed-in account is required to check credits.');
-  // Daily free credits are granted separately from purchases and starter grants.
-  // A deterministic per-account/per-UTC-day reference makes concurrent balance
-  // checks idempotent and ensures buying a pack never disables the daily grant.
-  const day=new Date().toISOString().slice(0,10),dailyReference=`daily-free-10:${day}`;
   const {data:profile,error:profileError}=await db.from('profiles').select('credits,starter_credits_remaining').eq('github_id',userId).maybeSingle();
   if(profileError)throw profileError;if(!profile)throw Error('Your Pothub profile is not initialized. Sign out and reconnect.');
-  await grantCreditsOnce(db,userId,5,dailyReference,'Daily free credits');
+  // Per-account rolling 24-hour window. The pending reference makes a grant
+  // recoverable if the process stops between claiming the window and the SQL grant.
+  const windowRef=firestore.collection('daily_free_credit_windows').doc(crypto.createHash('sha256').update(userId).digest('hex'));
+  const now=Date.now();
+  // Migrate the last UTC-day grant into the rolling window so deployment does not
+  // accidentally award a second five-credit grant to an account within 24 hours.
+  let legacyLastGrantedAt=0;
+  try{for(const offset of [0,1]){const day=new Date(now-offset*DAILY_FREE_INTERVAL_MS).toISOString().slice(0,10),legacyRef=`daily-free-10:${day}`,legacySnap=await firestore.collection('credit_grants').doc(grantDocumentId(userId,legacyRef)).get();if(legacySnap.exists){const parsed=Date.parse(String(legacySnap.data()?.created_at||''));if(Number.isFinite(parsed))legacyLastGrantedAt=Math.max(legacyLastGrantedAt,parsed);}}}catch{}
+  const claim=await firestore.runTransaction(async tx=>{
+    const snap=await tx.get(windowRef),row=snap.exists?snap.data():{};
+    if(row.pendingReference)return {reference:String(row.pendingReference),pending:true};
+    const last=Number(row.lastGrantedAt||legacyLastGrantedAt||0);
+    if(last&&now-last<DAILY_FREE_INTERVAL_MS)return {reference:'',nextGrantAt:last+DAILY_FREE_INTERVAL_MS};
+    const reference=`daily-free-rolling:${crypto.createHash('sha256').update(userId).digest('hex').slice(0,24)}:${now}`;
+    tx.set(windowRef,{userId,lastGrantedAt:last,pendingReference:reference,pendingAt:now,nextGrantAt:now+24*60*60*1000,updatedAt:now},{merge:true});
+    return {reference,pending:true};
+  });
+  if(claim.reference){
+    await grantCreditsOnce(db,userId,DAILY_FREE_CREDITS,claim.reference,'Daily free Express credits');
+    await firestore.runTransaction(async tx=>{const snap=await tx.get(windowRef);if(snap.exists&&snap.data().pendingReference===claim.reference)tx.set(windowRef,{lastGrantedAt:now,pendingReference:null,pendingAt:null,nextGrantAt:now+DAILY_FREE_INTERVAL_MS,updatedAt:Date.now()},{merge:true});});
+  }
   const {data,error}=await db.from('profiles').select('credits,starter_credits_remaining').eq('github_id',userId).maybeSingle();
   if(error)throw error;if(!data)throw Error('Your Pothub profile is not initialized. Sign out and reconnect.');
-  return{credits:Number(data.credits||0),starter_credits_remaining:Number(data.starter_credits_remaining||0),daily_free_credits:5,daily_free_grant_day:day,demo:false}
+  return{credits:Number(data.credits||0),starter_credits_remaining:Number(data.starter_credits_remaining||0),daily_free_credits:DAILY_FREE_CREDITS,daily_free_next_at:claim.nextGrantAt?new Date(claim.nextGrantAt).toISOString():new Date(now+24*60*60*1000).toISOString(),daily_free_policy:'rolling-24-hours',demo:false}
+}
+
+// Serialize AI credit-meter updates per account so simultaneous requests cannot
+// all claim the same third-workflow boundary. A failed workflow releases the lock
+// without incrementing the successful-workflow count.
+export async function beginAiWorkflowBilling(userId,operationId,store=firestore){
+  if(!store)throw new Error('AI workflow billing storage is unavailable.');
+  const key=crypto.createHash('sha256').update(String(userId)).digest('hex'),ref=store.collection('ai_workflow_meters').doc(key),now=Date.now();
+  return store.runTransaction(async tx=>{const snap=await tx.get(ref),row=snap.exists?snap.data():{},lockUntil=Number(row.lockUntil||0),owner=String(row.lockOperationId||'');
+    if(owner&&lockUntil>now&&owner!==String(operationId))throw Object.assign(new Error('Another AI workflow is still running for this account. Wait for it to finish, then retry.'),{status:409,code:'AI_WORKFLOW_IN_PROGRESS'});
+    const completed=Math.max(0,Number(row.completedWorkflows)||0);
+    tx.set(ref,{userId:String(userId),completedWorkflows:completed,lockOperationId:String(operationId),lockUntil:now+30*60*1000,updatedAt:now},{merge:true});
+    return {reference:key,operationId:String(operationId),completedBefore:completed,charge:shouldChargeForAiWorkflow(completed)};
+  });
+}
+export async function completeAiWorkflowBilling(userId,lease,store=firestore){
+  if(!lease||!store)return;
+  const ref=store.collection('ai_workflow_meters').doc(String(lease.reference));
+  await store.runTransaction(async tx=>{const snap=await tx.get(ref);if(!snap.exists||String(snap.data().lockOperationId||'')!==String(lease.operationId))throw new Error('AI workflow billing lock expired. Retry only after checking operation history.');const row=snap.data();tx.set(ref,{completedWorkflows:Math.max(0,Number(row.completedWorkflows)||0)+1,lockOperationId:null,lockUntil:0,lastCompletedAt:Date.now(),updatedAt:Date.now()},{merge:true});});
+}
+export async function failAiWorkflowBilling(lease,store=firestore){
+  if(!lease||!store)return;
+  const ref=store.collection('ai_workflow_meters').doc(String(lease.reference));
+  await store.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.exists&&String(snap.data().lockOperationId||'')===String(lease.operationId))tx.set(ref,{lockOperationId:null,lockUntil:0,updatedAt:Date.now()},{merge:true});});
 }
 export async function spendCredits(id,amount,reason,metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');const{data,error}=await db.rpc('spend_credits',{p_github_id:String(id),p_amount:amount,p_reason:reason,p_metadata:metadata});if(error)throw Error(error.message||'Unable to reserve credits.');if(!data?.ok)throw Error(data?.message||'Not enough credits.');return{credits:Number(data.credits),demo:false}}
 export async function beginOperation(userId,operationId,payloadHash,{ttlMs=20*60*1000,store=firestore}={}){
