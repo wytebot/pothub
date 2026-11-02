@@ -4,15 +4,14 @@ import { DAILY_FREE_CREDITS, DAILY_FREE_INTERVAL_MS, shouldChargeForAiWorkflow, 
 import { readFile } from 'node:fs/promises';
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('one credit is charged at the first workflow of each three-success batch', () => {
-  assert.equal(shouldChargeForAiWorkflow(0), true);  // first AI job charges immediately
-  assert.equal(shouldChargeForAiWorkflow(1), false); // second successful job is covered
-  assert.equal(shouldChargeForAiWorkflow(2), false); // third successful job is covered
-  assert.equal(shouldChargeForAiWorkflow(3), true);  // next batch charges on its first job
-  assert.equal(shouldChargeForAiWorkflow(4), false);
-  assert.equal(shouldChargeForAiWorkflow(5), false);
-  assert.equal(shouldChargeForAiWorkflow(6), true);
-  assert.equal(shouldChargeForAiWorkflow(-1), false); // invalid counters never trigger a charge
+test('each successful agent workflow consumes one credit', () => {
+  assert.equal(shouldChargeForAiWorkflow(0), true);
+  assert.equal(shouldChargeForAiWorkflow(1), true);
+  assert.equal(shouldChargeForAiWorkflow(2), true);
+  assert.equal(shouldChargeForAiWorkflow(3), true);
+  assert.equal(shouldChargeForAiWorkflow(4), true);
+  assert.equal(shouldChargeForAiWorkflow(5), true);
+  assert.equal(shouldChargeForAiWorkflow(-1), false);
 });
 
 test('five daily free credits use a rolling 24-hour window, not UTC date boundaries', () => {
