@@ -1,0 +1,56 @@
+import React from "react";
+
+const CONTENT = {
+  contact: { label: "SUPPORT", title: "Contact Us", sections: [["Email", "For bugs, account access problems, or general support, contact wytetechcompany@gmail.com."], ["Payment support", "Include the GitHub username, approximate transaction time, and the error shown by PotHub Codelab. Never send your card number, CVV, PIN, OTP, password, or access token."], ["Security reports", "Report suspected security problems privately by email so they can be investigated without exposing repository or account data."]] },
+  privacy: {
+    label: "PRIVACY",
+    title: "Privacy Policy",
+    sections: [
+      ["What we collect", "PotHub Codelab collects the information needed to authenticate your account, connect you to repositories you choose to use, and operate the workspace. We aim to collect only what is necessary for these functions."],
+      ["GitHub access", "When you sign in with GitHub, PotHub Codelab uses the permissions granted during authorization to perform actions you request, such as reading repositories, editing files, and creating or updating repository content. PotHub Codelab does not claim ownership of your code."],
+      ["Payments", "Payments are processed through our payment provider. PotHub Codelab does not intentionally store your full card number, CVV, or card PIN. Payment authorization data is handled through the payment flow provided by the payment processor."],
+      ["Data use", "We use account and service data to operate PotHub Codelab, prevent abuse, troubleshoot failures, maintain security, and provide requested features. We do not sell your private repository content."],
+      ["Your responsibility", "Keep your GitHub account and devices secure. Review the permissions shown during GitHub authorization and revoke access from GitHub when you no longer want PotHub Codelab connected."],
+      ["Google Drive™ (optional)", "If you connect Google Drive™,  PotHub Codelab requests the Google™ identity scopes openid and email to identify the Google™ account, plus the drive.file scope to create and access the files PotHub Codelab creates for you (such as exported repository ZIPs). PotHub Codelab does not request access to your Gmail, Calendar, Docs, Sheets, or all of your existing Drive files. Google™ authorization data is handled under the Google API Services™ User Data Policy, including its Limited Use requirements. You can disconnect PotHub Codelab from Developer Hub or revoke its Google™ access from your Google™ Account permissions."],
+    ]
+  },
+  terms: {
+    label: "LEGAL",
+    title: "Terms of Service",
+    sections: [
+      ["Using PotHub Codelab", "PotHub Codelab is a developer workspace that helps you work with GitHub repositories. You are responsible for the repositories, code, credentials, and content you access or modify through the service."],
+      ["Acceptable use", "Do not use PotHub Codelab to violate GitHub rules, applicable law, intellectual-property rights, privacy rights, or the rights of other users. Do not attempt to bypass security controls, abuse service limits, or interfere with the service."],
+      ["GitHub and third parties", "GitHub remains the source of truth for your repositories. GitHub, payment providers, and other third-party services are governed by their own terms and policies."],
+      ["Subscriptions", "Pro features require an active subscription. Pricing, included features, renewal terms, and availability may change with reasonable notice. If a payment fails, access to Pro features may be restricted until the subscription is restored."],
+      ["No guarantee", "PotHub Codelab is provided to help with development workflows, but you should keep appropriate backups and review changes before committing or pushing important code. We are not responsible for loss caused by your own code, repository configuration, or third-party service outages."],
+    ]
+  },
+  about: {
+    label: "PotHub Codelab",
+    title: "About PotHub Codelab",
+    sections: [
+      ["Built for developers", "PotHub Codelab is a focused mobile-friendly developer workspace built around GitHub. It brings repository browsing, file editing, changes, search, commits, and project workflows into one streamlined interface."],
+      ["GitHub-first", "Your repositories stay on GitHub. PotHub Codelab is designed as a productivity layer on top of GitHub rather than a replacement for Git hosting."],
+      ["Simple by design", "The goal is fast access to the tools developers use most, without turning the interface into a social feed or an unnecessarily complicated IDE."],
+      ["Support", "For help with a specific workflow, use the Help section inside PotHub Codelab and check the error message shown by the app before retrying an operation."],
+    ]
+  }
+};
+
+export default function LegalPage({ type }) {
+  const data = CONTENT[type] || CONTENT.about;
+  return (
+    <div className="page legalPage">
+      <header><div><span className="eyebrow">{data.label}</span><h1>{data.title}</h1></div></header>
+      <section className="panel legalPanel">
+        {data.sections.map(([heading, body]) => (
+          <details className="legalSection" key={heading} open={type === "about"}>
+            <summary>{heading}</summary>
+            <p>{body}</p>
+          </details>
+        ))}
+        <p className="muted legalNote">Last updated: September 14, 2026. Google Drive™ is a trademark of Google LLC. PotHub Codelab is independent and is not endorsed by or affiliated with Google LLC.</p>
+      </section>
+    </div>
+  );
+}
