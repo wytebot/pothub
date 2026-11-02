@@ -1,7 +1,6 @@
 import React,{useEffect,useMemo} from 'react';
 import Codelab from './codelab/Codelab';
 import {setCodelabApi,setCodelabContext} from './codelab/bridge';
-import './codelab/codelab.css';
 
 // Codelab is the WyteLab workspace running on PotHub's own session, credits and chat.
 // section: 'codelab' (WyteLab Home) or 'codelab:<page>' for every other WyteLab page.

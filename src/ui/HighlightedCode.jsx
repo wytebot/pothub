@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import 'highlight.js/styles/github-dark.css';
 
 const LANGUAGE_LOADERS = {
   javascript: () => import('highlight.js/lib/languages/javascript'),
