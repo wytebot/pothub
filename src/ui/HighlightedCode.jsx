@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import 'highlight.js/styles/github-dark.css';
+import UniversalCodeEditor from './UniversalCodeEditor';
 
 const LANGUAGE_LOADERS = {
   javascript: () => import('highlight.js/lib/languages/javascript'),
@@ -31,5 +32,6 @@ async function getHighlighter(){
 export default function HighlightedCode({code,language=''}){
   const [html,setHtml]=useState('');
   useEffect(()=>{let active=true;getHighlighter().then(hljs=>{let value;try{const lang=aliases[language]||language;value=lang&&hljs.getLanguage(lang)?hljs.highlight(code,{language:lang}).value:hljs.highlightAuto(code).value}catch{value=String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}if(active)setHtml(value)}).catch(()=>{if(active)setHtml(String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'))});return()=>{active=false}},[code,language]);
-  return <pre className="markdown-code"><code dangerouslySetInnerHTML={{__html:html||String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}}/></pre>;
+  const lineCount=String(code||'').split('\n').length;
+  return <UniversalCodeEditor value={code} language={language||'text'} height={Math.min(440,Math.max(150,lineCount*20+28))} ariaLabel={`${language||'plain text'} code block`} />;
 }
