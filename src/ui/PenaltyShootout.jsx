@@ -1,6 +1,5 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {ArrowLeft,RotateCcw,Volume2,VolumeX,Target,Trophy,MoveUpRight} from 'lucide-react';
-import './penalty-shootout.css';
 
 export default function PenaltyShootout({api,onCredits,onExit}){
  const canvasRef=useRef(null),worldRef=useRef(null),rafRef=useRef(0),lastRef=useRef(0),dragRef=useRef(null),audioRef=useRef(null),soundRef=useRef(true),runIdRef=useRef(''),rewardedRef=useRef(0),claimingRef=useRef(false),pendingRef=useRef(new Set());
