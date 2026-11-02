@@ -29,7 +29,7 @@ export default function GrowthLabWorkspace({role,repos=[],setRepo,setLogs,setPro
         <div className="growth-card-icon"><ImageIcon/></div><span className="eyebrow">CREATOR · CAMPAIGN FACTORY</span><h2>Prepare a 5-image batch</h2><p>Describe one product or campaign. PotHub prepares the prompt and opens Creator workspace with the batch size set to 5.</p>
         <label>Campaign brief<textarea rows={5} maxLength={4000} value={campaignPrompt} onChange={e=>setCampaignPrompt(e.target.value)} placeholder="Example: A launch campaign for a minimal black developer backpack, clean studio lighting, premium product photography…"/></label>
         <button className="primary" onClick={openCampaign} disabled={campaignPrompt.trim().length<8}><ImageIcon size={16}/> Prepare image batch <ArrowRight size={16}/></button>
-        <small>One PotHub credit covers every 3 successfully completed AI workflows across both workspaces; a batch can request up to 5 images. Your provider may charge separately for API usage.</small>
+        <small>Each successful agent action costs 1 PotHub credit. Each generated image and each generated file costs 1 credit; a batch of 5 images costs 5 credits. Each successfully delivered video costs 1 credit. Your provider may charge separately for API usage.</small>
       </article>}
       <article className="panel growth-card">
         <div className="growth-card-icon"><ShieldCheck/></div><span className="eyebrow">TRUST · PROVE-IT</span><h2>Review before you commit</h2><p>Use the existing repair workflow to inspect the proposed diff and verify a repair through GitHub Actions when available. Keep the default branch protected.</p>
