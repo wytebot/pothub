@@ -292,9 +292,9 @@ export async function getCredits(id){
   return{credits:Number(data.credits||0),starter_credits_remaining:Number(data.starter_credits_remaining||0),daily_free_credits:DAILY_FREE_CREDITS,daily_free_next_at:claim.nextGrantAt?new Date(claim.nextGrantAt).toISOString():new Date(now+24*60*60*1000).toISOString(),daily_free_policy:'rolling-24-hours',demo:false}
 }
 
-// Serialize AI credit-meter updates per account so simultaneous requests cannot
-// all claim the same third-workflow boundary. A failed workflow releases the lock
-// without incrementing the successful-workflow count.
+// Serialize AI credit-meter updates per account so concurrent requests cannot
+// claim the same batch-start charge. One credit is reserved at the first workflow
+// of each three-success batch; failed workflows release the reservation and do not advance the count.
 export async function beginAiWorkflowBilling(userId,operationId,store=firestore){
   if(!store)throw new Error('AI workflow billing storage is unavailable.');
   const key=crypto.createHash('sha256').update(String(userId)).digest('hex'),ref=store.collection('ai_workflow_meters').doc(key),now=Date.now();
