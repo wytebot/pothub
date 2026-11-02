@@ -1306,13 +1306,13 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
         <main>
           {openTabs.length > 0 && <nav className="workspaceFileTabs" aria-label="Open files">{openTabs.map(path=><div className={path===selected?"active":""} key={path}><button onClick={()=>setSelected(path)} title={path}>{path.split("/").pop()}</button><button className="closeTab" aria-label={`Close ${path}`} onClick={()=>{const next=openTabs.filter(x=>x!==path);setOpenTabs(next);if(selected===path)setSelected(next[next.length-1]||"")}}><X size={13}/></button></div>)}</nav>}
           {selected && files[selected] !== null && files[selected] !== undefined ? (
-            <FileViewer path={selected} value={files[selected]} onChange={edit} onViewReady={setEditorView} unsaved={changes.some((c) => c.path === selected)} onBack={() => setSelected("")} fontSize={editorFontSize} wordWrap={editorWordWrap} />
+            <FileViewer path={selected} value={files[selected]} onChange={edit} onViewReady={setEditorView} unsaved={changes.some((c) => c.path === selected)} onBack={() => setSelected("")} fontSize={editorFontSize} wordWrap={editorWordWrap} scope={repo?.full_name || ""} />
           ) : (
             <div className="empty">
               {fileLoading ? <><h2>Loading file…</h2><p>Fetching only the selected file from GitHub.</p></> : <><h2>Select a file</h2><p>Choose a file from the repository tree.</p></>}
             </div>
           )}
-          {splitOpen && <section className="workspaceSplitPane"><div className="workspaceSplitHeader"><b>Split editor</b><Select value={splitSelected} onChange={setSplitSelected} options={fileIndex.filter(f=>f.path!==selected).map(f=>({value:f.path,label:f.path}))} className="splitFileSelect"/><button onClick={()=>setSplitOpen(false)} aria-label="Close split editor"><X size={16}/></button></div>{splitSelected && typeof files[splitSelected]==="string" ? <FileViewer path={splitSelected} value={files[splitSelected]} onChange={v=>setFiles(prev=>({...prev,[splitSelected]:v}))} onViewReady={()=>{}} unsaved={changes.some(c=>c.path===splitSelected)} onBack={()=>setSplitSelected("")} fontSize={editorFontSize} wordWrap={editorWordWrap}/> : <p className="muted">Choose a second text file to edit side by side.</p>}</section>}
+          {splitOpen && <section className="workspaceSplitPane"><div className="workspaceSplitHeader"><b>Split editor</b><Select value={splitSelected} onChange={setSplitSelected} options={fileIndex.filter(f=>f.path!==selected).map(f=>({value:f.path,label:f.path}))} className="splitFileSelect"/><button onClick={()=>setSplitOpen(false)} aria-label="Close split editor"><X size={16}/></button></div>{splitSelected && typeof files[splitSelected]==="string" ? <FileViewer path={splitSelected} value={files[splitSelected]} onChange={v=>setFiles(prev=>({...prev,[splitSelected]:v}))} onViewReady={()=>{}} unsaved={changes.some(c=>c.path===splitSelected)} onBack={()=>setSplitSelected("")} fontSize={editorFontSize} wordWrap={editorWordWrap} scope={repo?.full_name || ""}/> : <p className="muted">Choose a second text file to edit side by side.</p>}</section>}
         </main>
       </div>
       {previewOpen && <div className="previewOverlay" role="dialog" aria-modal="true" aria-label="Local repository preview">
@@ -1348,7 +1348,7 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
 }
 
 
-function FileViewer({ path, value, onChange, onViewReady, unsaved=false, onBack, fontSize, wordWrap }) {
+function FileViewer({ path, value, onChange, onViewReady, unsaved=false, onBack, fontSize, wordWrap, scope="" }) {
   const binary = value && typeof value === "object" && value.__wydevBinary;
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [path]);
@@ -1380,5 +1380,5 @@ function FileViewer({ path, value, onChange, onViewReady, unsaved=false, onBack,
       </div>
     </div>;
   }
-  return <><div className="fileTitle"><button className="fileBack" aria-label="Back to files" onClick={onBack}>‹</button><b>{path}</b>{unsaved && <span> • Unsaved</span>}</div><CodeEditor path={path} value={String(value ?? "")} onChange={onChange} onViewReady={onViewReady} fontSize={fontSize} wordWrap={wordWrap} /></>;
+  return <><div className="fileTitle"><button className="fileBack" aria-label="Back to files" onClick={onBack}>‹</button><b>{path}</b>{unsaved && <span> • Unsaved</span>}</div><CodeEditor path={path} scope={scope} value={String(value ?? "")} onChange={onChange} onViewReady={onViewReady} fontSize={fontSize} wordWrap={wordWrap} /></>;
 }
