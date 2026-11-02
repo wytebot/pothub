@@ -218,21 +218,36 @@ export async function verifyApiPage(ownerId, { requestPasscode } = {}) {
       }
       return true;
     } catch (biometricError) {
-      throw new Error(`${biometricError?.message || 'Biometric verification failed.'} Use the same device authenticator that was enabled for API & Agents.`);
+      if (row?.pinHash || row?.serverVerified) return verifyPin(ownerId, requestPasscode);
+      throw new Error(`${biometricError?.message || 'Biometric verification failed.'} No fallback passcode is configured; reopen API & Agents from a trusted session to restore access.`);
     }
   }
   return browserVerify();
 }
 
-export async function enableApiPageBiometric(ownerId) {
+export async function enableApiPageBiometric(ownerId, { requestPasscode } = {}) {
   const available = await biometricAvailable();
-  if (!available.available) throw new Error(available.reason || 'This device does not support the required authenticator.');
   if (isNative()) {
-    await nativeVerify();
-    const row = { ownerId, enabled: true, mode: nativeEnableMode({ biometricPromptSucceeded: true }), biometricEnabled: true, createdAt: Date.now() };
-    await writeLock(row, ownerId);
-    return row;
+    // Native biometric APIs can become unavailable after enrollment; establish a
+    // secure local fallback before showing the OS biometric prompt.
+    const fallback = await setupPin(ownerId, requestPasscode);
+    if (!available.available) {
+      const row = { ...fallback, ownerId, enabled: true, mode: 'pin', biometricEnabled: false };
+      await writeLock(row, ownerId);
+      return row;
+    }
+    try {
+      await nativeVerify();
+      const row = { ...fallback, ownerId, enabled: true, mode: nativeEnableMode({ biometricPromptSucceeded: true }), biometricEnabled: true, createdAt: fallback.createdAt || Date.now() };
+      await writeLock(row, ownerId);
+      return row;
+    } catch (error) {
+      const row = { ...fallback, ownerId, enabled: true, mode: 'pin', biometricEnabled: false };
+      await writeLock(row, ownerId);
+      return row;
+    }
   }
+  if (!available.available) throw new Error(available.reason || 'This browser does not support passkeys.');
   return browserRegister(ownerId);
 }
 
