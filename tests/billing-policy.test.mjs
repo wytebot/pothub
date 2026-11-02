@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {resolveOperationPricing} from '../server/billing-policy.js';
+test('BYOK workflow pricing uses one-credit units before the shared three-success meter',()=>{for(const route of ['/api/diagnose','/api/repair/propose','/api/agent/chat','/api/creator/image']){const p=resolveOperationPricing({route,platformAmount:20,byoCandidateCount:1});assert.equal(p.amount,1);assert.equal(p.byo,true)}});
+test('model discovery and configuration are free and do not enter workflow pricing',()=>{const p=resolveOperationPricing({route:'/api/agent/models',platformAmount:20,byoCandidateCount:1});assert.equal(p.amount,0);assert.equal(p.byo,true)});
+test('platform AI policy retains configured amount and invalid amounts are rejected',()=>{assert.equal(resolveOperationPricing({route:'/api/diagnose',platformAmount:10}).amount,10);assert.throws(()=>resolveOperationPricing({route:'/api/diagnose',platformAmount:0}))});
