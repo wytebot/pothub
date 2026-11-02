@@ -9,6 +9,6 @@ export function isVerifiedHostedPayment(order,transaction,expectedId=''){
   return String(transaction?.status||'').toLowerCase()==='successful'
     && String(transaction?.tx_ref||'')===String(order?.reference||'')
     && String(transaction?.currency||'').toUpperCase()===String(order?.currency||'').toUpperCase()
-    && Number.isFinite(Number(transaction?.amount))&&Number(transaction.amount)>=Number(order?.amount)
+    && Number.isFinite(Number(transaction?.amount))&&Number(transaction.amount)===Number(order?.amount)
     && (!expectedId||id===String(expectedId));
 }

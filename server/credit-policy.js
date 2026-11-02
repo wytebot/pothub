@@ -4,8 +4,10 @@ export const AI_WORKFLOWS_PER_CREDIT = 3;
 
 /** `completedWorkflows` is incremented only after a validated/delivered success. */
 export function shouldChargeForAiWorkflow(completedWorkflows = 0) {
-  const completed = Math.max(0, Math.floor(Number(completedWorkflows) || 0));
-  return (completed + 1) % AI_WORKFLOWS_PER_CREDIT === 0;
+  const raw = Number(completedWorkflows);
+  if (!Number.isFinite(raw) || raw < 0) return false;
+  const completed = Math.floor(raw);
+  return completed % AI_WORKFLOWS_PER_CREDIT === 0;
 }
 
 export function nextDailyFreeGrantAt(lastGrantedAt = 0) {
