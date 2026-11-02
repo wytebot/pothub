@@ -161,12 +161,12 @@ After redeploying, open Developer workspace → Deployment logs → Connect Verc
 
 ## Active-model catalogue (hides deprecated models)
 
-PotHub can use a web search API to find each provider's official deprecation pages and hide deprecated or retired models from the model picker. Only provider names and model IDs are sent to the search API; user API keys never are. Without `MODEL_SEARCH_API_KEY` the feature is passive and the normal lists are shown.
+PotHub can use the existing server-side `GEMINI_API_KEY` to perform conservative AI-assisted model lifecycle analysis. Provider live model-list APIs remain the source of truth; uncertain lifecycle results fail open. No separate Brave or Tavily API key is required.
 
 | Variable | Required | Description |
 |---|---|---|
-| `MODEL_SEARCH_API_KEY` | Optional | Brave Search API key (default) or Tavily key. Enables automatic deprecation checks. |
-| `MODEL_SEARCH_PROVIDER` | Optional | `brave` (default) or `tavily`. |
+| `GEMINI_DOCS_MODEL` | Optional | Gemini model used for documentation analysis; defaults to `gemini-2.5-flash`. |
+
 | `MODEL_CATALOG_TTL_HOURS` | Optional | How often each provider is re-checked. Default 24, range 1-168. |
 | `MODEL_CATALOG_ENABLED` | Optional | Set `false` to turn filtering off. |
 | `MODEL_CATALOG_HIDE` | Optional | Comma-separated models to always hide: `model` or `provider:model`. |
