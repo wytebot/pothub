@@ -1,0 +1,1123 @@
+
+> pothub-ai@0.1.0 check
+> node --check server/app.js && node --check server/lib.js && node scripts/release-audit.mjs && npm test
+
+Rebuild source audit passed. This is a static audit only; it does not certify browser builds, live OAuth, payments, video delivery/refunds, or Android behavior.
+
+> pothub-ai@0.1.0 test
+> node --test tests/*.test.mjs
+
+TAP version 13
+# Subtest: switching accounts archives unsynced local rows and restores only the destination account
+ok 1 - switching accounts archives unsynced local rows and restores only the destination account
+  ---
+  duration_ms: 6.995273
+  type: 'test'
+  ...
+# Subtest: same-account and first-account sync do not partition or clear local data
+ok 2 - same-account and first-account sync do not partition or clear local data
+  ---
+  duration_ms: 0.364971
+  type: 'test'
+  ...
+# Subtest: BYOK is mandatory and legacy platform mode is normalized away
+ok 3 - BYOK is mandatory and legacy platform mode is normalized away
+  ---
+  duration_ms: 0.750352
+  type: 'test'
+  ...
+# Subtest: All workspaces require at least one configured BYOK agent
+ok 4 - All workspaces require at least one configured BYOK agent
+  ---
+  duration_ms: 1.052708
+  type: 'test'
+  ...
+# Subtest: log preprocessing strips ANSI, duplicate lines and common progress noise
+ok 5 - log preprocessing strips ANSI, duplicate lines and common progress noise
+  ---
+  duration_ms: 1.421056
+  type: 'test'
+  ...
+# Subtest: provider errors redact exact secret and bearer values
+ok 6 - provider errors redact exact secret and bearer values
+  ---
+  duration_ms: 4.042467
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/api-paths.test.mjs
+not ok 4 - tests/api-paths.test.mjs
+  ---
+  duration_ms: 156.90687
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/api-paths.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: pot forms and colors have unique ids and drawable artwork
+ok 8 - pot forms and colors have unique ids and drawable artwork
+  ---
+  duration_ms: 3.007902
+  type: 'test'
+  ...
+# Subtest: unknown or missing choices fall back to the original icon
+ok 9 - unknown or missing choices fall back to the original icon
+  ---
+  duration_ms: 1.136388
+  type: 'test'
+  ...
+# Subtest: the default choice keeps the shipped brand icon and manifest
+ok 10 - the default choice keeps the shipped brand icon and manifest
+  ---
+  duration_ms: 0.245403
+  type: 'test'
+  ...
+# Subtest: every pot/color combination ships PNGs and a manifest that points at them
+ok 11 - every pot/color combination ships PNGs and a manifest that points at them
+  ---
+  duration_ms: 9.867568
+  type: 'test'
+  ...
+# Subtest: artwork is centred and scaled inside the maskable safe zone
+ok 12 - artwork is centred and scaled inside the maskable safe zone
+  ---
+  duration_ms: 1.87938
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/async-route-safety.test.mjs
+not ok 6 - tests/async-route-safety.test.mjs
+  ---
+  duration_ms: 97.390347
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/async-route-safety.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'firebase-admin' imported from /mnt/data/pothub_creditfix/repo/server/lib.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/auth-gate.test.mjs
+not ok 7 - tests/auth-gate.test.mjs
+  ---
+  duration_ms: 103.927032
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/auth-gate.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: backup ZIP writer and reader preserve names and bytes
+ok 15 - backup ZIP writer and reader preserve names and bytes
+  ---
+  duration_ms: 2.159105
+  type: 'test'
+  ...
+# Subtest: backup ZIP reader rejects corrupted data
+ok 16 - backup ZIP reader rejects corrupted data
+  ---
+  duration_ms: 1.34498
+  type: 'test'
+  ...
+# Subtest: backup sanitizer redacts provider and GitHub keys from text
+ok 17 - backup sanitizer redacts provider and GitHub keys from text
+  ---
+  duration_ms: 1.0235
+  type: 'test'
+  ...
+# Subtest: BYOK agent workflows cost exactly one credit
+ok 18 - BYOK agent workflows cost exactly one credit
+  ---
+  duration_ms: 3.936338
+  type: 'test'
+  ...
+# Subtest: model discovery and configuration are free and do not enter workflow pricing
+ok 19 - model discovery and configuration are free and do not enter workflow pricing
+  ---
+  duration_ms: 0.153161
+  type: 'test'
+  ...
+# Subtest: platform AI policy retains configured amount and invalid amounts are rejected
+ok 20 - platform AI policy retains configured amount and invalid amounts are rejected
+  ---
+  duration_ms: 5.089468
+  type: 'test'
+  ...
+# Subtest: native biometric routing always has an explicit passcode fallback path
+ok 21 - native biometric routing always has an explicit passcode fallback path
+  ---
+  duration_ms: 7.877015
+  type: 'test'
+  ...
+# Subtest: browser WebAuthn uses server passcode fallback when the authenticator is unavailable
+ok 22 - browser WebAuthn uses server passcode fallback when the authenticator is unavailable
+  ---
+  duration_ms: 0.168902
+  type: 'test'
+  ...
+# Subtest: cancelled native biometric enrollment retains a usable passcode-only lock
+ok 23 - cancelled native biometric enrollment retains a usable passcode-only lock
+  ---
+  duration_ms: 2.760553
+  type: 'test'
+  ...
+# Subtest: AI candidate selection never builds routes from platform environment keys
+ok 24 - AI candidate selection never builds routes from platform environment keys
+  ---
+  duration_ms: 1.406406
+  type: 'test'
+  ...
+# Subtest: failed user agent routes return a bounded BYOK-only diagnostic
+ok 25 - failed user agent routes return a bounded BYOK-only diagnostic
+  ---
+  duration_ms: 0.202076
+  type: 'test'
+  ...
+# Subtest: repository source remains GitHub-backed and Codelab does not implement server-side repository storage
+ok 26 - repository source remains GitHub-backed and Codelab does not implement server-side repository storage
+  ---
+  duration_ms: 0.4467
+  type: 'test'
+  ...
+# Subtest: Codelab receives and renders the connected account repository list without requiring repository-specific credits
+ok 27 - Codelab receives and renders the connected account repository list without requiring repository-specific credits
+  ---
+  duration_ms: 0.865202
+  type: 'test'
+  ...
+# Subtest: Codelab makes metered AI operations explicit rather than charging for repository browsing
+ok 28 - Codelab makes metered AI operations explicit rather than charging for repository browsing
+  ---
+  duration_ms: 0.501153
+  type: 'test'
+  ...
+# Subtest: repository discovery requests up to ten pages and keeps GitHub as the source of truth
+ok 29 - repository discovery requests up to ten pages and keeps GitHub as the source of truth
+  ---
+  duration_ms: 1.747011
+  type: 'test'
+  ...
+# Subtest: repo names reject traversal and invalid GitHub names
+ok 30 - repo names reject traversal and invalid GitHub names
+  ---
+  duration_ms: 1.761017
+  type: 'test'
+  ...
+# Subtest: CSV parser handles quoted commas and escaped quotes
+ok 31 - CSV parser handles quoted commas and escaped quotes
+  ---
+  duration_ms: 1.155599
+  type: 'test'
+  ...
+# Subtest: pricing packs preserve public prices, revised credit counts and operation costs
+ok 32 - pricing packs preserve public prices, revised credit counts and operation costs
+  ---
+  duration_ms: 0.493539
+  type: 'test'
+  ...
+# Subtest: prompt bounding function enforces configured limits
+ok 33 - prompt bounding function enforces configured limits
+  ---
+  duration_ms: 0.238822
+  type: 'test'
+  ...
+# Subtest: model JSON parser handles fenced JSON and rejects malformed output
+ok 34 - model JSON parser handles fenced JSON and rejects malformed output
+  ---
+  duration_ms: 1.684791
+  type: 'test'
+  ...
+# Subtest: payment verification rejects wrong amount, currency, reference and charge ID
+ok 35 - payment verification rejects wrong amount, currency, reference and charge ID
+  ---
+  duration_ms: 0.359996
+  type: 'test'
+  ...
+# Subtest: webhook shared-secret check rejects missing and mismatched values
+ok 36 - webhook shared-secret check rejects missing and mismatched values
+  ---
+  duration_ms: 1.325589
+  type: 'test'
+  ...
+# Subtest: credit grant marker is stable per user and reference and separated by user
+ok 37 - credit grant marker is stable per user and reference and separated by user
+  ---
+  duration_ms: 0.610823
+  type: 'test'
+  ...
+# Subtest: model JSON parser handles trailing prose and truncated closing braces
+ok 38 - model JSON parser handles trailing prose and truncated closing braces
+  ---
+  duration_ms: 0.510538
+  type: 'test'
+  ...
+# Subtest: prompt bounding preserves both the first and last context rather than truncating the failure
+ok 39 - prompt bounding preserves both the first and last context rather than truncating the failure
+  ---
+  duration_ms: 0.692094
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/cors-handlers.test.mjs
+not ok 14 - tests/cors-handlers.test.mjs
+  ---
+  duration_ms: 108.217705
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/cors-handlers.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'firebase-admin' imported from /mnt/data/pothub_creditfix/repo/server/lib.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/credit-reconciliation.test.mjs
+not ok 15 - tests/credit-reconciliation.test.mjs
+  ---
+  duration_ms: 80.08726
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/credit-reconciliation.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: concurrent duplicate reserve charges once; commit replay returns stored result without another charge
+ok 42 - concurrent duplicate reserve charges once; commit replay returns stored result without another charge
+  ---
+  duration_ms: 6.157795
+  type: 'test'
+  ...
+# Subtest: release refunds once and the same reference can reserve again after failure
+ok 43 - release refunds once and the same reference can reserve again after failure
+  ---
+  duration_ms: 1.740361
+  type: 'test'
+  ...
+# Subtest: parallel different reservations cannot overdraw the credit balance
+ok 44 - parallel different reservations cannot overdraw the credit balance
+  ---
+  duration_ms: 2.405384
+  type: 'test'
+  ...
+# Subtest: replayed verified webhook grant reference adds credits only once
+ok 45 - replayed verified webhook grant reference adds credits only once
+  ---
+  duration_ms: 0.295633
+  type: 'test'
+  ...
+# Subtest: credit and signed-media helpers are explicitly imported by server library
+ok 46 - credit and signed-media helpers are explicitly imported by server library
+  ---
+  duration_ms: 2.476954
+  type: 'test'
+  ...
+# Subtest: agent model routing passes selected BYOK candidates without cloning Express request
+ok 47 - agent model routing passes selected BYOK candidates without cloning Express request
+  ---
+  duration_ms: 0.730059
+  type: 'test'
+  ...
+# Subtest: video Buffer response uses module-scope Readable import
+ok 48 - video Buffer response uses module-scope Readable import
+  ---
+  duration_ms: 0.23216
+  type: 'test'
+  ...
+# Subtest: only the reservation-owning image request can release its hold
+ok 49 - only the reservation-owning image request can release its hold
+  ---
+  duration_ms: 0.258807
+  type: 'test'
+  ...
+# Subtest: image operation marks reservation settled immediately after commit
+ok 50 - image operation marks reservation settled immediately after commit
+  ---
+  duration_ms: 0.153034
+  type: 'test'
+  ...
+# Subtest: agent reservation cleanup only releases a reservation created by this request
+ok 51 - agent reservation cleanup only releases a reservation created by this request
+  ---
+  duration_ms: 0.18218
+  type: 'test'
+  ...
+# Subtest: USD to NGN conversion uses a bounded configured rate or the documented fallback
+ok 52 - USD to NGN conversion uses a bounded configured rate or the documented fallback
+  ---
+  duration_ms: 1.00578
+  type: 'test'
+  ...
+# Subtest: invalid currency values are rejected rather than displayed as NaN
+ok 53 - invalid currency values are rejected rather than displayed as NaN
+  ---
+  duration_ms: 0.467973
+  type: 'test'
+  ...
+# Subtest: removes the PotHub deployment hostname from popup text
+ok 54 - removes the PotHub deployment hostname from popup text
+  ---
+  duration_ms: 2.299514
+  type: 'test'
+  ...
+# Subtest: removes other deployment URLs and preserves useful error detail
+ok 55 - removes other deployment URLs and preserves useful error detail
+  ---
+  duration_ms: 0.776837
+  type: 'test'
+  ...
+# Subtest: bounds popup text and supplies a safe fallback
+ok 56 - bounds popup text and supplies a safe fallback
+  ---
+  duration_ms: 0.141191
+  type: 'test'
+  ...
+# Subtest: distributed refresh lease admits one instance and releases only its own lease
+ok 57 - distributed refresh lease admits one instance and releases only its own lease
+  ---
+  duration_ms: 1.440898
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/error-handling.test.mjs
+not ok 21 - tests/error-handling.test.mjs
+  ---
+  duration_ms: 166.046861
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/error-handling.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'firebase-admin' imported from /mnt/data/pothub_creditfix/repo/server/lib.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/firestore-state-handlers.test.mjs
+not ok 22 - tests/firestore-state-handlers.test.mjs
+  ---
+  duration_ms: 63.910502
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/firestore-state-handlers.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: hosted checkout accepts only successful transactions matching the stored order
+ok 60 - hosted checkout accepts only successful transactions matching the stored order
+  ---
+  duration_ms: 1.085305
+  type: 'test'
+  ...
+# Subtest: hosted checkout verification binds transaction ID, reference, amount, currency and successful status
+ok 61 - hosted checkout verification binds transaction ID, reference, amount, currency and successful status
+  ---
+  duration_ms: 3.192502
+  type: 'test'
+  ...
+# Subtest: hosted checkout HTTP client pins the official v3 origin and keeps secret in server Authorization header
+ok 62 - hosted checkout HTTP client pins the official v3 origin and keeps secret in server Authorization header
+  ---
+  duration_ms: 1.499168
+  type: 'test'
+  ...
+# Subtest: GitHub repository access requires repository scope
+ok 63 - GitHub repository access requires repository scope
+  ---
+  duration_ms: 2.709467
+  type: 'test'
+  ...
+# Subtest: GitHub repository access rejects a different connected account
+ok 64 - GitHub repository access rejects a different connected account
+  ---
+  duration_ms: 0.214261
+  type: 'test'
+  ...
+# Subtest: GitHub repository access accepts the correct account and repo scope
+ok 65 - GitHub repository access accepts the correct account and repo scope
+  ---
+  duration_ms: 0.660541
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@hapi/iron' imported from /mnt/data/pothub_creditfix/repo/server/iron.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/github-oauth-state-signing.test.mjs
+not ok 26 - tests/github-oauth-state-signing.test.mjs
+  ---
+  duration_ms: 63.373091
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/github-oauth-state-signing.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/github-redirect-crash-fix.test.mjs
+not ok 27 - tests/github-redirect-crash-fix.test.mjs
+  ---
+  duration_ms: 96.592875
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/github-redirect-crash-fix.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: GitHub repository discovery paginates, deduplicates, and retains private/org repositories
+ok 68 - GitHub repository discovery paginates, deduplicates, and retains private/org repositories
+  ---
+  duration_ms: 12.867728
+  type: 'test'
+  ...
+# Subtest: GitHub repository discovery stops at the first short page and caps page count
+ok 69 - GitHub repository discovery stops at the first short page and caps page count
+  ---
+  duration_ms: 1.821097
+  type: 'test'
+  ...
+# Subtest: GitHub identity and first repository page are fetched concurrently
+ok 70 - GitHub identity and first repository page are fetched concurrently
+  ---
+  duration_ms: 24.41114
+  type: 'test'
+  ...
+# Subtest: GitHub bootstrap rejects malformed responses rather than rendering an empty list
+ok 71 - GitHub bootstrap rejects malformed responses rather than rendering an empty list
+  ---
+  duration_ms: 0.694034
+  type: 'test'
+  ...
+# Subtest: GitHub repository pages are fetched concurrently after a full first page
+ok 72 - GitHub repository pages are fetched concurrently after a full first page
+  ---
+  duration_ms: 0.702764
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/handler-safety-regressions.test.mjs
+not ok 29 - tests/handler-safety-regressions.test.mjs
+  ---
+  duration_ms: 93.888015
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/handler-safety-regressions.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: image adapter normalizes supported binary payloads
+ok 74 - image adapter normalizes supported binary payloads
+  ---
+  duration_ms: 1.213489
+  type: 'test'
+  ...
+# Subtest: image adapter rejects unsupported mime types and empty output
+ok 75 - image adapter rejects unsupported mime types and empty output
+  ---
+  duration_ms: 0.886024
+  type: 'test'
+  ...
+# Subtest: unwired image providers fail closed rather than returning fake output
+ok 76 - unwired image providers fail closed rather than returning fake output
+  ---
+  duration_ms: 2.798931
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@hapi/iron' imported from /mnt/data/pothub_creditfix/repo/server/iron.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/iron-helper.test.mjs
+not ok 31 - tests/iron-helper.test.mjs
+  ---
+  duration_ms: 62.090756
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/iron-helper.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: Kling adapter uses the documented Bearer API-key authorization scheme
+ok 78 - Kling adapter uses the documented Bearer API-key authorization scheme
+  ---
+  duration_ms: 0.636068
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/next-migration.test.mjs
+not ok 33 - tests/next-migration.test.mjs
+  ---
+  duration_ms: 131.099863
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/next-migration.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: A2 Firebase auth domain uses app host but preserves localhost and preview default
+ok 80 - A2 Firebase auth domain uses app host but preserves localhost and preview default
+  ---
+  duration_ms: 2.462285
+  type: 'test'
+  ...
+# Subtest: B3 GitHub repository name validation rejects special and .git names
+ok 81 - B3 GitHub repository name validation rejects special and .git names
+  ---
+  duration_ms: 0.768331
+  type: 'test'
+  ...
+# Subtest: B4 branch refs allow slash-separated names but reject unsafe path segments
+ok 82 - B4 branch refs allow slash-separated names but reject unsafe path segments
+  ---
+  duration_ms: 0.260598
+  type: 'test'
+  ...
+# Subtest: A3 redirect restore uses localStorage TTL and actionable marker error
+ok 83 - A3 redirect restore uses localStorage TTL and actionable marker error
+  ---
+  duration_ms: 7.674568
+  type: 'test'
+  ...
+# Subtest: A4 Firebase exchanges are single-flight by ID token and Google provider can restore role
+ok 84 - A4 Firebase exchanges are single-flight by ID token and Google provider can restore role
+  ---
+  duration_ms: 1.995338
+  type: 'test'
+  ...
+# Subtest: A6 browser exchange supports HttpOnly cookie sessions and encrypts GitHub token at rest
+ok 85 - A6 browser exchange supports HttpOnly cookie sessions and encrypts GitHub token at rest
+  ---
+  duration_ms: 4.173077
+  type: 'test'
+  ...
+# Subtest: A8 native auth exchange is rate limited and native URL handling is scheme-guarded
+ok 86 - A8 native auth exchange is rate limited and native URL handling is scheme-guarded
+  ---
+  duration_ms: 3.457039
+  type: 'test'
+  ...
+# Subtest: A12 GitHub OAuth no longer requests read:org
+ok 87 - A12 GitHub OAuth no longer requests read:org
+  ---
+  duration_ms: 1.566129
+  type: 'test'
+  ...
+# Subtest: A13 auth errors are not automatically dismissed and global handlers preserve error detail
+ok 88 - A13 auth errors are not automatically dismissed and global handlers preserve error detail
+  ---
+  duration_ms: 2.393424
+  type: 'test'
+  ...
+# Subtest: B8 developer-intent questions are not refused by off-topic keyword alone
+ok 89 - B8 developer-intent questions are not refused by off-topic keyword alone
+  ---
+  duration_ms: 1.743598
+  type: 'test'
+  ...
+# Subtest: C2 assistant replies regenerate from preceding user message and only user messages can be edited
+ok 90 - C2 assistant replies regenerate from preceding user message and only user messages can be edited
+  ---
+  duration_ms: 1.380591
+  type: 'test'
+  ...
+# Subtest: C4 composers respect IME composition and touch keyboard newline behavior
+ok 91 - C4 composers respect IME composition and touch keyboard newline behavior
+  ---
+  duration_ms: 1.612697
+  type: 'test'
+  ...
+# Subtest: C11 service worker build stamp is independent of a hard-coded shell version
+ok 92 - C11 service worker build stamp is independent of a hard-coded shell version
+  ---
+  duration_ms: 1.102715
+  type: 'test'
+  ...
+# Subtest: C13 Capacitor build refuses to ship without a configured API origin and skips SW in native shell
+ok 93 - C13 Capacitor build refuses to ship without a configured API origin and skips SW in native shell
+  ---
+  duration_ms: 1.18603
+  type: 'test'
+  ...
+# Subtest: same operation key and payload returns stored result without rerunning
+ok 94 - same operation key and payload returns stored result without rerunning
+  ---
+  duration_ms: 1.819083
+  type: 'test'
+  ...
+# Subtest: same operation key with different payload is rejected
+ok 95 - same operation key with different payload is rejected
+  ---
+  duration_ms: 0.71485
+  type: 'test'
+  ...
+# Subtest: running operation blocks concurrent duplicate and expired running state can retry
+ok 96 - running operation blocks concurrent duplicate and expired running state can retry
+  ---
+  duration_ms: 1.441712
+  type: 'test'
+  ...
+# Subtest: failed operation can reserve again with same idempotency key
+ok 97 - failed operation can reserve again with same idempotency key
+  ---
+  duration_ms: 0.218552
+  type: 'test'
+  ...
+# Subtest: concurrent transaction decisions serialize to one create and one in-progress rejection
+ok 98 - concurrent transaction decisions serialize to one create and one in-progress rejection
+  ---
+  duration_ms: 0.271064
+  type: 'test'
+  ...
+# Subtest: provider circuit keys isolate platform and per-user BYO credentials
+ok 99 - provider circuit keys isolate platform and per-user BYO credentials
+  ---
+  duration_ms: 3.512747
+  type: 'test'
+  ...
+# Subtest: provider circuit opens after consecutive failures and recovers after cooldown
+ok 100 - provider circuit opens after consecutive failures and recovers after cooldown
+  ---
+  duration_ms: 1.012218
+  type: 'test'
+  ...
+# Subtest: reasoning models use max_completion_tokens and omit temperature/response_format
+ok 101 - reasoning models use max_completion_tokens and omit temperature/response_format
+  ---
+  duration_ms: 2.285742
+  type: 'test'
+  ...
+# Subtest: classic OpenAI models use max_tokens and supported JSON mode only
+ok 102 - classic OpenAI models use max_tokens and supported JSON mode only
+  ---
+  duration_ms: 0.227918
+  type: 'test'
+  ...
+# Subtest: registry includes the requested text providers and both custom protocols
+ok 103 - registry includes the requested text providers and both custom protocols
+  ---
+  duration_ms: 1.252449
+  type: 'test'
+  ...
+# Subtest: function filters do not leak image/video-only models into chat
+ok 104 - function filters do not leak image/video-only models into chat
+  ---
+  duration_ms: 3.951873
+  type: 'test'
+  ...
+# Subtest: legacy provider labels normalize without breaking saved agents
+ok 105 - legacy provider labels normalize without breaking saved agents
+  ---
+  duration_ms: 0.327406
+  type: 'test'
+  ...
+# Subtest: provider declarations remain unique and carry capabilities
+ok 106 - provider declarations remain unique and carry capabilities
+  ---
+  duration_ms: 0.209167
+  type: 'test'
+  ...
+# Subtest: AI routes share one absolute request deadline rather than resetting per provider
+ok 107 - AI routes share one absolute request deadline rather than resetting per provider
+  ---
+  duration_ms: 46.2954
+  type: 'test'
+  ...
+# Subtest: provider timeout is capped by the smaller route budget
+ok 108 - provider timeout is capped by the smaller route budget
+  ---
+  duration_ms: 40.903791
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'firebase-admin' imported from /mnt/data/pothub_creditfix/repo/server/lib.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/security-lock.test.mjs
+not ok 41 - tests/security-lock.test.mjs
+  ---
+  duration_ms: 68.372116
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/security-lock.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: SSRF checks reject private IPv4, private IPv6 and hexadecimal IPv4-mapped IPv6
+ok 110 - SSRF checks reject private IPv4, private IPv6 and hexadecimal IPv4-mapped IPv6
+  ---
+  duration_ms: 7.845885
+  type: 'test'
+  ...
+# Subtest: SSRF URL validation rejects unsafe schemes and literal IP destinations
+ok 111 - SSRF URL validation rejects unsafe schemes and literal IP destinations
+  ---
+  duration_ms: 2.23277
+  type: 'test'
+  ...
+# Subtest: generated image storage uses private object paths and short-lived V4 signed URLs
+ok 112 - generated image storage uses private object paths and short-lived V4 signed URLs
+  ---
+  duration_ms: 2.371127
+  type: 'test'
+  ...
+# Subtest: signed media URL renewal rejects paths outside private PotHub media namespace
+ok 113 - signed media URL renewal rejects paths outside private PotHub media namespace
+  ---
+  duration_ms: 0.75907
+  type: 'test'
+  ...
+# node:internal/modules/run_main:123
+#     triggerUncaughtException(
+#     ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typescript' imported from /mnt/data/pothub_creditfix/repo/server/source-validation.js
+# Did you mean to import "typescript/lib/typescript.js"?
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/source-validation.test.mjs
+not ok 44 - tests/source-validation.test.mjs
+  ---
+  duration_ms: 58.815316
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/source-validation.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'firebase-admin' imported from /mnt/data/pothub_creditfix/repo/server/lib.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/starter-credit-policy.test.mjs
+not ok 45 - tests/starter-credit-policy.test.mjs
+  ---
+  duration_ms: 58.443541
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/starter-credit-policy.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: private, reserved and IPv4-mapped IPv6 destinations are rejected in dotted and hexadecimal forms
+ok 116 - private, reserved and IPv4-mapped IPv6 destinations are rejected in dotted and hexadecimal forms
+  ---
+  duration_ms: 7.469973
+  type: 'test'
+  ...
+# Subtest: DNS resolution rejects a mixed public/private answer and only permits allowlisted CDN hosts
+ok 117 - DNS resolution rejects a mixed public/private answer and only permits allowlisted CDN hosts
+  ---
+  duration_ms: 0.847369
+  type: 'test'
+  ...
+# Subtest: video asset URL validator permits approved CDN hosts and rejects local/private destinations
+ok 118 - video asset URL validator permits approved CDN hosts and rejects local/private destinations
+  ---
+  duration_ms: 9.3294
+  type: 'test'
+  ...
+# Subtest: Kling new-model API uses the documented Bearer API-key authorization scheme
+ok 119 - Kling new-model API uses the documented Bearer API-key authorization scheme
+  ---
+  duration_ms: 1.442929
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /mnt/data/pothub_creditfix/repo/server/app.js
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/webhook-handler.test.mjs
+not ok 48 - tests/webhook-handler.test.mjs
+  ---
+  duration_ms: 100.99607
+  type: 'test'
+  location: '/mnt/data/pothub_creditfix/repo/tests/webhook-handler.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: workspace vault encrypts API keys at rest and authenticates ciphertext
+ok 121 - workspace vault encrypts API keys at rest and authenticates ciphertext
+  ---
+  duration_ms: 2.762764
+  type: 'test'
+  ...
+# Subtest: workspace item scope is account-isolated and IDs are opaque
+ok 122 - workspace item scope is account-isolated and IDs are opaque
+  ---
+  duration_ms: 0.431484
+  type: 'test'
+  ...
+# Subtest: only supported account workspace tables can sync
+ok 123 - only supported account workspace tables can sync
+  ---
+  duration_ms: 0.122234
+  type: 'test'
+  ...
+# Subtest: workspace payload is JSON-only and bounded below Firestore document limit
+ok 124 - workspace payload is JSON-only and bounded below Firestore document limit
+  ---
+  duration_ms: 3.364181
+  type: 'test'
+  ...
+# Subtest: workspace conflict resolver compares timestamps safely
+ok 125 - workspace conflict resolver compares timestamps safely
+  ---
+  duration_ms: 0.329451
+  type: 'test'
+  ...
+1..125
+# tests 125
+# suites 0
+# pass 109
+# fail 16
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5212.890023
+npm run check exit=1
