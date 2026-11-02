@@ -91,12 +91,14 @@ test('Creator chat hides stale configure-agent prompt when a compatible creator 
   assert.match(ui, /chat-history-group-title/);
   assert.match(ui, /creator-chat-header/);
 });
-test('API page lock uses a single platform authenticator without requiring PIN enrollment', async () => {
+test('API page lock configures a native fallback passcode and keeps browser passkeys server-verified', async () => {
   const biometric = await read('src/lib/biometric.js');
   const agents = await read('src/ui/AgentsWorkspace.jsx');
   assert.match(biometric, /async function browserRegister\(ownerId\)/);
-  assert.doesNotMatch(biometric, /const pinRow = await setupPin\(ownerId, requestPasscode\)/);
+  assert.match(biometric, /const fallback = await setupPin\(ownerId, requestPasscode\)/);
+  assert.match(biometric, /if \(row\?\.pinHash \|\| row\?\.serverVerified\) return verifyPin\(ownerId, requestPasscode\)/);
   assert.match(agents, /one authenticator/);
+  assert.match(agents, /secure local fallback passcode/);
 });
 test('Firebase config derives authDomain from the page host and vercel.json proxies the handler', async () => {
   const firebase = await read('src/lib/firebase.js');
