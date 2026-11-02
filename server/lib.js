@@ -294,7 +294,7 @@ export async function getCredits(id){
 
 // Serialize AI credit-meter updates per account so concurrent requests cannot
 // claim the same batch-start charge. One credit is reserved at the first workflow
-// of each three-success batch; failed workflows release the reservation and do not advance the count.
+// successful AI action; failed workflows release reservations and do not advance the count.
 export async function beginAiWorkflowBilling(userId,operationId,store=firestore){
   if(!store)throw new Error('AI workflow billing storage is unavailable.');
   const key=crypto.createHash('sha256').update(String(userId)).digest('hex'),ref=store.collection('ai_workflow_meters').doc(key),now=Date.now();

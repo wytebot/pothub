@@ -1,9 +1,9 @@
 /** Pricing assumptions, not a guarantee. Review against live invoices before launch. */
 export const PACKS = [
-  { id: 'spark', name: 'Starter', usd: 1.99, credits: 36, maxCreditsAtTarget: 36 },
-  { id: 'builder', name: 'Developer', usd: 4.99, credits: 110, maxCreditsAtTarget: 110 },
-  { id: 'pro', name: 'Professional', usd: 9.99, credits: 240, maxCreditsAtTarget: 240 },
-  { id: 'power', name: 'Power', usd: 19.99, credits: 500, maxCreditsAtTarget: 500 }
+  { id: 'spark', name: 'Starter', usd: 1.99, credits: 60, maxCreditsAtTarget: 60 },
+  { id: 'builder', name: 'Developer', usd: 4.99, credits: 150, maxCreditsAtTarget: 150 },
+  { id: 'pro', name: 'Professional', usd: 9.99, credits: 300, maxCreditsAtTarget: 300 },
+  { id: 'power', name: 'Power', usd: 19.99, credits: 600, maxCreditsAtTarget: 600 }
 ];
 export const OPERATIONS = { diagnosis: 10, repair: 20 };
 export const BYO_SERVICE_FEES = { developer: 1, creator: 1 }; // One credit per successful BYOK agent workflow; no separate PotHub AI fee.
