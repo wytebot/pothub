@@ -475,3 +475,7 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 .ai-response-options .edit-message-actions{margin-top:4px}
 .codelab-ai-chat-button{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 @media(max-width:520px){.codelab-editor-head{flex-wrap:wrap}.codelab-ai-chat-button{min-height:36px}}
+
+/* Codelab sub-menu (WyteLab menu items) inside the PotHub sidebar */
+.sidebar .codelab-menu{display:flex;flex-direction:column;gap:2px;margin:2px 0 6px 14px;padding-left:8px;border-left:1px solid var(--line,rgba(255,255,255,.12))}
+.sidebar .codelab-menu button{font-size:.92em;padding-top:7px;padding-bottom:7px}
