@@ -465,3 +465,13 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 .creator-chat-mode .message-body pre{max-width:100%;overflow:auto}
 @media(max-width:760px){.creator-chat-mode .creator-message-heading{gap:7px;margin-bottom:7px}.creator-chat-mode .creator-message-avatar{width:25px;height:25px;flex-basis:25px}.creator-chat-mode .message.user .message-body{max-width:94%}.creator-chat-mode .message-tools button{min-height:38px;padding:6px 10px}.creator-chat-mode .message{margin-bottom:20px}}
 @media(prefers-reduced-motion:reduce){.creator-chat-mode .message-tools button{transition:none}}
+
+/* Keep AI response utilities out of the reading flow until explicitly requested. */
+.ai-response-options{margin-top:7px;border-top:1px solid var(--border);padding-top:5px}
+.ai-response-options>summary{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:3px 8px;border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;list-style:none}
+.ai-response-options>summary::-webkit-details-marker{display:none}
+.ai-response-options>summary::after{content:'▾';font-size:10px}
+.ai-response-options[open]>summary::after{content:'▴'}
+.ai-response-options .edit-message-actions{margin-top:4px}
+.codelab-ai-chat-button{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+@media(max-width:520px){.codelab-editor-head{flex-wrap:wrap}.codelab-ai-chat-button{min-height:36px}}
