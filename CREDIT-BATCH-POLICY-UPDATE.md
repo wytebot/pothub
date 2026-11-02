@@ -1,6 +1,6 @@
 # AI credit batch policy update
 
-- One credit is reserved at the first AI workflow in each batch of three successful workflows.
+- Each successful AI agent action consumes one credit. Generated images and files consume one credit per output; delivered videos consume one credit each.
 - The next two successful workflows are covered by that credit.
 - The next batch starts at successful workflow counts 3, 6, 9, and so on, and reserves another credit on its first job.
 - Reservation happens before the model/provider job starts. It is committed only after the workflow succeeds; failure releases the reservation and does not increment the successful-workflow meter.
