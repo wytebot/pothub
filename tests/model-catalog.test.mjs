@@ -128,3 +128,13 @@ test('a failed refresh keeps the last good data and backs off', async () => {
   await c.filterActiveModels('openai', ['gpt-4.1']);
   assert.equal(searches, 2, 'no retry storm inside the backoff window');
 });
+
+test('force refresh bypasses a fresh documentation cache when Fetch is clicked', async () => {
+  let searches = 0;
+  const { c } = catalog({ search: async () => { searches += 1; return [{ url: 'https://platform.openai.com/docs/deprecations' }]; } });
+  await c.filterActiveModels('openai', ['gpt-4.1']);
+  await c.filterActiveModels('openai', ['gpt-4.1']);
+  assert.equal(searches, 1, 'normal fetches reuse fresh docs cache');
+  await c.filterActiveModels('openai', ['gpt-4.1'], { force: true });
+  assert.equal(searches, 2, 'explicit refresh checks official docs again');
+});
