@@ -1,10 +1,9 @@
 /**
  * Active-model catalog.
  *
- * Uses a web search API (Brave Search or Tavily) to find each provider's OFFICIAL
- * deprecation / shutdown pages, extracts the model IDs listed there as deprecated or
- * retired, and lets the app hide them from model pickers so users only see models
- * that are still active.
+ * Uses the existing server-side Gemini key to analyze official provider documentation and model metadata.
+ * Provider live model-list APIs remain the source of truth for discoverability; Gemini is only a
+ * documentation assistant and its uncertain findings fail open.
  *
  * Safety properties:
  *  - Only model IDs and provider names are sent to the search API. User API keys never leave
@@ -18,8 +17,8 @@
  *    provider per TTL, shared across instances.
  *
  * Environment:
- *  MODEL_SEARCH_API_KEY        search API key (feature is passive without it)
- *  MODEL_SEARCH_PROVIDER       "brave" (default) | "tavily"
+ *  GEMINI_API_KEY              existing server-side Gemini key (no separate search API required)
+ *  GEMINI_DOCS_MODEL            optional Gemini model for documentation analysis
  *  MODEL_CATALOG_ENABLED       "false" turns filtering off
  *  MODEL_CATALOG_TTL_HOURS     refresh interval, default 24 (1..168)
  *  MODEL_CATALOG_HIDE          extra hidden models: "model" or "provider:model", comma separated
@@ -45,7 +44,7 @@ export const OFFICIAL_DOC_HOSTS = {
   luma: ['docs.lumalabs.ai'],
 };
 
-const SEARCH_HOSTS = { brave: 'api.search.brave.com', tavily: 'api.tavily.com' };
+const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
 const DAY = 86_400_000;
 const MAX_PAGE_BYTES = 2_000_000;
 const MAX_PAGES = 3;
@@ -256,8 +255,7 @@ export function createModelCatalog(deps = {}) {
   const config = () => {
     const e = env();
     const ttl = Math.min(168, Math.max(1, Number(e.MODEL_CATALOG_TTL_HOURS) || 24)) * 3_600_000;
-    const searchProvider = String(e.MODEL_SEARCH_PROVIDER || 'brave').toLowerCase() === 'tavily' ? 'tavily' : 'brave';
-    return { enabled: String(e.MODEL_CATALOG_ENABLED || 'true').toLowerCase() !== 'false', ttl, key: String(e.MODEL_SEARCH_API_KEY || ''), searchProvider, hide: csv(e.MODEL_CATALOG_HIDE), keep: csv(e.MODEL_CATALOG_KEEP) };
+    return { enabled: String(e.MODEL_CATALOG_ENABLED || 'true').toLowerCase() !== 'false', ttl, key: String(e.GEMINI_API_KEY || ''), model: String(e.GEMINI_DOCS_MODEL || 'gemini-2.5-flash'), hide: csv(e.MODEL_CATALOG_HIDE), keep: csv(e.MODEL_CATALOG_KEEP) };
   };
 
   async function getStore() { if (store === undefined) store = deps.store !== undefined ? deps.store : await defaultStore(); return store; }
@@ -275,29 +273,28 @@ export function createModelCatalog(deps = {}) {
     try { await s.set(provider, rec); } catch { /* cache only */ }
   }
 
-  async function discover(provider, cfg) {
+  async function discover(provider, cfg, modelIds = []) {
     const hosts = OFFICIAL_DOC_HOSTS[provider];
     if (!hosts) throw new Error('No official documentation host is registered for this provider.');
-    const year = new Date(now()).getUTCFullYear();
-    const query = `${provider} API model deprecations shutdown retired models ${year}`;
-    const signal = AbortSignal.timeout(9000);
-    const search = deps.search || defaultSearch;
-    const results = (await search({ query, provider: cfg.searchProvider, key: cfg.key, hosts, signal })).filter((x) => x?.url && hostAllowed(x.url, hosts));
-    if (!results.length) throw new Error('Search returned no official documentation pages.');
-    const fetchPage = deps.fetchPage || defaultFetchPage;
-    const found = new Map();
-    const sources = [];
-    for (const r of results.slice(0, MAX_PAGES)) {
-      let text = r.text;
-      try { if (!text) text = await fetchPage(r.url, hosts, signal); } catch { text = r.snippet || ''; }
-      const part = extractDeprecations(`${text || ''}\n${r.snippet || ''}`, { now: now() });
-      for (const [k, v] of part) if (!found.has(k) || v.status === 'retired') found.set(k, { ...v, source: r.url });
-      sources.push(r.url);
-    }
-    return { deprecated: [...found.values()].slice(0, MAX_ENTRIES), sources };
+    if (!cfg.key) throw new Error('GEMINI_API_KEY is not configured.');
+    // Ask Gemini for a conservative evidence-based classification. The prompt explicitly
+    // forbids guessing; only exact model IDs and explicit lifecycle statements are returned.
+    const prompt = `You are a model lifecycle auditor. Provider: ${provider}. Official documentation hosts allowed: ${hosts.join(', ')}. Current UTC date: ${new Date(now()).toISOString().slice(0,10)}.
+Model IDs from the provider live model-list API:
+${modelIds.slice(0,250).join('\n')}
+Return JSON only: {"deprecated":[{"id":"exact-id","status":"deprecated|retired","date":null,"evidence":"short explicit statement","source":"official documentation URL"}]}. Include an ID only when you have strong, specific knowledge of an explicit lifecycle notice on one of the listed official hosts. Do not infer from age, preview labels, popularity, or model naming. Never invent URLs or claim to have browsed pages. If uncertain, omit the model.`;
+    const model = cfg.model;
+    const url = `${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent`;
+    const response = await fetchPinnedHttps(url, { allowHosts: ['generativelanguage.googleapis.com'], signal: AbortSignal.timeout(12000), headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.key }, method: 'POST', body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 4096 } }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(`Gemini documentation analysis returned ${response.status}.`);
+    const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
+    let parsed; try { parsed = JSON.parse(raw); } catch { throw new Error('Gemini returned an invalid documentation report.'); }
+    const deprecated = (Array.isArray(parsed.deprecated) ? parsed.deprecated : []).filter(x => modelIds.some(id => id.toLowerCase() === String(x.id || '').toLowerCase()) && ['deprecated','retired'].includes(x.status) && typeof x.source === 'string' && hosts.some(h => { try { return new URL(x.source).hostname === h || new URL(x.source).hostname.endsWith(`.${h}`); } catch { return false; } })).map(x => ({ id: String(x.id), status: x.status, date: x.date || null, source: x.source, evidence: String(x.evidence || '').slice(0,300) }));
+    return { deprecated, sources: [...new Set(deprecated.map(x => x.source))] };
   }
 
-  async function refresh(provider) {
+  async function refresh(provider, modelIds = []) {
     const cfg = config();
     if (!cfg.key) return null;
     if (inflight.has(provider)) return inflight.get(provider);
@@ -308,7 +305,7 @@ export function createModelCatalog(deps = {}) {
     const job = (async () => {
       const old = await load(provider);
       try {
-        const { deprecated, sources } = await discover(provider, cfg);
+        const { deprecated, sources } = await discover(provider, cfg, modelIds);
         const rec = { provider, checkedAt: now(), attemptedAt: now(), deprecated, sources, lastError: null };
         await save(provider, rec);
         return rec;
@@ -330,7 +327,7 @@ export function createModelCatalog(deps = {}) {
       const stale = !rec?.checkedAt || now() - rec.checkedAt >= cfg.ttl;
       const cooling = rec?.attemptedAt && now() - rec.attemptedAt < FAILURE_BACKOFF_MS && rec.lastError;
       if (force || (stale && !cooling)) {
-        const job = refresh(provider);
+        const job = refresh(provider, opts.modelIds || []);
         if (job) {
           const fresh = await Promise.race([job, new Promise((r) => setTimeout(() => r(undefined), waitMs))]);
           if (fresh) rec = fresh;
@@ -346,7 +343,7 @@ export function createModelCatalog(deps = {}) {
     const cfg = config();
     const base = { active: list, hidden: [], verified: false, checkedAt: null, reason: null };
     if (!cfg.enabled) return { ...base, reason: 'disabled' };
-    const rec = await status(provider, opts);
+    const rec = await status(provider, { ...opts, modelIds: list });
     const known = new Map((rec?.deprecated || []).map((x) => [String(x.id).toLowerCase(), x]));
     const hidden = []; const active = [];
     for (const id of list) {
