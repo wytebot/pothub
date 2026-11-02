@@ -12,12 +12,11 @@ export const DEFAULT_MODELS = {};
 export function normalizeConfiguredModel(provider, model) {
   const id = normalizeProvider(provider);
   const value = String(model || '').trim();
-  if (id === 'gemini' && value === 'gemini-3.8-flash') return 'gemini-2.5-flash';
   return value;
 }
 
 export const PROVIDERS = [
- {id:'gemini',label:'Google Gemini',protocol:'gemini',auth:'x-goog-api-key',baseUrl:'https://generativelanguage.googleapis.com',models:['gemini-2.5-flash','gemini-2.5-pro','gemini-2.0-flash'],modelsByFunction:{Image:['gemini-2.5-flash-image','imagen-3.0-generate-002']},capabilities:[...VISION,'image','video','embeddings'],streaming:true,implemented:true},
+ {id:'gemini',label:'Google Gemini',protocol:'gemini',auth:'x-goog-api-key',baseUrl:'https://generativelanguage.googleapis.com',models:['gemini-3.8-flash','gemini-3.5-flash-lite','gemini-3.6-flash'],modelsByFunction:{Image:['gemini-3.1-flash-image','gemini-3-pro-image']},capabilities:[...VISION,'image','video','embeddings'],streaming:true,implemented:true},
  OPENAI('openai','OpenAI','https://api.openai.com/v1',['gpt-4.1','gpt-4.1-mini','gpt-4o','gpt-4o-mini'],{capabilities:[...VISION,'image','embeddings'],modelsByFunction:{Image:['gpt-image-2','gpt-image-2.5-sunburst','gpt-image-2.5-flare']}}),
  ANTHROPIC('anthropic','Anthropic','https://api.anthropic.com/v1',['claude-sonnet-4-5','claude-haiku-4-5','claude-opus-4-1']),
  OPENAI('mistral','Mistral','https://api.mistral.ai/v1',['mistral-large-latest','mistral-small-latest','codestral-latest']),
@@ -46,4 +45,29 @@ export function providerById(id){return PROVIDERS.find(p=>p.id===id)||null}
 export function providersForFunction(fn){const need=FUNCTIONS[fn]||FUNCTIONS.Diagnosis;return PROVIDERS.filter(p=>p.implemented!==false&&need.every(c=>p.capabilities.includes(c)))}
 export function providerLabel(id){return providerById(id)?.label||id}
 export function modelsForFunction(providerId,fn){const p=providerById(providerId);return p?.modelsByFunction?.[fn]||p?.models||[]}
+
+/** Filter live provider catalog rows for the selected agent function. Provider model-list
+ * endpoints do not all expose reliable capability metadata, so text is filtered by
+ * advertised method where available and image/video use conservative model-ID hints.
+ * The agent Test action remains the final check for key/account access. */
+export function filterDiscoveredModels(providerId, fn, rows) {
+ const id=normalizeProvider(providerId)||String(providerId||'');
+ const task=String(fn||'Diagnosis').replace(/\s+/g,' ').trim();
+ const list=Array.isArray(rows)?rows:[];
+ const nameOf=m=>String(m?.name||m?.id||'').replace(/^models\//,'');
+ const textExcluded=/(?:embed|embedding|moderation|whisper|transcri(?:be|ption)|text-to-speech|\btts\b|realtime|robotics)/i;
+ return [...new Set(list.filter(m=>{
+  const name=nameOf(m), descriptor=`${name} ${m?.displayName||''} ${m?.description||''}`;
+  if(!name) return false;
+  if(id==='gemini') {
+   const methods=Array.isArray(m?.supportedGenerationMethods)?m.supportedGenerationMethods:[];
+   if(task==='Image') return methods.includes('generateContent') && /image|nano.?banana/i.test(descriptor);
+   if(task==='Video') return /veo|video/i.test(descriptor);
+   return methods.includes('generateContent') && !textExcluded.test(name) && !/(?:^|[-_/])(?:image|veo|video)(?:[-_/]|$)/i.test(name);
+  }
+  if(task==='Image') return /image|dall[-_ ]?e|flux|stable[-_ ]?diffusion|imagen|ideogram/i.test(descriptor);
+  if(task==='Video') return /video|sora|veo|kling|runway|luma|ray[-_ ]?2/i.test(descriptor);
+  return !textExcluded.test(name) && !/(?:^|[-_/])(?:image|video|sora|veo)(?:[-_/]|$)/i.test(name);
+ }).map(nameOf).filter(x=>x&&x.length<=160))].slice(0,300);
+}
 export function normalizeProvider(value){const s=String(value||'').trim().toLowerCase().replace(/[_\s]+/g,'-');const aliases={'google-gemini':'gemini','gemini-api':'gemini','google':'gemini','open-ai':'openai','open-ai-compatible':'openai-compatible','claude':'anthropic','anthropic-api':'anthropic','xai':'xai','meta-llama':'openrouter'};const id=aliases[s]||s;return providerById(id)?.id||null}

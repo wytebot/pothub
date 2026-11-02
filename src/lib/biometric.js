@@ -161,8 +161,17 @@ function credentialJSON(credential) {
 async function browserRegister(ownerId) {
   const options = await apiSecurity('webauthn/register/options');
   const publicKey = { ...options, challenge: fromB64url(options.challenge), user: { ...options.user, id: fromB64url(options.user.id) }, excludeCredentials: (options.excludeCredentials || []).map(x => ({ ...x, id: fromB64url(x.id) })) };
-  const credential = await navigator.credentials.create({ publicKey });
-  if (!credential) throw new Error('Passkey setup was cancelled. API & Agents remains unlocked only for this visit; choose a passkey and try again.');
+  let credential;
+  try {
+    credential = await navigator.credentials.create({ publicKey });
+  } catch (error) {
+    if (error?.name === 'InvalidStateError' || /already registered|one of the credentials already registered|credential.*exist/i.test(String(error?.message || ''))) {
+      throw new Error('This device already has a PotHub passkey for this website, but it is not linked to the currently signed-in account. Sign in to the original PotHub account that created it, or use a different authenticator/profile. PotHub did not create a duplicate passkey.');
+    }
+    if (error?.name === 'NotAllowedError') throw new Error('Passkey setup was cancelled or timed out. API & Agents protection was not enabled; try again and complete the device prompt.');
+    throw error;
+  }
+  if (!credential) throw new Error('Passkey setup was cancelled. API & Agents protection was not enabled; choose a passkey and try again.');
   const result = await apiSecurity('webauthn/register/verify', { response: credentialJSON(credential) });
   const row = { id: result.credentialId, ownerId, createdAt: Date.now(), rpId: location.hostname, enabled: true, mode: 'webauthn', hasPin: false, serverVerified: true };
   await writeLock(row, ownerId);
