@@ -20,3 +20,10 @@ test('creator transcript styles remain responsive and respect reduced motion',()
  assert.match(css,/@media\(max-width:760px\)\{\.creator-chat-mode \.creator-message-heading/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)\{\.creator-chat-mode \.message-tools button/);
 });
+test('workspace context is initialized before chat-follow hooks read its messages',()=>{
+ const contextIndex=ui.indexOf('}=ctx;');
+ const followIndex=ui.indexOf('const creatorChatFollow=useChatAutoFollow(messages)');
+ assert.ok(contextIndex>=0,'workspace context destructuring exists');
+ assert.ok(followIndex>=0,'creator chat follow hook exists');
+ assert.ok(contextIndex<followIndex,'messages must be initialized before the hook reads it');
+});
