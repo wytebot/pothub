@@ -18,15 +18,14 @@ Set these under **Vercel → Project → Settings → Environment Variables** fo
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Full Firebase service-account JSON, stored as a server-only secret. Do not prefix with `NEXT_PUBLIC_`. |
 | `FIREBASE_PROJECT_ID` | `pothub-ca2a1` (can be inferred from service-account JSON, but set it explicitly for clarity). |
 | `GEMINI_API_KEY` | Pothub-managed server-side Gemini fallback key. The current `/api/health` readiness check expects this to be set. Never expose it to the browser. |
-| `FLW_CLIENT_ID` | Required billing configuration identifier; server-only. |
-| `FLW_CLIENT_SECRET` | Preferred server-only Flutterwave API secret. `FLW_SECRET_KEY` remains a backward-compatible fallback for existing deployments. |
-| `FLW_ENCRYPTION_KEY` | Required billing configuration key; server-only and never sent to the client. |
-| `FLW_SECRET_KEY` | Legacy fallback for the Flutterwave Standard hosted-checkout secret; server-only. |
+| `FLW_CLIENT_ID` | **Required.** Flutterwave v4 client ID; server-only. |
+| `FLW_CLIENT_SECRET` | **Required.** Flutterwave v4 client secret; server-only. Use the keys for the same mode as `FLW_MODE`. |
+| `FLW_ENCRYPTION_KEY` | **Required.** v4 dashboard encryption key (32-byte base64). Card fields are AES-256-GCM encrypted with it before being sent to Flutterwave; never sent to the client. |
 | `FLW_WEBHOOK_SECRET_HASH` | Merchant webhook secret configured in Flutterwave. Used for constant-time verification of hosted Standard webhooks; v4 signed webhook events use the HMAC signature branch. |
 | `DEVICE_FINGERPRINT_SECRET` | Optional dedicated HMAC pepper (32+ random characters) for server-derived starter-credit device claims. If omitted, `SESSION_SECRET` is used. Never expose it to the client. |
 | `FIREBASE_STORAGE_BUCKET` | Optional Firebase Storage bucket name. Defaults to `<FIREBASE_PROJECT_ID>.firebasestorage.app`; required IAM permissions must allow object creation and signed URL generation. |
 
-The current `/api/health` endpoint marks core readiness based on Firebase Admin/Firestore and `SESSION_SECRET`. Optional integrations are reported separately. Hosted checkout remains disabled unless `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET` (or legacy `FLW_SECRET_KEY`), `FLW_ENCRYPTION_KEY`, `WYBUILD_WEBHOOK_SHARED_SECRET`, and the billing database are configured.
+The current `/api/health` endpoint marks core readiness based on Firebase Admin/Firestore and `SESSION_SECRET`. Optional integrations are reported separately. Billing is disabled unless `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY` and the billing database are configured. Set `FLW_MODE=production` for live v4 keys; without it the sandbox host is used and live keys fail authentication.
 
 ## Frontend build-time variables
 
@@ -45,7 +44,7 @@ Only configure these if you use the corresponding feature or need to override it
 - `AI_MAX_PROMPT_CHARS`, `AI_MAX_OUTPUT_TOKENS`, `AI_MAX_OPERATION_COST_USD` — server-side AI limits.
 - `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` — explicitly allows trusted custom HTTPS agent endpoints; leave unset unless needed.
 - `POTHUB_VIDEO_MAX_BYTES` — video response size limit in bytes; default is 26214400 (25 MiB), with a hard maximum of 25 MiB.
-- `FLW_MODE` — retained for legacy v4 charge paths; hosted checkout uses the matching Flutterwave Standard secret key for the same environment.
+- `FLW_MODE` — `production` for live v4 keys; anything else uses the v4 sandbox.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — native Android server OAuth only, not browser Google login.
 
 ## OAuth provider setup
