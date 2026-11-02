@@ -18,12 +18,15 @@ Set these under **Vercel → Project → Settings → Environment Variables** fo
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Full Firebase service-account JSON, stored as a server-only secret. Do not prefix with `NEXT_PUBLIC_`. |
 | `FIREBASE_PROJECT_ID` | `pothub-ca2a1` (can be inferred from service-account JSON, but set it explicitly for clarity). |
 | `GEMINI_API_KEY` | Pothub-managed server-side Gemini fallback key. The current `/api/health` readiness check expects this to be set. Never expose it to the browser. |
-| `FLW_SECRET_KEY` | Flutterwave Standard hosted-checkout secret key for the selected environment; server-only. Required for creating hosted payment links and verifying transactions. |
+| `FLW_CLIENT_ID` | Required billing configuration identifier; server-only. |
+| `FLW_CLIENT_SECRET` | Preferred server-only Flutterwave API secret. `FLW_SECRET_KEY` remains a backward-compatible fallback for existing deployments. |
+| `FLW_ENCRYPTION_KEY` | Required billing configuration key; server-only and never sent to the client. |
+| `FLW_SECRET_KEY` | Legacy fallback for the Flutterwave Standard hosted-checkout secret; server-only. |
 | `FLW_WEBHOOK_SECRET_HASH` | Merchant webhook secret configured in Flutterwave. Used for constant-time verification of hosted Standard webhooks; v4 signed webhook events use the HMAC signature branch. |
 | `DEVICE_FINGERPRINT_SECRET` | Optional dedicated HMAC pepper (32+ random characters) for server-derived starter-credit device claims. If omitted, `SESSION_SECRET` is used. Never expose it to the client. |
 | `FIREBASE_STORAGE_BUCKET` | Optional Firebase Storage bucket name. Defaults to `<FIREBASE_PROJECT_ID>.firebasestorage.app`; required IAM permissions must allow object creation and signed URL generation. |
 
-The current `/api/health` endpoint marks core readiness based on Firebase Admin/Firestore and `SESSION_SECRET`. Optional integrations are reported separately; hosted Flutterwave checkout is shown as available when `FLW_SECRET_KEY` and `FLW_WEBHOOK_SECRET_HASH` are configured.
+The current `/api/health` endpoint marks core readiness based on Firebase Admin/Firestore and `SESSION_SECRET`. Optional integrations are reported separately. Hosted checkout remains disabled unless `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET` (or legacy `FLW_SECRET_KEY`), `FLW_ENCRYPTION_KEY`, `WYBUILD_WEBHOOK_SHARED_SECRET`, and the billing database are configured.
 
 ## Frontend build-time variables
 
@@ -127,7 +130,7 @@ These remain separate compatibility settings in this release; configure all thre
 ### Hosted Flutterwave checkout and signed media
 
 - PotHub no longer collects or forwards PAN/CVV. `POST /api/billing/checkout` creates a Flutterwave Standard hosted payment link; the browser navigates to Flutterwave and returns with `tx_ref`/`transaction_id`. Verification is server-side by transaction ID or by `tx_ref` when the ID was lost.
-- Set `FLW_SECRET_KEY` and `FLW_WEBHOOK_SECRET_HASH` for the same environment. The old client encryption key is no longer returned by `/api/billing/config`; remove obsolete `FLW_ENCRYPTION_KEY` from deployment variables after confirming no other legacy service uses it.
+- Set `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, and `WYBUILD_WEBHOOK_SHARED_SECRET` for the same environment. Legacy hosted checkout can use `FLW_SECRET_KEY` as a fallback for `FLW_CLIENT_SECRET`. Never expose these values in client-side variables.
 - Set `FIREBASE_STORAGE_BUCKET` if the default bucket name is not correct. Generated images are stored in private Firebase Storage objects and returned as short-lived signed URLs. Apply `storage.cors.json` to the bucket so the browser/Capacitor app can fetch signed image URLs (for example: `gcloud storage buckets update gs://YOUR_BUCKET --cors-file=storage.cors.json`).
 - Kling's current new-model endpoints use `Authorization: Bearer <API_KEY>` (not a legacy AK/SK JWT); use a Kling API key created in the Kling developer console. Legacy endpoints that require AK/SK JWT are not used by this adapter.
 

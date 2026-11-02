@@ -1,10 +1,13 @@
-# PotHub credit rules update
+# AI credit batch policy update
 
-- Five free Express credits are granted on a rolling 24-hour window per account, not at UTC midnight. A persisted pending grant reference makes retries idempotent if a process stops between claiming the window and granting credits.
-- Text AI workflows, Creator image batches, and delivered Creator video workflows share one server-side per-account meter. One credit is charged for each group of three successfully completed AI workflows, regardless of plan, workspace, or BYOK/platform AI mode. Failed workflows do not increment the completed count; the credit reservation is committed only after the successful result is validated/delivered. Concurrent AI workflows for the same account are serialized by a short-lived Firestore lease to avoid double counting.
-- In Codelab, successful pull-request creation, repository deletion, and repository revert each cost one credit. Failed operations release their reservation. Deterministic payload-based idempotency keys are used when clients omit an operation ID, reducing duplicate charges on retries.
-- Model discovery and agent configuration remain free. Provider inference costs for user-owned API keys are still billed by the provider, not PotHub.
+- One credit is reserved at the first AI workflow in each batch of three successful workflows.
+- The next two successful workflows are covered by that credit.
+- The next batch starts at successful workflow counts 3, 6, 9, and so on, and reserves another credit on its first job.
+- Reservation happens before the model/provider job starts. It is committed only after the workflow succeeds; failure releases the reservation and does not increment the successful-workflow meter.
+- The same shared meter applies to text, image, and delivered video workflows. Live model discovery/configuration does not consume a credit.
 
-## Verification caveats
-
-The source and targeted tests should be run before deployment. This report does not claim a successful live Vercel deployment or a production build in this environment.
+## Verification
+- `node --check server/lib.js`: passed.
+- `node --check server/app.js`: passed.
+- `node --test tests/ai-workflow-credit-policy.test.mjs`: 3 passed.
+- Full `npm test`: 164 passed, 24 could not run successfully because dependencies including `express`, `firebase-admin`, and `typescript` are not installed in this working directory. This is an environment/dependency blocker, not a passing full-suite result.
