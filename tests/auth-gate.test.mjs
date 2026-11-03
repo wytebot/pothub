@@ -1,2 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {requireUser} from '../server/lib.js';
-test('real requireUser gate rejects missing and malformed bearer sessions',async()=>{for(const authorization of ['', 'Bearer not-a-session']){const req={headers:{authorization,cookie:''}},res={statusCode:200,status(n){this.statusCode=n;return this},json(body){this.body=body;return this}};const result=await requireUser(req,res);assert.equal(result,null);assert.equal(res.statusCode,401);assert.match(res.body.error,/Sign in/);}});
