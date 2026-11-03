@@ -44,3 +44,9 @@ test('streaming creator prompt requires evidence-grounded answers and honest too
   assert.match(source, /BYOK-only workspace/);
   assert.match(source, /Never claim you inspected files, called tools, generated media, ran tests, committed, or deployed/);
 });
+
+test('version endpoint exposes the source revision so deployments can be identified', () => {
+  const route = source.slice(source.indexOf("app.get('/api/version'"), source.indexOf("app.get('/api/health'"));
+  assert.match(route, /sourceRevision:'pothub-payment-ai-scope-hardening-2026-11-04-r1'/);
+  assert.match(route, /Cache-Control/);
+});

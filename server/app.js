@@ -348,7 +348,7 @@ app.post('/api/creator/image', async (req,res) => {
     err(res,e,e instanceof z.ZodError?422:400);
   }
 });
-app.get('/api/version',(req,res)=>{res.setHeader('Cache-Control','no-store, no-cache, private, max-age=0, must-revalidate');res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');res.json({build:String(process.env.VERCEL_DEPLOYMENT_ID||process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||''),deployment:String(process.env.VERCEL_DEPLOYMENT_ID||''),commit:String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||'')})});
+app.get('/api/version',(req,res)=>{res.setHeader('Cache-Control','no-store, no-cache, private, max-age=0, must-revalidate');res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');res.json({sourceRevision:'pothub-payment-ai-scope-hardening-2026-11-04-r1',build:String(process.env.VERCEL_DEPLOYMENT_ID||process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||''),deployment:String(process.env.VERCEL_DEPLOYMENT_ID||''),commit:String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||'')})});
 app.get('/api/health',async(req,res)=>{
   // Health must be diagnostic JSON even when one or more integrations are broken.
   const statusOf=(value,valid=true)=>!String(value||'').trim()?'missing':valid?'configured':'invalid';
