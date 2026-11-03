@@ -1,29 +1,38 @@
-# Pothub pricing and credit economics
+# PotHub pricing and credit economics
 
-## Current public prices (unchanged)
+## BYOK-only packs
 
-The checkout remains USD. PotHub also displays indicative NGN equivalents using `POTHUB_USD_NGN_RATE` (default fallback: ₦1,347 per USD, an indicative 31 October 2026 reference). Configure the variable in Vercel Production, Preview and Development to keep displayed naira equivalents aligned with your pricing policy. NGN figures are display-only; they do not alter the Flutterwave order currency or server-verified USD amount.
+PotHub does not pay for AI inference. Users supply their own provider keys; credits pay only for PotHub infrastructure such as orchestration, generated-file processing, storage, bandwidth, cloud sync and confirmed GitHub operations.
 
-| Pack | USD price | Indicative NGN at ₦1,347/USD | Credits |
+Indicative NGN equivalents use `POTHUB_USD_NGN_RATE` (default ₦1,347/USD; display-only).
+
+| Pack | USD | Indicative NGN | Credits |
 |---|---:|---:|---:|
-| Starter | $1.99 | ₦2,681 | 24 |
-| Developer | $4.99 | ₦6,722 | 74 |
-| Professional | $9.99 | ₦13,457 | 158 |
-| Power | $19.99 | ₦26,927 | 324 |
+| Starter | $1.99 | ₦2,681 | 200 |
+| Developer | $4.99 | ₦6,722 | 600 |
+| Professional | $9.99 | ₦13,457 | 1,200 |
+| Power | $19.99 | ₦26,927 | 2,400 |
 
-Diagnosis costs 10 credits; repair proposal costs 20. BYO service fees are 2 credits for Developer and 1 for Creator. API & Agents is the only source of AI provider keys, models, endpoints, and task assignments for both workspaces. Every AI operation requires a compatible saved BYOK agent. PotHub never routes inference to platform-funded provider keys; when all configured candidates fail, the operation fails without a hidden fallback. Creator configured-agent chat/image operations cost 1 credit. Delivered video charging remains idempotent and is performed only on result delivery. Verified Fix costs 3 credits, charged only after a matching GitHub Actions run is confirmed completed by the server.
+## Credit cost per action
 
-## Planning model
+| Action | Previous credits | New credits | Basis |
+|---|---:|---:|---|
+| Chat / BYOK text orchestration | 1 (Creator), 2 (Developer) | 1 | Small orchestration only; provider tokens are paid directly by the user |
+| Repository diagnosis | 10 | 1 | BYOK inference; lightweight request orchestration |
+| Repair proposal | 20 | 3 | File/diff validation and proposal delivery |
+| File generation | not consistently defined | 3 | Server file generation and delivery |
+| ZIP generation | not consistently defined | 4 | Packaging and bandwidth |
+| Image delivery/hosting | 1 per image workflow | 8 | Binary storage and delivery placeholder |
+| Video delivery/hosting | charged on delivery; variable | 25 | Larger storage and bandwidth placeholder |
+| Confirmed GitHub commit | not consistently defined | 2 | Repository operation and audit metadata |
+| Cloud sync | not consistently defined | 1 | Sync operation |
+| Deploy / redeploy | 0 | 0 | No charge unless a separately listed PotHub platform service is used |
 
-Run `npm run pricing:check`. The report prints web and Play channel economics separately, typical/heavy provider token estimates, image/video rate placeholders where applicable, and 0.5×/1×/2× AI-cost sensitivity. The default target gross margin is 60%.
+Action costs are initial policy values and must be compared with measured infrastructure invoices. No credits are charged when an agent is missing or a request fails validation before work begins.
 
-Inputs live in `server/pricing.js`: token rates, image/video rates, processor rates, per-order infrastructure allowance and AI safety factor. They are planning assumptions, not vendor quotations. Actual provider prices, caching/batch discounts, currency conversion, Flutterwave fee caps, tax, chargebacks, refunds and Firestore/storage usage must be reconciled against invoices and production usage. Unknown media costs are reported as `n/a`, not invented.
+## Infrastructure margin model
 
-## Recommendation (analysis only)
-
-Keep the current prices until real per-operation telemetry is available. Diagnosis is the strongest candidate for a cheaper operation because it generally consumes fewer output tokens than repair. Consider a free validation retry for malformed fixes and a first-purchase bonus only after measured high-percentile costs prove the 60% floor remains intact. Do not add a daily free allowance until abuse controls and provider spend ceilings are measured. BYO rescue from a platform failure is fee-waived in the new recovery path.
-
-No user-facing prices or credit pack quantities are changed by this release.
+Assumptions in `server/pricing.js`: `infraCostPerCreditUsd = 0.0015` is a **placeholder**, not a measured invoice; infrastructure per order is $0.05; Play fee is 30%; web processing is 3.5% + $0.30. `npm run pricing:check` computes worst-channel margin assuming 100% of credits are spent. Every pack must pass the 50% target plus a 0.5 percentage-point buffer. If measured infrastructure cost differs, adjust credits per pack, never the target margin.
 
 ## Credit reservation lifecycle
 
