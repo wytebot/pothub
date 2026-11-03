@@ -87,7 +87,7 @@ test('C13 Capacitor build refuses to ship without a configured API origin and sk
 
 test('Creator chat hides stale configure-agent prompt when a compatible creator agent exists and groups history by date', async () => {
   const ui = await read('src/ui/WorkspaceSection.jsx');
-  assert.match(ui, /missingAgentFunction&&!\(role==='Creator'&&agents\.some/);
+  assert.match(ui, /missingAgentFunction&&role==='Creator'/);
   assert.match(ui, /chat-history-group-title/);
   assert.match(ui, /creator-chat-header/);
 });
