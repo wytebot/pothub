@@ -12,12 +12,11 @@ Set these under **Vercel → Project → Settings → Environment Variables** fo
 | `FRONTEND_URL` | Public browser app origin. If frontend and API share the Vercel domain, use the same origin as `APP_URL`. |
 | `APP_ORIGIN` | Exact browser origin allowed by API CORS; usually the same value as `FRONTEND_URL`. |
 | `SESSION_SECRET` | Random secret of at least 32 characters. Generate a unique value per environment, e.g. `openssl rand -hex 32`. |
-| `POTHUB_VAULT_ENCRYPTION_KEY` | Strong server-only key used to encrypt saved provider API keys in each account's Firestore workspace vault. Generate with `openssl rand -hex 32`; never expose it as `NEXT_PUBLIC_*`. If unset, `SESSION_SECRET` is used as a compatibility fallback. Keep this value stable across deployments or saved provider keys cannot be decrypted. |
+| `POTHUB_VAULT_ENCRYPTION_KEY` | Dedicated 32-byte server-only vault key, represented as 64 hexadecimal characters, used to encrypt saved provider API keys and other vault secrets. Generate with `openssl rand -hex 32`; set it in Vercel Project Settings → Environment Variables for Production, Preview, and Development as needed. Never use a `NEXT_PUBLIC_*` name or commit the value. There is no SESSION_SECRET fallback. Keep the same value across deployments; changing it without re-encrypting existing records makes them unreadable. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App Client ID. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App Client Secret; server-only. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Full Firebase service-account JSON, stored as a server-only secret. Do not prefix with `NEXT_PUBLIC_`. |
 | `FIREBASE_PROJECT_ID` | `pothub-ca2a1` (can be inferred from service-account JSON, but set it explicitly for clarity). |
-| `GEMINI_API_KEY` | Pothub-managed server-side Gemini fallback key. The current `/api/health` readiness check expects this to be set. Never expose it to the browser. |
 | `FLW_CLIENT_ID` | **Required.** Flutterwave v4 client ID; server-only. |
 | `FLW_CLIENT_SECRET` | **Required.** Flutterwave v4 client secret; server-only. Use the keys for the same mode as `FLW_MODE`. |
 | `FLW_ENCRYPTION_KEY` | **Required.** v4 dashboard encryption key (32-byte base64). Card fields are AES-256-GCM encrypted with it before being sent to Flutterwave; never sent to the client. |
@@ -40,7 +39,6 @@ These are the only frontend build variables normally needed. Firebase web config
 
 Only configure these if you use the corresponding feature or need to override its defaults:
 
-- `AI_FALLBACK_BASE_URL`, `AI_FALLBACK_API_KEY`, `AI_FALLBACK_MODEL` — server-side OpenAI-compatible fallback provider. Keep the key private. The current readiness check still expects `GEMINI_API_KEY`.
 - `AI_MAX_PROMPT_CHARS`, `AI_MAX_OUTPUT_TOKENS`, `AI_MAX_OPERATION_COST_USD` — server-side AI limits.
 - `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` — explicitly allows trusted custom HTTPS agent endpoints; leave unset unless needed.
 - `POTHUB_VIDEO_MAX_BYTES` — video response size limit in bytes; default is 26214400 (25 MiB), with a hard maximum of 25 MiB.
@@ -156,18 +154,15 @@ PotHub uses Sign in with Vercel OAuth so each developer connects their own Verce
 
 **Fix for “Invalid redirect URL”:** use the same canonical production hostname everywhere. If PotHub is deployed at `https://pothub-self.vercel.app`, set `APP_URL=https://pothub-self.vercel.app`, `FRONTEND_URL=https://pothub-self.vercel.app`, `APP_ORIGIN=https://pothub-self.vercel.app`, and `VERCEL_REDIRECT_URI=https://pothub-self.vercel.app/api/vercel/callback`. Replace that example hostname with your actual deployed domain. In the Vercel OAuth app's settings, add that exact full callback URL as an allowed/redirect URL—same scheme, host, path, and no trailing slash or query string. Do not register the Vercel dashboard URL, `/api/vercel/connect`, a preview deployment URL, or a different custom domain. If you change domains, update both sides and redeploy. The code rejects non-HTTPS, localhost, query-string, and wrong-path callback values with a clearer configuration error. `VERCEL_REDIRECT_URI` is the only new/explicit variable for this callback; no new API token variable is required.
 
-In the Vercel app's Manage settings, enable the `openid`, `email`, `profile`, and `offline_access` identity scopes and the read permissions needed for listing projects, reading deployments, and reading deployment events/logs. The app's available API permissions are controlled by its Vercel dashboard configuration; the OAuth scopes alone do not grant deployment API permissions. PotHub uses PKCE and a short-lived, HttpOnly, signed state cookie, stores per-user access/refresh tokens encrypted in Firestore, and rotates refresh tokens server-side. Keep `SESSION_SECRET`, `POTHUB_VAULT_ENCRYPTION_KEY` (or the existing strong `SESSION_SECRET` fallback), and Firebase Admin/Firestore configured.
+In the Vercel app's Manage settings, enable the `openid`, `email`, `profile`, and `offline_access` identity scopes and the read permissions needed for listing projects, reading deployments, and reading deployment events/logs. The app's available API permissions are controlled by its Vercel dashboard configuration; the OAuth scopes alone do not grant deployment API permissions. PotHub uses PKCE and a short-lived, HttpOnly, signed state cookie, stores per-user access/refresh tokens encrypted in Firestore, and rotates refresh tokens server-side. Keep `SESSION_SECRET`, a dedicated `POTHUB_VAULT_ENCRYPTION_KEY`, and Firebase Admin/Firestore configured.
 
 After redeploying, open Developer workspace → Deployment logs → Connect Vercel. Authorize the account, select a project from the discovered list, then choose a deployment. If Vercel reports insufficient permissions, update the OAuth app's permissions and reconnect. The callback URL to register is `https://YOUR-POTHUB-DOMAIN/api/vercel/callback`.
 
 
-## Active-model catalogue (hides deprecated models)
 
-PotHub can use the existing server-side `GEMINI_API_KEY` to perform conservative AI-assisted model lifecycle analysis. Provider live model-list APIs remain the source of truth; uncertain lifecycle results fail open. No separate Brave or Tavily API key is required.
 
 | Variable | Required | Description |
 |---|---|---|
-| `GEMINI_DOCS_MODEL` | Optional | Gemini model used for documentation analysis; defaults to `gemini-2.5-flash`. |
 
 | `MODEL_CATALOG_TTL_HOURS` | Optional | How often each provider is re-checked. Default 24, range 1-168. |
 | `MODEL_CATALOG_ENABLED` | Optional | Set `false` to turn filtering off. |
@@ -179,3 +174,7 @@ Results are cached in Firestore (`model_catalog` collection, Admin SDK only; kee
 
 # Shared Flutterwave webhook is owned by WyBuild; authenticate its server-to-server PotHub settlement callback.
 WYBUILD_WEBHOOK_SHARED_SECRET=replace-with-the-same-random-secret-configured-in-WyBuild
+
+## BYOK-only AI policy
+
+PotHub does not ship, host, or use platform-owned AI keys or a platform default model. Every inference request must use a key saved by the user on an explicitly task-assigned agent. Remove legacy `GEMINI_API_KEY`, `AI_FALLBACK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `POTHUB_AI_API_KEY` variables from every deployment environment; the server refuses to start if any are set. Provider keys are never valid application-wide defaults.
