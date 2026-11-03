@@ -34,5 +34,5 @@ test('image operation marks reservation settled immediately after commit', () =>
 test('agent reservation cleanup only releases a reservation created by this request', () => {
   assert.match(app, /let reservation; let ownsReservation=false; let reservationSettled=false/);
   assert.match(app, /if\(ownsReservation&&!reservationSettled\)await releaseCreditReservation/);
-  assert.match(app, /await commitCreditReservation\(userId,reference,result\);reservationSettled=true;await finishOperation/);
+  assert.match(app, /await commitCreditReservation\(userId,reference,result\);reservationSettled=true;\}await finishOperation/);
 });
