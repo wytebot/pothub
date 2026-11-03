@@ -22,7 +22,7 @@ This archive is a **partial hardening pass**, not a production certification. It
 
 ## Deployment warning
 
-The new startup guard intentionally refuses to boot if legacy platform-owned AI key variables remain in the deployment environment. Remove those old variables from Vercel Production, Preview and Development before deploying. This avoids accidentally using a platform key, but means an unclean environment will fail readiness until it is cleaned up.
+Legacy platform-owned AI key variables are ignored for inference and produce a warning only; they no longer block application startup. Remove them from Vercel Production, Preview and Development when convenient. All AI inference must still use keys saved on user-configured agents.
 
 ## Manual QA still required
 
