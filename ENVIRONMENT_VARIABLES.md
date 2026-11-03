@@ -177,4 +177,7 @@ WYBUILD_WEBHOOK_SHARED_SECRET=replace-with-the-same-random-secret-configured-in-
 
 ## BYOK-only AI policy
 
-PotHub does not ship, host, or use platform-owned AI keys or a platform default model. Every inference request must use a key saved by the user on an explicitly task-assigned agent. Remove legacy `GEMINI_API_KEY`, `AI_FALLBACK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `POTHUB_AI_API_KEY` variables from every deployment environment; the server refuses to start if any are set. Provider keys are never valid application-wide defaults.
+PotHub does not ship, host, or use platform-owned AI keys or a platform default model. Every inference request must use a key saved by the user on an explicitly task-assigned agent. Remove legacy `GEMINI_API_KEY`, `AI_FALLBACK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `POTHUB_AI_API_KEY` variables from every deployment environment; the server ignores them for inference and logs a warning if any remain; they do not block startup. Provider keys are never valid application-wide defaults.
+
+
+For Vercel OAuth, `VERCEL_REDIRECT_URI` must exactly match the callback registered in the Vercel OAuth app. Production example: `https://pothub-self.vercel.app/api/vercel/callback`. See `VERCEL-OAUTH-REDIRECT-FIX.md`.

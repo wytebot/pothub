@@ -1,7 +1,7 @@
 # PotHub manual QA checklist
 
 ## Before preview deployment
-- [ ] Remove legacy platform-owned AI key variables from Vercel Production, Preview and Development; otherwise the new startup guard intentionally fails.
+- [ ] Optional cleanup: remove legacy platform-owned AI key variables from Vercel Production, Preview and Development. If left configured, they are ignored for inference and only produce a warning; startup must continue.
 - [ ] Run `npm ci`, `npm run check`, and `npm run build` in the target Node 24 environment.
 - [ ] Confirm `/api/health` returns ready and `GET /api/pricing` returns the approved pack amounts.
 
