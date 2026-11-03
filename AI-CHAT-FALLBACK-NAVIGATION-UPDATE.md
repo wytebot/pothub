@@ -1,4 +1,4 @@
-# PotHub AI Chat, Fallback and Navigation Update
+# platform-owned AI Chat, Fallback and Navigation Update
 
 ## Changes
 - Chat agents can now store multiple model IDs for one encrypted API key. The selected model runs first; additional IDs are tried in the order entered.

@@ -18,8 +18,8 @@ Note: the actual WebAuthn credential chooser and native Android biometric sheet 
 - Developer own-agent diagnosis and repair use the existing 2-credit BYO service fee.
 - Added an account-level Developer AI mode setting stored in the authenticated Firestore profile: `pothub` or `own`.
 - Default is `pothub` for existing accounts. In this mode, any client-supplied agent config is ignored by the server and platform usage prices apply (10 credits for diagnosis, 20 for repair proposal).
-- In `own` mode, the server only accepts task-compatible agent candidates. If none are supplied, it returns `AGENT_NOT_CONFIGURED` (409) before reserving credits; it does not silently switch to Pothub AI.
-- Server-side mode selection is authoritative. Client headers cannot reduce a Pothub AI charge.
+- In `own` mode, the server only accepts task-compatible agent candidates. If none are supplied, it returns `AGENT_NOT_CONFIGURED` (409) before reserving credits; it does not silently switch to platform-owned AI.
+- Server-side mode selection is authoritative. Client headers cannot reduce a platform-owned AI charge.
 - Responses now include `billingMode` where applicable, making the applied billing path explicit.
 
 ### Naira equivalents
