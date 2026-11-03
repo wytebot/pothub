@@ -6,13 +6,14 @@ import {
   compareWorkspaceVersion
 } from '../server/workspace-vault.js';
 
-const env = { POTHUB_VAULT_ENCRYPTION_KEY: 'pothub-test-vault-key-which-is-long-enough-123456789' };
+const env = { POTHUB_VAULT_ENCRYPTION_KEY: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00' };
 
 test('workspace vault encrypts API keys at rest and authenticates ciphertext', () => {
   const encrypted = encryptWorkspaceSecret('sk-provider-secret-1234567890', env);
   assert.notEqual(encrypted.data, 'sk-provider-secret-1234567890');
   assert.equal(decryptWorkspaceSecret(encrypted, env), 'sk-provider-secret-1234567890');
-  assert.throws(() => decryptWorkspaceSecret(encrypted, { POTHUB_VAULT_ENCRYPTION_KEY: 'a-different-vault-key-which-is-also-long-enough-123456' }));
+  assert.throws(() => decryptWorkspaceSecret(encrypted, { POTHUB_VAULT_ENCRYPTION_KEY: 'ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100' }));
+  assert.throws(() => encryptWorkspaceSecret('secret', { SESSION_SECRET: 'a-long-session-secret-that-is-not-a-vault-key' }), /POTHUB_VAULT_ENCRYPTION_KEY/);
 });
 
 test('workspace item scope is account-isolated and IDs are opaque', () => {
