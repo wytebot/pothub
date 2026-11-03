@@ -28,3 +28,9 @@ test('frontend sends configured BYOK agents through round-robin model/key fallba
   assert.match(ui, /buildFallbackSequence\(primary,extra,8\)/);
   assert.match(ui, /const models=\[\.\.\.new Set\(\[a\.model,\.\.\.\(Array\.isArray\(a\.models\)/);
 });
+
+test('legacy platform AI environment variables never block startup or become inference defaults', () => {
+  assert.match(app, /configuredPlatformAiKeys\.length\)console\.warn/);
+  assert.doesNotMatch(app, /configuredPlatformAiKeys\.length\)throw new Error/);
+  assert.match(app, /They are never used for inference/);
+});
