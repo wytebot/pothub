@@ -11,7 +11,12 @@ export function interleaveAgentCandidates(agents, limit = 8) {
     ...agent,
     models: [...new Set((Array.isArray(agent.models) ? agent.models : [agent.model])
       .map((model) => String(model || '').trim()).filter(Boolean))].slice(0, 8),
-  })).filter((agent) => String(agent.key || '').trim() && agent.models.length && String(agent.provider || '').trim());
+  })).filter((agent) => {
+    const task = String(agent.task || '').trim().toLowerCase();
+    // Legacy 'all' or unscoped agents are not valid fallbacks. A credential is
+    // eligible only for the exact task it was saved for.
+    return String(agent.key || '').trim() && agent.models.length && String(agent.provider || '').trim() && task && task !== 'all';
+  });
   const result = [];
   const seen = new Set();
   const maxModels = Math.max(0, ...normalized.map(agent => agent.models.length));
@@ -20,25 +25,21 @@ export function interleaveAgentCandidates(agents, limit = 8) {
       if (result.length >= max) break;
       const model = agent.models[modelIndex];
       if (!model) continue;
-      const identity = `${agent.provider}\u0000${agent.baseUrl || ''}\u0000${agent.key}\u0000${model}\u0000${agent.task || 'all'}`;
+      const identity = `${agent.provider}\u0000${agent.baseUrl || ''}\u0000${agent.key}\u0000${model}\u0000${agent.task || ''}\u0000${agent.workspace || 'developer'}`;
       if (seen.has(identity)) continue;
       seen.add(identity);
-      result.push({ key: agent.key, model, provider: agent.provider, baseUrl: agent.baseUrl || '', task: agent.task || 'all' });
+      result.push({ key: agent.key, model, provider: agent.provider, baseUrl: agent.baseUrl || '', task: agent.task, workspace: String(agent.workspace || 'developer').toLowerCase() === 'creator' ? 'creator' : 'developer' });
     }
   }
   return result;
 }
 
 /**
- * Strict-priority fallback order. Agents saved for the task come first (default agent first, models
- * round-robined across keys); text-capable agents saved for sibling text tasks on the same API & Agents
- * page follow as a last resort. Nothing outside the saved agents is ever added.
+ * Build a fallback sequence only from agents explicitly configured for the same task.
+ * `extra` is intentionally ignored: cross-task fallback is a root cause of wrong-model
+ * calls (e.g. Prompt Guard being tried for chat). A caller must pass a task-homogeneous
+ * candidate list. Every candidate remains bound to its own provider, key and endpoint.
  */
-export function buildFallbackSequence(primary, extra = [], limit = 8) {
-  const max = Math.max(1, Math.min(32, Number(limit) || 8));
-  const first = interleaveAgentCandidates(primary, max);
-  if (first.length >= max) return first;
-  const seen = new Set(first.map(c => `${c.provider}\u0000${c.baseUrl || ''}\u0000${c.key}\u0000${c.model}`));
-  const rest = interleaveAgentCandidates(extra, max).filter(c => !seen.has(`${c.provider}\u0000${c.baseUrl || ''}\u0000${c.key}\u0000${c.model}`));
-  return [...first, ...rest].slice(0, max);
+export function buildFallbackSequence(primary, _extra = [], limit = 8) {
+  return interleaveAgentCandidates(primary, limit);
 }

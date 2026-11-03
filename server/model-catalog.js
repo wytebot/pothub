@@ -17,8 +17,6 @@
  *    provider per TTL, shared across instances.
  *
  * Environment:
- *  GEMINI_API_KEY              existing server-side Gemini key (no separate search API required)
- *  GEMINI_DOCS_MODEL            optional Gemini model for documentation analysis
  *  MODEL_CATALOG_ENABLED       "false" turns filtering off
  *  MODEL_CATALOG_TTL_HOURS     refresh interval, default 24 (1..168)
  *  MODEL_CATALOG_HIDE          extra hidden models: "model" or "provider:model", comma separated
@@ -44,7 +42,6 @@ export const OFFICIAL_DOC_HOSTS = {
   luma: ['docs.lumalabs.ai'],
 };
 
-const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
 const DAY = 86_400_000;
 const MAX_PAGE_BYTES = 2_000_000;
 const MAX_PAGES = 3;
@@ -255,7 +252,7 @@ export function createModelCatalog(deps = {}) {
   const config = () => {
     const e = env();
     const ttl = Math.min(168, Math.max(1, Number(e.MODEL_CATALOG_TTL_HOURS) || 24)) * 3_600_000;
-    return { enabled: String(e.MODEL_CATALOG_ENABLED || 'true').toLowerCase() !== 'false', ttl, key: String(e.GEMINI_API_KEY || ''), model: String(e.GEMINI_DOCS_MODEL || 'gemini-2.5-flash'), hide: csv(e.MODEL_CATALOG_HIDE), keep: csv(e.MODEL_CATALOG_KEEP) };
+    return { enabled: String(e.MODEL_CATALOG_ENABLED || 'true').toLowerCase() !== 'false', ttl, searchKey: String(e.MODEL_SEARCH_API_KEY || e.BRAVE_SEARCH_API_KEY || e.TAVILY_API_KEY || ''), searchProvider: String(e.MODEL_SEARCH_PROVIDER || (e.TAVILY_API_KEY ? 'tavily' : 'brave')).toLowerCase(), hide: csv(e.MODEL_CATALOG_HIDE), keep: csv(e.MODEL_CATALOG_KEEP) };
   };
 
   async function getStore() { if (store === undefined) store = deps.store !== undefined ? deps.store : await defaultStore(); return store; }
@@ -273,61 +270,57 @@ export function createModelCatalog(deps = {}) {
     try { await s.set(provider, rec); } catch { /* cache only */ }
   }
 
+  // Deterministic, non-generative model lifecycle refresh: search only official provider docs,
+  // fetch those pages through the host allowlist, and parse explicit lifecycle statements.
   async function discover(provider, cfg, modelIds = []) {
     const hosts = OFFICIAL_DOC_HOSTS[provider];
-    if (!hosts) throw new Error('No official documentation host is registered for this provider.');
-    if (!cfg.key) throw new Error('GEMINI_API_KEY is not configured.');
-    // Ask Gemini for a conservative evidence-based classification. The prompt explicitly
-    // forbids guessing; only exact model IDs and explicit lifecycle statements are returned.
-    const prompt = `You are a model lifecycle auditor. Provider: ${provider}. Official documentation hosts allowed: ${hosts.join(', ')}. Current UTC date: ${new Date(now()).toISOString().slice(0,10)}.
-Model IDs from the provider live model-list API:
-${modelIds.slice(0,250).join('\n')}
-Return JSON only: {"deprecated":[{"id":"exact-id","status":"deprecated|retired","date":null,"evidence":"short explicit statement","source":"official documentation URL"}]}. Include an ID only when you have strong, specific knowledge of an explicit lifecycle notice on one of the listed official hosts. Do not infer from age, preview labels, popularity, or model naming. Never invent URLs or claim to have browsed pages. If uncertain, omit the model.`;
-    const model = cfg.model;
-    const url = `${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent`;
-    const response = await fetchPinnedHttps(url, { allowHosts: ['generativelanguage.googleapis.com'], signal: AbortSignal.timeout(12000), headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.key }, method: 'POST', body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 4096 } }) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(`Gemini documentation analysis returned ${response.status}.`);
-    const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
-    let parsed; try { parsed = JSON.parse(raw); } catch { throw new Error('Gemini returned an invalid documentation report.'); }
-    const deprecated = (Array.isArray(parsed.deprecated) ? parsed.deprecated : []).filter(x => modelIds.some(id => id.toLowerCase() === String(x.id || '').toLowerCase()) && ['deprecated','retired'].includes(x.status) && typeof x.source === 'string' && hosts.some(h => { try { return new URL(x.source).hostname === h || new URL(x.source).hostname.endsWith(`.${h}`); } catch { return false; } })).map(x => ({ id: String(x.id), status: x.status, date: x.date || null, source: x.source, evidence: String(x.evidence || '').slice(0,300) }));
-    return { deprecated, sources: [...new Set(deprecated.map(x => x.source))] };
+    if (!hosts || !cfg.searchKey) throw new Error('Official model documentation search is not configured.');
+    const query = `${provider} official model deprecation shutdown retirement documentation`;
+    const search = deps.search || defaultSearch;
+    const results = await search({ query, provider: cfg.searchProvider, key: cfg.searchKey, hosts, signal: AbortSignal.timeout(9000) });
+    const allowed = (Array.isArray(results) ? results : []).filter(row => hostAllowed(row.url, hosts)).slice(0, 5);
+    if (!allowed.length) throw new Error('Search returned no official documentation pages.');
+    const fetchPage = deps.fetchPage || ((url, _hosts, signal) => defaultFetchPage(url, hosts, signal));
+    const pages = await Promise.all(allowed.map(async row => ({ url: row.url, text: String(row.text || row.snippet || '') + '\n' + await fetchPage(row.url, hosts, AbortSignal.timeout(9000)).catch(() => '') })));
+    const known = new Map(modelIds.map(id => [String(id).toLowerCase(), String(id)]));
+    const deprecated = new Map();
+    for (const page of pages) for (const [id, item] of extractDeprecations(page.text, { now: now() })) {
+      const exact = known.get(id.toLowerCase());
+      if (exact) deprecated.set(exact.toLowerCase(), { id: exact, status: item.status, date: item.date, source: page.url, evidence: 'Explicit lifecycle statement parsed from official documentation.' });
+    }
+    return { deprecated: [...deprecated.values()], sources: [...new Set([...deprecated.values()].map(x => x.source))] };
   }
-
   async function refresh(provider, modelIds = []) {
     const cfg = config();
-    if (!cfg.key) return null;
+    if (!cfg.searchKey) return load(provider);
     if (inflight.has(provider)) return inflight.get(provider);
     const cutoff = now() - 3_600_000;
     while (refreshLog.length && refreshLog[0] < cutoff) refreshLog.shift();
-    if (refreshLog.length >= REFRESHES_PER_HOUR) return null;
+    if (refreshLog.length >= REFRESHES_PER_HOUR) return load(provider);
     refreshLog.push(now());
     const job = (async () => {
       const old = await load(provider);
       try {
-        const { deprecated, sources } = await discover(provider, cfg, modelIds);
-        const rec = { provider, checkedAt: now(), attemptedAt: now(), deprecated, sources, lastError: null };
-        await save(provider, rec);
-        return rec;
+        const result = await discover(provider, cfg, modelIds);
+        const rec = { provider, checkedAt: now(), attemptedAt: now(), ...result, lastError: null };
+        await save(provider, rec); return rec;
       } catch (e) {
         const rec = { ...(old || { provider, deprecated: [], sources: [] }), attemptedAt: now(), lastError: String(e?.message || e).slice(0, 200) };
-        await save(provider, rec);
-        return rec;
+        await save(provider, rec); return rec;
       } finally { inflight.delete(provider); }
     })();
-    inflight.set(provider, job);
-    return job;
+    inflight.set(provider, job); return job;
   }
 
   /** Returns the freshest record available within `waitMs`; never throws. */
-  async function status(provider, { waitMs = 6000, force = false } = {}) {
+  async function status(provider, { waitMs = 6000, force = false, modelIds = [] } = {}) {
     try {
       const cfg = config();
       let rec = await load(provider);
       const stale = !rec?.checkedAt || now() - rec.checkedAt >= cfg.ttl;
       const cooling = rec?.attemptedAt && now() - rec.attemptedAt < FAILURE_BACKOFF_MS && rec.lastError;
       if (force || (stale && !cooling)) {
-        const job = refresh(provider, opts.modelIds || []);
+        const job = refresh(provider, modelIds);
         if (job) {
           const fresh = await Promise.race([job, new Promise((r) => setTimeout(() => r(undefined), waitMs))]);
           if (fresh) rec = fresh;

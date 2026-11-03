@@ -13,8 +13,8 @@ export function workspaceItemKey(table, id) {
   return crypto.createHash('sha256').update(`${String(table)}:${String(id)}`).digest('hex');
 }
 function vaultKey(env = process.env) {
-  const secret = String(env.POTHUB_VAULT_ENCRYPTION_KEY || env.SESSION_SECRET || '').trim();
-  if (secret.length < 32) throw Object.assign(new Error('Saved API sync is not configured. Set POTHUB_VAULT_ENCRYPTION_KEY to a strong secret of at least 32 characters.'), { status: 503 });
+  const secret = String(env.POTHUB_VAULT_ENCRYPTION_KEY || '').trim();
+  if (!/^[a-f0-9]{64}$/i.test(secret)) throw Object.assign(new Error('Saved API sync is not configured. Set POTHUB_VAULT_ENCRYPTION_KEY to a 64-character hexadecimal secret generated with openssl rand -hex 32.'), { status: 503 });
   return crypto.createHash('sha256').update(secret).digest();
 }
 export function encryptWorkspaceSecret(secret, env = process.env) {

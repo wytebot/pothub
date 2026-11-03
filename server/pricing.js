@@ -1,63 +1,36 @@
-/** Pricing assumptions, not a guarantee. Review against live invoices before launch. */
+/** BYOK pricing: credits pay only for PotHub infrastructure, never model inference. */
 export const PACKS = [
-  { id: 'spark', name: 'Starter', usd: 1.99, credits: 60, maxCreditsAtTarget: 60 },
-  { id: 'builder', name: 'Developer', usd: 4.99, credits: 150, maxCreditsAtTarget: 150 },
-  { id: 'pro', name: 'Professional', usd: 9.99, credits: 300, maxCreditsAtTarget: 300 },
-  { id: 'power', name: 'Power', usd: 19.99, credits: 600, maxCreditsAtTarget: 600 }
+  { id: 'spark', name: 'Starter', usd: 1.99, credits: 200, maxCreditsAtTarget: 200 },
+  { id: 'builder', name: 'Developer', usd: 4.99, credits: 600, maxCreditsAtTarget: 600 },
+  { id: 'pro', name: 'Professional', usd: 9.99, credits: 1200, maxCreditsAtTarget: 1200 },
+  { id: 'power', name: 'Power', usd: 19.99, credits: 2400, maxCreditsAtTarget: 2400 }
 ];
-export const OPERATIONS = { diagnosis: 10, repair: 20 };
-export const BYO_SERVICE_FEES = { developer: 1, creator: 1 }; // One credit per successful BYOK agent workflow; no separate PotHub AI fee.
+export const OPERATIONS = { chat: 1, diagnosis: 1, repair: 3, fileGeneration: 3, zipGeneration: 4, imageDelivery: 8, videoDelivery: 25, githubCommit: 2, cloudSync: 1 };
+export const BYO_SERVICE_FEES = { developer: 1, creator: 1 };
 export const ASSUMPTIONS = {
   targetMargin: 0.50,
-  // Conservative planning estimate: $0.003 variable provider cost per credit, doubled for model/token variance. Replace with measured provider invoices after launch.
-  aiCostPerCreditUsd: 0.003,
-  aiSafetyFactor: 2,
+  infraCostPerCreditUsd: 0.0015, // PLACEHOLDER until measured invoices replace it.
   infrastructurePerOrderUsd: 0.05,
   playFeeRate: 0.30,
   webProcessorRate: 0.035,
   webProcessorFlatUsd: 0.30,
-  // Channel fees are alternatives, not stacked: Play handles Play purchases;
-  // Flutterwave fees apply to web checkout. Confirm actual merchant rates.
+  targetBuffer: 0.005
 };
 export function calculatePack(pack) {
-  const ai = pack.credits * ASSUMPTIONS.aiCostPerCreditUsd * ASSUMPTIONS.aiSafetyFactor;
-  const infrastructure = ASSUMPTIONS.infrastructurePerOrderUsd;
+  const infrastructure = pack.credits * ASSUMPTIONS.infraCostPerCreditUsd + ASSUMPTIONS.infrastructurePerOrderUsd;
   const playFees = pack.usd * ASSUMPTIONS.playFeeRate;
   const webFees = pack.usd * ASSUMPTIONS.webProcessorRate + ASSUMPTIONS.webProcessorFlatUsd;
   const worstChannelFee = Math.max(playFees, webFees);
-  const total = ai + infrastructure + worstChannelFee;
-  return { ...pack, aiCostUsd: ai, infrastructureUsd: infrastructure, playFeesUsd: playFees, webFeesUsd: webFees, worstChannelFeeUsd: worstChannelFee, estimatedCostUsd: total, estimatedMargin: (pack.usd-total)/pack.usd, passesTarget: (pack.usd-total)/pack.usd >= ASSUMPTIONS.targetMargin };
+  const total = infrastructure + worstChannelFee;
+  const estimatedMargin = (pack.usd-total)/pack.usd;
+  return { ...pack, aiCostUsd: 0, infrastructureUsd: infrastructure, playFeesUsd: playFees, webFeesUsd: webFees, worstChannelFeeUsd: worstChannelFee, estimatedCostUsd: total, estimatedMargin, passesTarget: estimatedMargin >= ASSUMPTIONS.targetMargin + ASSUMPTIONS.targetBuffer };
 }
-
-/** Planning inputs are intentionally editable and must be reconciled to vendor invoices.
- * USD per million tokens; image/video rates are per generated image/second. */
-export const PROVIDER_COSTS = {
-  gemini:{inputPerMillion:0.30,outputPerMillion:2.50,image:0.039,videoPerSecond:0.10},
-  openai:{inputPerMillion:2.00,outputPerMillion:8.00,image:0.04,videoPerSecond:null},
-  anthropic:{inputPerMillion:3.00,outputPerMillion:15.00,image:null,videoPerSecond:null},
-  mistral:{inputPerMillion:0.20,outputPerMillion:0.60,image:null,videoPerSecond:null},
-  groq:{inputPerMillion:0.59,outputPerMillion:0.79,image:null,videoPerSecond:null},
-  deepseek:{inputPerMillion:0.27,outputPerMillion:1.10,image:null,videoPerSecond:null},
-  xai:{inputPerMillion:2.00,outputPerMillion:10.00,image:null,videoPerSecond:null},
-  cohere:{inputPerMillion:2.50,outputPerMillion:10.00,image:null,videoPerSecond:null},
-  perplexity:{inputPerMillion:1.00,outputPerMillion:1.00,image:null,videoPerSecond:null},
-  together:{inputPerMillion:0.90,outputPerMillion:0.90,image:null,videoPerSecond:null},
-  fireworks:{inputPerMillion:0.90,outputPerMillion:0.90,image:null,videoPerSecond:null},
-  openrouter:{inputPerMillion:1.00,outputPerMillion:3.00,image:null,videoPerSecond:null},
-  huggingface:{inputPerMillion:1.00,outputPerMillion:1.00,image:null,videoPerSecond:null}
-};
-export const USAGE_SCENARIOS={typical:{inputTokens:5000,outputTokens:1200,images:0,videoSeconds:0},heavy:{inputTokens:24000,outputTokens:6000,images:2,videoSeconds:8}};
-export function estimateProviderOperation(provider='gemini',usage=USAGE_SCENARIOS.typical){
-  const r=PROVIDER_COSTS[provider]||PROVIDER_COSTS.gemini;
-  const tokens=(usage.inputTokens*r.inputPerMillion+usage.outputTokens*r.outputPerMillion)/1_000_000;
-  const imageCost=r.image==null?null:usage.images*r.image;
-  const videoCost=r.videoPerSecond==null?null:usage.videoSeconds*r.videoPerSecond;
-  return {provider,tokensUsd:tokens,imageUsd:imageCost,videoUsd:videoCost,totalUsd:imageCost===null||videoCost===null?null:tokens+imageCost+videoCost,usage};
-}
-export function calculatePackChannels(pack){
-  const ai=pack.credits*ASSUMPTIONS.aiCostPerCreditUsd*ASSUMPTIONS.aiSafetyFactor;
-  const infra=ASSUMPTIONS.infrastructurePerOrderUsd;
+export const PROVIDER_COSTS = {};
+export const USAGE_SCENARIOS = { typical: { inputTokens: 0, outputTokens: 0, images: 0, videoSeconds: 0 }, heavy: { inputTokens: 0, outputTokens: 0, images: 0, videoSeconds: 0 } };
+export function estimateProviderOperation(provider='byok',usage=USAGE_SCENARIOS.typical) { return { provider, tokensUsd: 0, imageUsd: 0, videoUsd: 0, totalUsd: 0, usage, note: 'Provider usage is billed directly to the user by their configured provider; PotHub does not estimate or pay these charges.' }; }
+export function calculatePackChannels(pack) {
+  const infra=pack.credits*ASSUMPTIONS.infraCostPerCreditUsd+ASSUMPTIONS.infrastructurePerOrderUsd;
   const web=pack.usd*ASSUMPTIONS.webProcessorRate+ASSUMPTIONS.webProcessorFlatUsd;
   const play=pack.usd*ASSUMPTIONS.playFeeRate;
-  return {web:{fees:web,cost:ai+infra+web,margin:(pack.usd-ai-infra-web)/pack.usd},play:{fees:play,cost:ai+infra+play,margin:(pack.usd-ai-infra-play)/pack.usd}};
+  return { web:{fees:web,cost:infra+web,margin:(pack.usd-infra-web)/pack.usd}, play:{fees:play,cost:infra+play,margin:(pack.usd-infra-play)/pack.usd} };
 }
