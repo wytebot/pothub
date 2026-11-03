@@ -481,16 +481,16 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 .sidebar .codelab-menu button{font-size:.92em;padding-top:7px;padding-bottom:7px}
 
 /* Claude-like chat workflow and bounded, auto-growing message composers. */
-.chat-main .composer textarea{box-sizing:border-box;width:100%;height:auto;min-height:32px;max-height:160px;overflow-y:hidden;resize:none;line-height:1.5;overscroll-behavior:contain;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-main .composer textarea{box-sizing:border-box;width:100%;height:auto;min-height:32px;max-height:min(40dvh,240px);overflow-y:hidden;resize:none;line-height:1.5;overscroll-behavior:contain;white-space:pre-wrap;overflow-wrap:anywhere}
 .chat-main .composer textarea:focus{outline:none}
 .creator-chat-progress{padding:0 14px 8px}
 .creator-chat-progress .work-progress{margin-top:0}
 .chat-main .composer-attachments{display:flex;flex-wrap:wrap;gap:6px;max-width:100%}
 .chat-main .composer-attachments>span{max-width:100%;overflow-wrap:anywhere}
 .chat-main .composer-attachments>span button{flex:none}
-@media(max-width:640px){.chat-main .composer textarea{min-height:34px;max-height:160px;font-size:16px}.creator-chat-progress{padding:0 10px 8px}}
+@media(max-width:640px){.chat-main .composer textarea{min-height:34px;max-height:min(40dvh,240px);font-size:16px}.creator-chat-progress{padding:0 10px 8px}}
 
-.edit-workspace .edit-composer textarea{height:auto!important;min-height:30px!important;max-height:160px!important;overflow-y:hidden;resize:none!important;overscroll-behavior:contain}
+.edit-workspace .edit-composer textarea{height:auto!important;min-height:30px!important;max-height:min(40dvh,240px)!important;overflow-y:hidden;resize:none!important;overscroll-behavior:contain}
 
 .edit-composer-attachments{display:flex;flex-wrap:wrap;gap:6px;flex:1 0 100%;min-width:0}.edit-composer-attachments>span,.edit-message-attachments>span{display:inline-flex;align-items:center;gap:6px;max-width:100%;overflow-wrap:anywhere;border:1px solid var(--border,#30363d);border-radius:10px;padding:5px 8px;font-size:12px}.edit-composer-attachments button{border:0;background:transparent;color:inherit;padding:2px 5px;min-height:22px}.edit-composer-tools label{cursor:pointer}
 .edit-message-attachments{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
