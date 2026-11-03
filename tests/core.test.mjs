@@ -7,7 +7,7 @@ import { boundPrompt, parseModelJson } from '../server/ai-safety.js';
 
 test('repo names reject traversal and invalid GitHub names',()=>{assert.equal(validateRepoName('my-repo'),true);assert.equal(validateRepoName('../repo'),false);assert.equal(validateRepoName('has space'),false)});
 test('CSV parser handles quoted commas and escaped quotes',()=>{assert.deepEqual(parseCsv('name,note\nA,"hello, world"\nB,"say ""hi"""'),[['name','note'],['A','hello, world'],['B','say "hi"']])});
-test('pricing packs preserve public prices, revised credit counts and operation costs',()=>{assert.deepEqual(PACKS.map(p=>[p.usd,p.credits]),[[1.99,36],[4.99,110],[9.99,240],[19.99,500]]);assert.deepEqual(OPERATIONS,{diagnosis:10,repair:20});assert.ok(PACKS.every(p=>calculatePack(p).passesTarget))});
+test('pricing packs preserve public prices, revised credit counts and operation costs',()=>{assert.deepEqual(PACKS.map(p=>[p.usd,p.credits]),[[1.99,200],[4.99,600],[9.99,1200],[19.99,2400]]);assert.deepEqual(OPERATIONS,{chat:1,diagnosis:1,repair:3,fileGeneration:3,zipGeneration:4,imageDelivery:8,videoDelivery:25,githubCommit:2,cloudSync:1});assert.ok(PACKS.every(p=>calculatePack(p).passesTarget))});
 
 test('prompt bounding function enforces configured limits',()=>{const input='x'.repeat(30000);assert.equal(boundPrompt(input,25000).length,25000);assert.equal(boundPrompt('abc',25000),'abc')});
 test('model JSON parser handles fenced JSON and rejects malformed output',()=>{assert.deepEqual(parseModelJson('```json\n{\"ok\":true}\n```'),{ok:true});assert.throws(()=>parseModelJson('not json'));assert.deepEqual(parseModelJson('[1,2]'),[1,2]);assert.deepEqual(parseModelJson('{"items":[1,2'),{items:[1,2]})});

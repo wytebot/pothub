@@ -1,21 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { buildFallbackSequence } from '../src/lib/agent-routing.js';
+import { readFile } from 'node:fs/promises';
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('fallback sequence keeps task agents first and appends sibling saved agents without duplicates', () => {
-  const primary = [{ key: 'k1', provider: 'gemini', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] }, { key: 'k2', provider: 'openai', models: ['gpt-4.1-mini'] }];
-  const extra = [{ key: 'k3', provider: 'anthropic', models: ['claude-sonnet-4-5'] }, { key: 'k1', provider: 'gemini', models: ['gemini-2.5-flash'] }];
+test('fallback sequence never borrows sibling-task agents', () => {
+  const primary = [{ key: 'k1', provider: 'gemini', task: 'chat', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] }, { key: 'k2', provider: 'openai', task: 'chat', models: ['gpt-4.1-mini'] }];
+  const extra = [{ key: 'k3', provider: 'anthropic', task: 'diagnosis', models: ['claude-sonnet-4-5'] }, { key: 'k1', provider: 'gemini', task: 'image', models: ['gemini-2.5-flash'] }];
   const out = buildFallbackSequence(primary, extra, 8);
-  assert.deepEqual(out.map(x => `${x.key}:${x.model}`), ['k1:gemini-2.5-flash', 'k2:gpt-4.1-mini', 'k1:gemini-2.5-pro', 'k3:claude-sonnet-4-5']);
+  assert.deepEqual(out.map(x => `${x.key}:${x.model}`), ['k1:gemini-2.5-flash', 'k2:gpt-4.1-mini', 'k1:gemini-2.5-pro']);
+});
+
+test('fallback sequence rejects unscoped and legacy all-task agents', () => {
+  assert.deepEqual(buildFallbackSequence([{ key: 'k1', provider: 'gemini', models: ['m1'] }, { key: 'k2', provider: 'gemini', task: 'all', models: ['m2'] }], [], 8), []);
 });
 
 test('fallback sequence never exceeds the limit and never invents candidates', () => {
-  const primary = [{ key: 'k1', provider: 'gemini', models: ['a', 'b', 'c'] }];
-  assert.equal(buildFallbackSequence(primary, [{ key: 'k9', provider: 'openai', models: ['x'] }], 3).length, 3);
+  const primary = [{ key: 'k1', provider: 'gemini', task: 'chat', models: ['a', 'b', 'c'] }];
+  assert.equal(buildFallbackSequence(primary, [{ key: 'k9', provider: 'openai', task: 'chat', models: ['x'] }], 3).length, 3);
   assert.deepEqual(buildFallbackSequence([], [], 8), []);
-  assert.deepEqual(buildFallbackSequence([{ key: '', provider: 'gemini', models: ['a'] }], [], 8), []);
+  assert.deepEqual(buildFallbackSequence([{ key: '', provider: 'gemini', task: 'chat', models: ['a'] }], [], 8), []);
 });
 
 test('server model router only accepts saved-agent candidates and has multi-pass fallback', async () => {
@@ -29,6 +33,13 @@ test('server model router only accepts saved-agent candidates and has multi-pass
   assert.match(body, /deadPairs/);
   assert.match(body, /Your configured agent did not complete this request/);
   assert.match(body, /AGENT_ROUTES_FAILED/);
+});
+
+test('server enforces exact task and workspace on transient BYOK candidates', async () => {
+  const app = await read('server/app.js');
+  assert.match(app, /item\.task === task/);
+  assert.match(app, /item\.workspace === \(String\(req\.headers\['x-pothub-workspace'\]/);
+  assert.match(app, /item\.task !== 'all'/);
 });
 
 test('catalog or circuit-breaker skips are deferred, not dropped, and Gemini catalog is fully paged', async () => {
@@ -48,5 +59,6 @@ test('client sends only agents saved on API & Agents, compatible with the task, 
   assert.match(ui, /prepareAgentCandidates/);
   assert.match(ui, /buildFallbackSequence\(primary,extra,8\)/);
   assert.match(ui, /providersForFunction\(fn\)\.some/);
+  assert.match(ui, /a\.workspace\|\|'developer'/);
   assert.doesNotMatch(ui, /GEMINI_API_KEY|process\.env\.NEXT_PUBLIC_[A-Z_]*API_KEY/);
 });

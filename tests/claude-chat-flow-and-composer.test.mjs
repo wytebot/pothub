@@ -13,9 +13,11 @@ test('creator chat exposes request lifecycle steps without cycling through fake 
  assert.match(ui,/activeIndex=\{chatStage\}/);
 });
 test('chat composer grows to a bounded height then scrolls internally',()=>{
- assert.match(ui,/Math\.min\(el\.scrollHeight,160\)/);
- assert.match(css,/\.chat-main \.composer textarea\{[^}]*max-height:160px;overflow-y:hidden/s);
- assert.match(css,/\.edit-workspace \.edit-composer textarea\{[^}]*max-height:160px!important;overflow-y:hidden/s);
+ assert.match(ui,/Math\.min\(el\.scrollHeight,240\)/);
+ assert.match(css,/\.chat-main \.composer textarea\{[^}]*max-height:min\(40dvh,240px\)/s);
+ assert.match(css,/\.chat-main \.composer textarea\{[^}]*overflow-y:hidden/s);
+ assert.match(css,/\.edit-workspace \.edit-composer textarea\{[^}]*max-height:min\(40dvh,240px\)!important/s);
+ assert.match(css,/\.edit-workspace \.edit-composer textarea\{[^}]*overflow-y:hidden/s);
 });
 test('creator attachments accept common code and document formats and retain size/count limits',()=>{
  assert.match(ui,/\.csv,\.json,\.js,\.jsx,\.ts,\.tsx,\.html,\.css,\.xml/);

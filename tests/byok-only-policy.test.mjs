@@ -7,12 +7,14 @@ test('AI candidate selection never builds routes from platform environment keys'
   assert.match(app, /const candidates = userCandidates\.map/);
   assert.doesNotMatch(app, /process\.env\.GEMINI_API_KEY\s*\|\|/);
   assert.doesNotMatch(app, /process\.env\.AI_FALLBACK_API_KEY/);
-  assert.match(app, /PotHub does not use platform-funded AI/);
+  assert.match(app, /Bring your own AI\. PotHub orchestrates it\./);
 });
 test('failed user agent routes return a bounded BYOK-only diagnostic', () => {
   assert.match(app, /Your configured agent did not complete this request/);
   assert.match(app, /PotHub never substitutes a platform model/);
-  assert.match(app, /interleaveAgentCandidates\(eligible,8\)/);
+  assert.match(app, /interleaveAgentCandidates\(mapped,8\)/);
+  assert.match(app, /item\.task === task/);
+  assert.match(app, /item\.workspace ===/);
 });
 test('repository source remains GitHub-backed and Codelab does not implement server-side repository storage', () => {
   const codelab = fs.readFileSync(new URL('../src/ui/CodelabWorkspace.jsx', import.meta.url), 'utf8');

@@ -42,10 +42,10 @@ test('agents without a configured key/provider/model are never candidates', () =
   ]), []);
 });
 
-test('API agent test UI tests configured model variants rather than only the primary model', async () => {
+test('API agent test uses server-side saved agent IDs instead of sending API keys from the client', async () => {
   const fs = await import('node:fs');
   const app = fs.readFileSync(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
-  assert.ok(app.includes('const models=[...new Set([a.model,...(Array.isArray(a.models)?a.models:[])]'));
-  assert.match(app, /passed=results\.some\(result=>result\.ok\)/);
-  assert.match(app, /A configured fallback model was used/);
+  assert.match(app, /body:JSON\.stringify\(\{agentIds:\[a\.id\]\}\)/);
+  assert.match(app, /X-Pothub-Task-Kind/);
+  assert.match(app, /agentConfig:\{agentIds:selected\.map\(a=>a\.agentId\)\}/);
 });
