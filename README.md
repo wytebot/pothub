@@ -2,6 +2,10 @@
 
 Pothub is a React 18 + Next.js application for browser deployment on Vercel, with a separate static-export build for Capacitor Android. The Express API is routed through a Next.js API catch-all on Vercel and remains responsible for authentication, GitHub operations, provider proxying, video jobs, credit accounting, and Flutterwave v4 payment verification.
 
+## AI model policy
+
+**Bring your own AI. PotHub orchestrates it.** Every AI inference task must use an agent and provider key configured by the user for that task. PotHub does not provide platform-funded model inference.
+
 ## Project map
 - `src/ui/` — welcome, role selection, Developer/Creator workspaces, agents, history, backup, profile and responsive styling.
 - `src/lib/` — Dexie persistence, account-partitioned local cache, cloud sync, agent-key encryption, backup ZIP support, video adapter, biometric gate, and browser/native platform adapter.
@@ -58,4 +62,4 @@ This build adds Runway, Luma, Kling and Replicate video adapters; Firestore-back
 
 ### Persistent workspace storage
 
-PotHub keeps a durable local IndexedDB workspace and automatically synchronizes saved agents, chats, prompts, runs, projects, and metadata to the signed-in account. Local rows are partitioned per account when switching users so offline changes are preserved instead of cleared. Configure `POTHUB_VAULT_ENCRYPTION_KEY` as a stable server-only Vercel environment variable to enable encrypted API-key sync. Binary media blobs remain local and are transferable through the ZIP backup. HTML pages are network-only; only immutable static assets are cached by the service worker.
+PotHub keeps a durable local IndexedDB workspace and automatically synchronizes saved agents, chats, prompts, runs, projects, and metadata to the signed-in account. Local rows are partitioned per account when switching users so offline changes are preserved instead of cleared. Configure a dedicated `POTHUB_VAULT_ENCRYPTION_KEY` as a stable server-only Vercel environment variable to enable encrypted API-key sync (generate with `openssl rand -hex 32`; exactly 64 hex characters; do not reuse `SESSION_SECRET`). Binary media blobs remain local and are transferable through the ZIP backup. HTML pages are network-only; only immutable static assets are cached by the service worker.
