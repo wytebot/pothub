@@ -21,7 +21,7 @@ This is a staged migration, not a claim that every API key is now absent from ev
 
 - Firebase Admin / Firestore must be configured and available for server-side agent resolution.
 - `POTHUB_VAULT_ENCRYPTION_KEY` must be a stable, randomly generated 32-byte key encoded as 64 hexadecimal characters (generate with `openssl rand -hex 32`). Back it up securely before deployment; changing it without a key migration makes stored agent credentials unreadable.
-- Remove legacy platform AI provider keys as required by the existing BYOK startup guard.
+- Legacy platform AI provider keys are ignored for inference; remove them from deployment settings when convenient.
 
 ## Manual checks
 
