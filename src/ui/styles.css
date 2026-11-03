@@ -505,3 +505,31 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 .universal-editor-loading{min-height:150px;display:grid;place-items:center;color:var(--muted);font-size:13px;background:#0b0f14}
 .universal-code-editor .monaco-editor,.universal-code-editor .monaco-editor-background,.universal-code-editor .monaco-editor .margin{background-color:#0b0f14!important}
 @media(max-width:600px){.universal-editor-toolbar{align-items:flex-start}.universal-editor-actions{width:100%}.universal-editor-actions button{flex:1}.universal-editor-surface{max-width:100%}}
+
+
+/* Chat reliability: reserve a real flex row for the composer and prevent mobile clipping. */
+.creator-chat-mode .app-shell,.creator-chat-mode .app-body,.creator-chat-mode .main-content{height:100dvh;min-height:0;overflow:hidden}
+.creator-chat-mode .chat-layout{display:flex;min-height:0;height:100dvh;overflow:hidden}
+.creator-chat-mode .chat-main{display:flex;flex:1 1 auto;flex-direction:column;min-width:0;min-height:0;height:100%;overflow:hidden}
+.creator-chat-mode .creator-chat-header,.creator-chat-mode .creator-prompt-tools,.creator-chat-mode .creator-chat-progress,.creator-chat-mode .video-agent-nudge,.creator-chat-mode .composer{flex:0 0 auto}
+.creator-chat-mode .chat-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:18px;scroll-padding-bottom:24px}
+.creator-chat-mode .composer{position:relative;bottom:auto;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:8px 12px calc(10px + env(safe-area-inset-bottom));margin:0;background:#000;z-index:5}
+.creator-chat-mode .composer textarea{box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:54px;max-height:180px;overflow-y:auto;resize:none;line-height:1.45;padding:14px 16px;border-radius:24px}
+.creator-chat-mode .composer-footer{display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:0 2px calc(env(safe-area-inset-bottom)*.15);}
+.creator-chat-mode .composer-footer .send{flex:0 0 46px;width:46px;height:46px;min-width:46px;min-height:46px;display:grid;place-items:center;margin-left:auto}
+.creator-chat-mode .composer-attachments{max-width:100%;overflow-x:auto}
+.creator-chat-mode .message-body{overflow-wrap:anywhere;word-break:normal}
+.creator-chat-mode .message.pending .message-body{opacity:.72}
+@media(max-width:760px){.creator-chat-mode .chat-layout,.creator-chat-mode .chat-main{height:100dvh;max-height:100dvh}.creator-chat-mode .creator-chat-header{padding-top:calc(6px + env(safe-area-inset-top));padding-bottom:6px}.creator-chat-mode .creator-prompt-tools{max-width:100%;overflow-x:auto}.creator-chat-mode .composer{padding-left:10px;padding-right:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}.creator-chat-mode .composer textarea{min-height:52px;max-height:160px;font-size:16px}.creator-chat-mode .creator-chat-progress{max-height:24vh;overflow:auto}}
+
+/* Chat controls must remain tappable on mobile/Capacitor even while the scroll region is active. */
+.creator-chat-mode .chat-main .composer,
+.creator-chat-mode .chat-main .composer-footer,
+.creator-chat-mode .chat-main .composer-footer button,
+.creator-chat-mode .chat-main .composer-footer label,
+.creator-chat-mode .edit-workspace .edit-composer,
+.creator-chat-mode .edit-workspace .edit-composer button { pointer-events:auto; touch-action: manipulation; }
+.creator-chat-mode .chat-main .composer-footer { position:relative; z-index:8; }
+.creator-chat-mode .chat-main .composer-footer .send { position:relative; z-index:9; flex-shrink:0; }
+.creator-chat-mode .chat-main .composer textarea { pointer-events:auto; touch-action:pan-y; }
+.creator-chat-mode .chat-scroll { position:relative; z-index:1; }
