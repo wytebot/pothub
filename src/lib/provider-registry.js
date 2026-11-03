@@ -17,6 +17,7 @@ export function normalizeConfiguredModel(provider, model) {
 // Gemini models Google has shut down (a retired model answers HTTP 404) and the replacement Google recommends.
 // Agents saved by older PotHub versions still carry these IDs.
 const RETIRED_GEMINI_MODELS = {
+  'gemini-3.8-flash': 'gemini-3.6-flash',
   'gemini-2.5-flash-image': 'gemini-3.1-flash-image',
   'gemini-2.5-flash-image-preview': 'gemini-3.1-flash-image',
   'gemini-3.1-flash-image-preview': 'gemini-3.1-flash-image',
@@ -29,7 +30,7 @@ const RETIRED_GEMINI_MODELS = {
 };
 
 export const PROVIDERS = [
- {id:'gemini',label:'Google Gemini',protocol:'gemini',auth:'x-goog-api-key',baseUrl:'https://generativelanguage.googleapis.com',models:['gemini-3.8-flash','gemini-3.5-flash-lite','gemini-3.6-flash'],modelsByFunction:{Image:['gemini-3.1-flash-image','gemini-3-pro-image']},capabilities:[...VISION,'image','video','embeddings'],streaming:true,implemented:true},
+ {id:'gemini',label:'Google Gemini',protocol:'gemini',auth:'x-goog-api-key',baseUrl:'https://generativelanguage.googleapis.com',models:['gemini-3.5-flash-lite','gemini-3.6-flash'],modelsByFunction:{Image:['gemini-3.1-flash-image','gemini-3-pro-image']},capabilities:[...VISION,'image','video','embeddings'],streaming:true,implemented:true},
  OPENAI('openai','OpenAI','https://api.openai.com/v1',['gpt-4.1','gpt-4.1-mini','gpt-4o','gpt-4o-mini'],{capabilities:[...VISION,'image','embeddings'],modelsByFunction:{Image:['gpt-image-2','gpt-image-2.5-sunburst','gpt-image-2.5-flare']}}),
  ANTHROPIC('anthropic','Anthropic','https://api.anthropic.com/v1',['claude-sonnet-4-5','claude-haiku-4-5','claude-opus-4-1']),
  OPENAI('mistral','Mistral','https://api.mistral.ai/v1',['mistral-large-latest','mistral-small-latest','codestral-latest']),

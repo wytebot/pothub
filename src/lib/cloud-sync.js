@@ -28,18 +28,21 @@ function rowVersion(row) { return Math.max(Date.parse(String(row?.updatedAt || '
 async function localPayload(table, row) {
   const payload = stripLocalBinary(row);
   if (table === 'agents') {
-    if (!row.secret) throw new Error(`Saved API agent “${row.label || row.id}” has no encrypted key on this device.`);
-    payload.secretPlain = await decryptSecret(row.secret);
+    if (row.secret) { payload.secretPlain = await decryptSecret(row.secret); payload.keyConfigured = true; }
+    else payload.keyConfigured = !!row.keyConfigured;
     delete payload.secret;
+    delete payload.secretEncrypted;
   }
   return payload;
 }
-async function fromCloud(table, payload) {
+async function fromCloud(table, payload, local = null) {
   const row = { ...payload };
   if (table === 'agents') {
-    if (!row.secretPlain) throw new Error(`Saved API agent “${row.label || row.id}” is missing its cloud-encrypted key.`);
-    row.secret = await encryptSecret(row.secretPlain);
+    if (row.secretPlain) row.secret = await encryptSecret(row.secretPlain);
+    else if (local?.secret) row.secret = local.secret; // Keep the device's own encrypted copy; never overwrite it with absent server key material.
+    else row.keyConfigured = !!row.keyConfigured;
     delete row.secretPlain;
+    delete row.secretEncrypted;
   }
   return row;
 }
@@ -105,11 +108,11 @@ export async function syncAccountWorkspace({ db, api, user, onStatus = () => {} 
     }
     if (!item.data) continue;
     if (!local || rowVersion(item.data) > rowVersion(local)) {
-      const restored = await fromCloud(item.table, item.data);
+      const restored = await fromCloud(item.table, item.data, local);
       await db.table(item.table).put(restored);
     } else {
       const localData = await localPayload(item.table, local);
-      const localChanged = rowVersion(local) > rowVersion(item.data) || JSON.stringify(localData) !== JSON.stringify(item.data);
+      const comparableLocal = {...localData}; delete comparableLocal.secretPlain; delete comparableLocal.secret; delete comparableLocal.secretEncrypted; const comparableRemote = {...item.data}; delete comparableRemote.secretPlain; delete comparableRemote.secret; delete comparableRemote.secretEncrypted; const localChanged = rowVersion(local) > rowVersion(item.data) || JSON.stringify(comparableLocal) !== JSON.stringify(comparableRemote);
       if (localChanged) pending.push({ table: item.table, id: String(local.id), updatedAt: local.updatedAt || local.videoJob?.updatedAt || local.createdAt || new Date().toISOString(), data: localData });
     }
   }
