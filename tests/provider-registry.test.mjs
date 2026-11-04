@@ -26,7 +26,8 @@ test('legacy provider labels normalize without breaking saved agents',()=>{
   assert.deepEqual(DEFAULT_MODELS,{});
   assert.ok(!PROVIDERS.find(p=>p.id==='gemini').models.includes('gemini-3.8-flash'));
   assert.ok(PROVIDERS.find(p=>p.id==='gemini').models.includes('gemini-3.6-flash'));
-  assert.equal(providerById('azure-openai').implemented,false);
+  // Custom endpoints are enabled so any provider/model can be used without being hard-coded.
+  for(const id of ['azure-openai','openai-compatible','anthropic-compatible']){assert.notEqual(providerById(id).implemented,false,id);assert.equal(providerById(id).requiresCustomEndpoint,true,id)}
 });
 test('provider declarations remain unique and carry capabilities',()=>{
   const ids=PROVIDERS.map(p=>p.id);assert.equal(new Set(ids).size,ids.length);

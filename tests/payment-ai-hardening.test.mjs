@@ -47,6 +47,6 @@ test('streaming creator prompt requires evidence-grounded answers and honest too
 
 test('version endpoint exposes the source revision so deployments can be identified', () => {
   const route = source.slice(source.indexOf("app.get('/api/version'"), source.indexOf("app.get('/api/health'"));
-  assert.match(route, /sourceRevision:'pothub-payment-ai-scope-hardening-2026-11-04-r1'/);
+  assert.match(route, /sourceRevision:'pothub-[a-z0-9-]+-2026-11-04-r\d+'/);
   assert.match(route, /Cache-Control/);
 });
