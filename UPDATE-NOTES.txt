@@ -1,0 +1,12 @@
+PotHub targeted Vercel JSX syntax fix
+
+Affected source file:
+  src/ui/WorkspaceSection.jsx
+
+Version update:
+  package.json: 0.1.0 -> 0.1.1
+
+Validation:
+  WorkspaceSection.jsx passed TypeScript JSX/JavaScript syntax transpilation.
+
+Apply these files at the matching paths in the repository, then commit and push.
