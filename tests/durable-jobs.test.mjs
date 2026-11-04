@@ -1,0 +1,3 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import {normalizeJobPatch,jobEvent} from '../server/durable-jobs.js';
+test('job updates bound progress and terminal timestamps',()=>{assert.deepEqual(normalizeJobPatch({state:'running',progress:120},10),{state:'running',updatedAt:10,progress:100});assert.equal(normalizeJobPatch({state:'succeeded'},12).finishedAt,12);assert.throws(()=>normalizeJobPatch({state:'unknown'}))});
+test('job events contain resumable sequence and safe status fields',()=>{const e=jobEvent({state:'running',progress:22,stage:'Writing files',message:'Working'},4);assert.equal(e.seq,4);assert.equal(e.progress,22);assert.equal(e.type,'update')});
