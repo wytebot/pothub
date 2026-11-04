@@ -75,4 +75,35 @@ async function fal(c,input) {
   if(!result)throw new Error('fal image generation is still processing. Retry later.');const out=[];
   for(const [i,item] of (result.images||[]).slice(0,input.count).entries()){const url=String(item.url||'');if(!url.startsWith('https://')||!(new URL(url).hostname==='fal.media'||new URL(url).hostname.endsWith('.fal.media')))continue;const r=await fetchPinnedHttps(url,{signal:timeout(20000,input.deadlineAt),allowHosts:['fal.media']});if(!r.ok)continue;const mime=(r.headers.get('content-type')||item.content_type||'image/png').split(';')[0];if(!IMAGE_MIME.test(mime))continue;out.push(normalizeImage((await readImageBytes(r)).toString('base64'),mime,i+1))}return out;
 }
-export async function generateImage(c,input){switch(c.provider){case'openai':return openAI(c,input);case'stability':return stability(c,input);case'black-forest-labs':return bfl(c,input);case'replicate':return replicate(c,input);case'fal':return fal(c,input);default:throw new Error(`Image adapter for ${c.provider} is not implemented.`)}}
+
+function sniffImageMime(bytes){
+  if(bytes.length>8&&bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47)return 'image/png';
+  if(bytes.length>3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff)return 'image/jpeg';
+  if(bytes.length>12&&bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP')return 'image/webp';
+  return '';
+}
+// Any OpenAI-style /images/generations endpoint (custom providers, gateways, Azure OpenAI deployments).
+// No model ID is hard-coded: the provider's response decides whether the model can draw.
+async function openAICompatible(c,input){
+  const raw=String(c.baseUrl||'').trim();
+  if(!raw)throw new Error('Enter the API endpoint for this image agent.');
+  const endpoint=/\/images\/generations(?:\?.*)?$/.test(raw)?raw:`${raw.replace(/\/+$/,'')}/images/generations`;
+  const headers=c.provider==='azure-openai'?{'api-key':c.key}:{Authorization:`Bearer ${c.key}`};
+  const size=input.size||(['9:16','2:3','3:4'].includes(input.aspectRatio)?'1024x1536':['16:9','3:2','4:3'].includes(input.aspectRatio)?'1536x1024':'1024x1024');
+  const response=await fetchPinnedHttps(endpoint,{method:'POST',signal:timeout(90000,input.deadlineAt),headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({model:c.model,prompt:input.prompt,n:input.count,size})});
+  const d=await json(response,c.key);
+  const out=[];
+  for(const [i,item] of (Array.isArray(d.data)?d.data:[]).slice(0,input.count).entries()){
+    if(item?.b64_json){const bytes=Buffer.from(String(item.b64_json),'base64');out.push(normalizeImage(item.b64_json,sniffImageMime(bytes)||'image/png',i+1));continue}
+    const url=String(item?.url||'');
+    if(!url.startsWith('https://'))continue;
+    const r=await fetchPinnedHttps(url,{signal:timeout(30000,input.deadlineAt)});
+    if(!r.ok)throw new Error(`Image download returned HTTP ${r.status}.`);
+    const bytes=await readImageBytes(r);
+    const mime=sniffImageMime(bytes)||String(r.headers.get('content-type')||'').split(';')[0];
+    out.push(normalizeImage(bytes.toString('base64'),mime,i+1));
+  }
+  if(!out.length)throw new Error('The provider accepted the request but returned no image data.');
+  return out;
+}
+export async function generateImage(c,input){switch(c.provider){case'openai-compatible':case'azure-openai':return openAICompatible(c,input);case'openai':return openAI(c,input);case'stability':return stability(c,input);case'black-forest-labs':return bfl(c,input);case'replicate':return replicate(c,input);case'fal':return fal(c,input);default:throw new Error(`Image adapter for ${c.provider} is not implemented.`)}}

@@ -305,7 +305,7 @@ Return JSON only: {"deprecated":[{"id":"exact-id","status":"deprecated|retired",
     const job = (async () => {
       const old = await load(provider);
       try {
-        const { deprecated, sources } = await discover(provider, cfg, modelIds);
+        const { deprecated, sources } = await (deps.discover || discover)(provider, cfg, modelIds);
         const rec = { provider, checkedAt: now(), attemptedAt: now(), deprecated, sources, lastError: null };
         await save(provider, rec);
         return rec;
@@ -320,14 +320,14 @@ Return JSON only: {"deprecated":[{"id":"exact-id","status":"deprecated|retired",
   }
 
   /** Returns the freshest record available within `waitMs`; never throws. */
-  async function status(provider, { waitMs = 6000, force = false } = {}) {
+  async function status(provider, { waitMs = 6000, force = false, modelIds = [] } = {}) {
     try {
       const cfg = config();
       let rec = await load(provider);
       const stale = !rec?.checkedAt || now() - rec.checkedAt >= cfg.ttl;
       const cooling = rec?.attemptedAt && now() - rec.attemptedAt < FAILURE_BACKOFF_MS && rec.lastError;
       if (force || (stale && !cooling)) {
-        const job = refresh(provider, opts.modelIds || []);
+        const job = refresh(provider, modelIds);
         if (job) {
           const fresh = await Promise.race([job, new Promise((r) => setTimeout(() => r(undefined), waitMs))]);
           if (fresh) rec = fresh;
