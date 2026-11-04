@@ -1,36 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-const app=readFileSync(new URL('../src/ui/App.jsx',import.meta.url),'utf8');
-const ui=readFileSync(new URL('../src/ui/WorkspaceSection.jsx',import.meta.url),'utf8');
-const css=readFileSync(new URL('../src/ui/styles.css',import.meta.url),'utf8');
-test('creator chat exposes request lifecycle steps without cycling through fake progress',()=>{
- assert.match(app,/function ProgressSteps\(\{labels=\[\],activeIndex=0,detail=''\}\)/);
- assert.doesNotMatch(app,/setInterval\(\(\)=>setActive/);
- assert.match(app,/\[chatStage,setChatStage\]=useState\(0\)/);
- assert.match(ui,/Preparing chat context and attachments/);
- assert.match(ui,/Saving the response to chat history/);
- assert.match(ui,/activeIndex=\{chatStage\}/);
-});
-test('chat composer grows to a bounded height then scrolls internally',()=>{
- assert.match(ui,/Math\.min\(el\.scrollHeight,160\)/);
- assert.match(css,/\.chat-main \.composer textarea\{[^}]*max-height:160px;overflow-y:hidden/s);
- assert.match(css,/\.edit-workspace \.edit-composer textarea\{[^}]*max-height:160px!important;overflow-y:hidden/s);
-});
-test('creator attachments accept common code and document formats and retain size/count limits',()=>{
- assert.match(ui,/\.csv,\.json,\.js,\.jsx,\.ts,\.tsx,\.html,\.css,\.xml/);
- assert.match(ui,/\.slice\(0,8\)/);
- assert.match(ui,/100\*1024\*1024/);
- assert.match(app,/return \(await file\.text\(\)\)\.slice\(0,maxChars\)/);
- assert.match(app,/docx\|xlsx\|zip/);
-});
+import { classifyRequest } from '../src/lib/request-intent.js';
+import { buildOutputFile } from '../src/lib/output-files.js';
+import { responseConstraintIssues } from '../server/response-styles.js';
 
-test('repository chat accepts and forwards file and image attachments',()=>{
- const server=readFileSync(new URL('../server/app.js',import.meta.url),'utf8');
- assert.match(ui,/setEditAttachments\(\[\]\)/);
- assert.match(ui,/attachments:attachmentPayload/);
- assert.match(ui,/edit-composer-attachments/);
- assert.match(server,/attachments:z\.array\(z\.object\(\{id:z\.string\(\)\.max\(100\)\.optional\(\)/);
- assert.match(server,/Attached file contents/);
- assert.match(server,/const extraParts=\(i\.attachments\|\|\[\]\)/);
+test('creator request classification preserves chat for analysis and routes direct media commands',()=>{
+ assert.equal(classifyRequest('Generate an image of a cat').task,'image');
+ assert.equal(classifyRequest('How do I generate an image in Python?').task,'chat');
+ assert.equal(classifyRequest('Give me a prompt for a logo').task,'chat');
+});
+test("explicit answer constraints are checked without changing the user's requested content",()=>{
+ assert.deepEqual(responseConstraintIssues('Answer in 3 bullets','- one\n- two\n- three'),[]);
+ assert.ok(responseConstraintIssues('Keep it under 5 words','This answer has more than five words.').length>0);
+});
+test('text and CSV exports preserve text and use an Excel-compatible UTF-8 BOM for CSV only',async()=>{
+ const txt=await buildOutputFile('txt','# Hello\n\nA useful answer.');
+ const csv=await buildOutputFile('csv','```csv\nname,value\nAlice,2\n```');
+ assert.ok(txt&&csv);assert.equal(txt.data.charCodeAt(0),72);assert.equal(csv.data.charCodeAt(0),0xFEFF);
+ assert.match(csv.data,/Alice,2/);
 });

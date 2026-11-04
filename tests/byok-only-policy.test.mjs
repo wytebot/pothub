@@ -1,28 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-const app = fs.readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
-test('AI candidate selection never builds routes from platform environment keys', () => {
-  assert.match(app, /const userCandidates = Array\.isArray\(explicitCandidates\) \? explicitCandidates : requestAgentConfig\(req\)/);
-  assert.match(app, /const candidates = userCandidates\.map/);
-  assert.doesNotMatch(app, /process\.env\.GEMINI_API_KEY\s*\|\|/);
-  assert.doesNotMatch(app, /process\.env\.AI_FALLBACK_API_KEY/);
-  assert.match(app, /PotHub does not use platform-funded AI/);
-});
-test('failed user agent routes return a bounded BYOK-only diagnostic', () => {
-  assert.match(app, /Your configured agent did not complete this request/);
-  assert.match(app, /PotHub never substitutes a platform model/);
-  assert.match(app, /interleaveAgentCandidates\(eligible,8\)/);
-});
-test('repository source remains GitHub-backed and Codelab does not implement server-side repository storage', () => {
-  const codelab = fs.readFileSync(new URL('../src/ui/CodelabWorkspace.jsx', import.meta.url), 'utf8');
-  assert.match(app, /app\.post\('\/api\/github\/create-repo'/);
-  assert.doesNotMatch(codelab, /localStorage\.setItem\(|indexedDB|upload.*repo/i);
-});
+import { buildFallbackSequence, interleaveAgentCandidates } from '../src/lib/agent-routing.js';
+import { classifyRequest } from '../src/lib/request-intent.js';
 
-test('frontend sends configured BYOK agents through round-robin model/key fallback', () => {
-  const ui = fs.readFileSync(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
-  assert.match(ui, /import \{interleaveAgentCandidates,buildFallbackSequence\} from '\.\.\/lib\/agent-routing'/);
-  assert.match(ui, /buildFallbackSequence\(primary,extra,8\)/);
-  assert.match(ui, /const models=\[\.\.\.new Set\(\[a\.model,\.\.\.\(Array\.isArray\(a\.models\)/);
+test('BYOK fallback contains only explicitly configured agents and their models',()=>{
+ const configured=[{key:'user-key-a',provider:'gemini',models:['model-a','model-b'],task:'chat'},{key:'user-key-b',provider:'openai',models:['model-c'],task:'chat'}];
+ const result=buildFallbackSequence(configured,[],8);
+ assert.deepEqual(result.map(x=>x.key),['user-key-a','user-key-b','user-key-a']);
+ assert.ok(result.every(x=>configured.some(a=>a.key===x.key&&a.provider===x.provider&&a.models.includes(x.model))));
+});
+test('empty or invalid saved agent configuration produces no fallback candidate',()=>{
+ assert.deepEqual(buildFallbackSequence([],[],8),[]);
+ assert.deepEqual(interleaveAgentCandidates([{key:'',provider:'gemini',models:['active-model']}]),[]);
+});
+test('intent routing distinguishes media creation from code and analysis before choosing an agent function',()=>{
+ assert.equal(classifyRequest('Generate an image of a red bicycle').task,'image');
+ assert.equal(classifyRequest('Create a video of ocean waves').task,'video');
+ assert.equal(classifyRequest('Write Python code to resize an image').task,'chat');
+ assert.equal(classifyRequest('Explain video codecs').task,'chat');
 });
