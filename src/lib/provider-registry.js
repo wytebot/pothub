@@ -75,7 +75,10 @@ export function filterDiscoveredModels(providerId, fn, rows) {
   if(!name) return false;
   if(id==='gemini') {
    const methods=Array.isArray(m?.supportedGenerationMethods)?m.supportedGenerationMethods:[];
-   if(task==='Image') return methods.includes('generateContent') && /image|nano.?banana/i.test(descriptor);
+   // Gemini's models.list metadata does not reliably expose output-modality support.
+   // Do not reject discovered IDs using name fragments; show all generateContent-capable
+   // models as candidates and verify image output with a real, bounded provider request.
+   if(task==='Image') return methods.includes('generateContent') && !textExcluded.test(descriptor) && !/(?:^|[-_/])(?:veo|video|tts)(?:[-_/]|$)/i.test(name);
    if(task==='Video') return /veo|video/i.test(descriptor);
    return methods.includes('generateContent') && !textExcluded.test(name) && !/(?:^|[-_/])(?:image|veo|video)(?:[-_/]|$)/i.test(name);
   }
