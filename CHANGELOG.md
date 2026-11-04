@@ -1,3 +1,15 @@
+## 2026-11-04 (r2) - Remove "add a video agent" message; release revision
+
+- Any provider or model can be used: OpenAI-compatible, Anthropic-compatible and Azure OpenAI custom endpoints are now enabled (they were switched off with `implemented:false`); model IDs remain free text; the server's model ID limit is 180 characters like the other routes (src/lib/provider-registry.js, server/app.js).
+- Fixed server/model-catalog.js: `status()` read an undefined `opts`, so documentation refreshes never ran. Added a `deps.discover` test hook. The module is imported but not used to filter live model lists.
+- Media adapters: added a generic OpenAI-compatible image adapter (`/images/generations`, b64 or URL results, Azure `api-key` header, SSRF-pinned, 15 MB cap, MIME sniffing) for the `openai-compatible` and `azure-openai` providers, which now advertise Image. Fixed the agent Test button: OpenAI image agents were tested with a chat call, and Runway/Luma/Replicate/Kling video agents always failed with "not wired". They now use non-billable key checks (`verifyVideoProvider`). New tests: tests/media-adapters-custom.test.mjs.
+- Pipeline gate: repaired the 9 failing source-regex/stale tests that would stop the GitHub Actions deploy (OAuth scope, reservation cleanup, configure-agent card, WyteLab menu, Chat AI wiring, 4 model-catalog tests). Tests now assert behavior, not exact source strings.
+
+- A missing Video agent no longer shows any "add/configure a video agent" toast, popup state or error text. Video-intent prompts without a Video agent fall through to Chat (src/ui/App.jsx routeMediaIntent, generateVideo, imagePromptVideoChain, retryVideoResult, resumeVideoJobs; src/ui/WorkspaceSection.jsx Resume button).
+- Server chat prompt no longer tells the model to send users to add an Image/Video agent (server/app.js).
+- /api/version sourceRevision is now `pothub-no-video-agent-message-2026-11-04-r2` so a live deployment can be told apart from an old one.
+- Tests: updated the routing assertion in tests/intent-routing-and-delivery.test.mjs, added a no-video-message test, made the sourceRevision test pattern-based.
+
 # One-pass audit changelog — 2026-11-01
 
 **Important honesty note:** “Fixed (source)” means a source change and a focused regression assertion exist; it does not mean the browser, provider, OAuth, Firestore, billing or APK flow was live-tested. “Needs live test” includes items whose source change is incomplete or whose behavior requires credentials/device verification; the evidence column says which. No item is silently represented as complete.
