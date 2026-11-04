@@ -9,11 +9,16 @@ test('Codelab hosts the WyteLab workspace on the PotHub session',()=>{
   assert.match(server,/app\.all\('\/api\/wytelab\/\*'/);
 });
 test('WyteLab menu items are in the PotHub sidebar without the APK partner button',()=>{
-  for(const l of ['Repositories','Recent Projects','Changes','Actions','Developer Hub','Logs','Billing','Search','Help','Privacy','Terms','About','Contact','Vercel'])assert.ok(app.includes(l),l);
+  // The sidebar now lives in the hosted WyteLab components, so check the whole PotHub + Codelab UI source.
+  const menu=read('../src/ui/codelab/components/Menu.jsx');
+  const ui=app+host+menu;
+  for(const l of ['Repositories','Recent Projects','Changes','Actions','Developer Hub','Logs','Billing','Search','Help','Privacy','Terms','About','Contact','Vercel'])assert.ok(ui.includes(l),l);
+  // The WyBuild partner entry is an external link only; PotHub itself has no in-app APK build button.
   assert.doesNotMatch(app,/Build APK/);
+  assert.match(menu,/p===\"partner\"\)\{openExternal\(/);
 });
 test('Chat AI leads to the chat area from the sidebar and the edit page',()=>{
-  assert.match(app,/openRepoAI\(codelabRepo\)/);
+  assert.match(app,/onOpenAI=\{openRepoAI\}/);
   assert.match(project,/Chat AI/);
   assert.match(project,/codelabContext\(\)\.openAI\?\.\(repo\)/);
 });
