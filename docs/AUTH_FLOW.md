@@ -27,3 +27,12 @@ The production API is an Express app mounted through the Next.js catch-all at `p
 - `browser_sessions` uses a SHA-256 hash of the opaque session ID as its Firestore document ID and an expiry timestamp. `/api/auth/logout` deletes the matching server-side record and clears session cookies.
 - Cross-site frontend/API deployments can block cookies; prefer same-origin deployment. Cross-origin native calls use an Authorization bearer header and explicit CORS allowlisting.
 - OAuth, Firebase domain behavior, session revocation, and native deep-link return still require live verification with deployed configuration.
+
+## Independent GitHub and Vercel sign-in
+
+- Google sign-in remains available for Creator accounts.
+- GitHub can start an independent Developer sign-in at `/api/auth/github`; adding `?link=1` is reserved for linking GitHub to an existing Google account. The callback uses signed, short-lived state and PKCE and the browser/native one-time ticket exchange.
+- Vercel can start an independent sign-in at `/api/auth/vercel`; the callback is `/api/vercel/callback`. The Vercel OAuth app must register that exact HTTPS callback and enable `openid`, `email`, `profile`, and `offline_access` for persistent Vercel API access. The login identity is scoped as `vercel_<OIDC sub>`; a Vercel-only account does not gain a GitHub token.
+- To link Vercel to an existing Google account, continue using `/api/vercel/connect` while signed in. It stores encrypted access/refresh tokens against the current identity.
+- Configure `VERCEL_CLIENT_ID`, `VERCEL_CLIENT_SECRET`, `VERCEL_REDIRECT_URI`, `SESSION_SECRET` (32+ characters), and Firestore. Set `VERCEL_REDIRECT_URI` to `https://<deployed-host>/api/vercel/callback` and register the same URL in Vercel's app settings.
+- OAuth configuration and live sign-in still require testing against the real GitHub/Vercel app registrations. The code cannot verify external secrets or dashboard callback settings by itself.
