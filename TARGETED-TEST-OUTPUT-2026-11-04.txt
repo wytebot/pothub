@@ -1,0 +1,172 @@
+TAP version 13
+# Subtest: BYOK is mandatory and legacy platform mode is normalized away
+ok 1 - BYOK is mandatory and legacy platform mode is normalized away
+  ---
+  duration_ms: 0.661672
+  type: 'test'
+  ...
+# Subtest: All workspaces require at least one configured BYOK agent
+ok 2 - All workspaces require at least one configured BYOK agent
+  ---
+  duration_ms: 0.977499
+  type: 'test'
+  ...
+# Subtest: BYOK fallback tries primary model for each configured key before model variants
+ok 3 - BYOK fallback tries primary model for each configured key before model variants
+  ---
+  duration_ms: 1.169645
+  type: 'test'
+  ...
+# Subtest: BYOK fallback preserves each model with its own key, provider, endpoint and task
+ok 4 - BYOK fallback preserves each model with its own key, provider, endpoint and task
+  ---
+  duration_ms: 0.214037
+  type: 'test'
+  ...
+# Subtest: BYOK fallback is bounded and removes duplicate model/key candidates
+ok 5 - BYOK fallback is bounded and removes duplicate model/key candidates
+  ---
+  duration_ms: 0.85625
+  type: 'test'
+  ...
+# Subtest: agents without a configured key/provider/model are never candidates
+ok 6 - agents without a configured key/provider/model are never candidates
+  ---
+  duration_ms: 0.132627
+  type: 'test'
+  ...
+# Subtest: API agent test UI tests configured model variants rather than only the primary model
+ok 7 - API agent test UI tests configured model variants rather than only the primary model
+  ---
+  duration_ms: 1.294139
+  type: 'test'
+  ...
+# Subtest: Creator chat follows new responses and pauses when reader touches or scrolls up
+ok 8 - Creator chat follows new responses and pauses when reader touches or scrolls up
+  ---
+  duration_ms: 0.873426
+  type: 'test'
+  ...
+# Subtest: Repository chat uses the same reader-controlled auto-follow behavior
+ok 9 - Repository chat uses the same reader-controlled auto-follow behavior
+  ---
+  duration_ms: 0.199276
+  type: 'test'
+  ...
+# Subtest: Creator and developer agents receive stronger quality and honesty instructions
+ok 10 - Creator and developer agents receive stronger quality and honesty instructions
+  ---
+  duration_ms: 0.509265
+  type: 'test'
+  ...
+# Subtest: directory exclusions are segment anchored
+ok 11 - directory exclusions are segment anchored
+  ---
+  duration_ms: 0.95053
+  type: 'test'
+  ...
+# Subtest: rejects traversal, absolute, env, and private key paths
+ok 12 - rejects traversal, absolute, env, and private key paths
+  ---
+  duration_ms: 0.355938
+  type: 'test'
+  ...
+# Subtest: Gemini model discovery filters by agent function and advertised generation methods
+ok 13 - Gemini model discovery filters by agent function and advertised generation methods
+  ---
+  duration_ms: 2.341423
+  type: 'test'
+  ...
+# Subtest: OpenAI-compatible discovery hides non-text models for chat and exposes image candidates only for Image
+ok 14 - OpenAI-compatible discovery hides non-text models for chat and exposes image candidates only for Image
+  ---
+  duration_ms: 0.516917
+  type: 'test'
+  ...
+# Subtest: reasoning models use max_completion_tokens and omit temperature/response_format
+ok 15 - reasoning models use max_completion_tokens and omit temperature/response_format
+  ---
+  duration_ms: 1.536389
+  type: 'test'
+  ...
+# Subtest: classic OpenAI models use max_tokens and supported JSON mode only
+ok 16 - classic OpenAI models use max_tokens and supported JSON mode only
+  ---
+  duration_ms: 0.150122
+  type: 'test'
+  ...
+# Subtest: registry includes the requested text providers and both custom protocols
+ok 17 - registry includes the requested text providers and both custom protocols
+  ---
+  duration_ms: 0.742151
+  type: 'test'
+  ...
+# Subtest: function filters do not leak image/video-only models into chat
+ok 18 - function filters do not leak image/video-only models into chat
+  ---
+  duration_ms: 1.811546
+  type: 'test'
+  ...
+# Subtest: legacy provider labels normalize without breaking saved agents
+ok 19 - legacy provider labels normalize without breaking saved agents
+  ---
+  duration_ms: 0.295789
+  type: 'test'
+  ...
+# Subtest: provider declarations remain unique and carry capabilities
+ok 20 - provider declarations remain unique and carry capabilities
+  ---
+  duration_ms: 0.193497
+  type: 'test'
+  ...
+# Subtest: legacy saved Gemini model is migrated before requests are routed
+ok 21 - legacy saved Gemini model is migrated before requests are routed
+  ---
+  duration_ms: 0.212205
+  type: 'test'
+  ...
+# Subtest: scope claim verifies and stays pinned to owner/repo/branch
+ok 22 - scope claim verifies and stays pinned to owner/repo/branch
+  ---
+  duration_ms: 1.71314
+  type: 'test'
+  ...
+# Subtest: scope claim rejects tampering, other users and expiry
+ok 23 - scope claim rejects tampering, other users and expiry
+  ---
+  duration_ms: 0.569965
+  type: 'test'
+  ...
+# Subtest: repair capability maps to the configured Fix generation function
+ok 24 - repair capability maps to the configured Fix generation function
+  ---
+  duration_ms: 0.706913
+  type: 'test'
+  ...
+# Subtest: client does not borrow sibling Chat/Diagnosis/Fix agents as cross-function fallbacks
+ok 25 - client does not borrow sibling Chat/Diagnosis/Fix agents as cross-function fallbacks
+  ---
+  duration_ms: 0.258281
+  type: 'test'
+  ...
+# Subtest: server selects only exact task agents or explicitly universal agents
+ok 26 - server selects only exact task agents or explicitly universal agents
+  ---
+  duration_ms: 0.208838
+  type: 'test'
+  ...
+# Subtest: streaming chat schema accepts bounded attachments and passes image parts to configured models
+ok 27 - streaming chat schema accepts bounded attachments and passes image parts to configured models
+  ---
+  duration_ms: 1.55974
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 470.444003
