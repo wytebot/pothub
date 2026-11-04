@@ -21,8 +21,20 @@ test('Vercel OAuth can use a one-time Google-account ticket for Capacitor and re
  assert.match(workspace,/api\/vercel\/connect\?native=1&link_ticket=/);
  assert.match(ui,/linked==='vercel'/);
 });
-test('GitHub linking from the workspace no longer starts an independent GitHub login',()=>{
- assert.match(ui,/Sign in with Google first, then connect GitHub from Codelab/);
- assert.match(ui,/api\/auth\/github\?link=1/);
- assert.doesNotMatch(ui,/preferred-role',value:'Developer'/);
+test('GitHub and Vercel support independent sign-in while explicit linking remains account-bound',()=>{
+ assert.match(app,/app\.get\('\/api\/auth\/vercel'/);
+ assert.match(app,/authMode:'login'/);
+ assert.match(app,/saved\.authMode==='login'\?`vercel_/);
+ assert.match(ui,/window\.location\.assign\(`\$\{authBase\}\/api\/auth\/github`\)/);
+ assert.match(ui,/window\.location\.assign\(`\$\{authBase\}\/api\/auth\/vercel`\)/);
+ assert.match(ui,/setRole\(me\.authProvider==='github'\?'Developer':'Creator'\)/);
+ assert.match(app,/linkRequested&&\(!existing\?\.user\?\.id\|\|existing\.authProvider!=='google'\)/);
+});
+test('Vercel independent sign-in creates a provider-scoped identity and uses shared one-time session exchange',()=>{
+ assert.match(app,/app\.get\('\/api\/auth\/vercel'/);
+ assert.match(app,/authMode:'login'/);
+ assert.match(app,/`vercel_\$\{String\(profile\.sub\)\}`/);
+ assert.match(app,/session\.authProvider!=='vercel'/);
+ assert.match(app,/session\.authProvider!=='vercel'/);
+ assert.match(ui,/Continue with Vercel/);
 });
