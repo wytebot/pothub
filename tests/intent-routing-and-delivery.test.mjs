@@ -84,9 +84,30 @@ test('client routes by intent confidence and the server tells the model about ro
   const ui = fs.readFileSync(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
   const server = fs.readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
   assert.match(ui, /classifyRequest\(currentText,\{attachments:attach\}\)/);
-  assert.match(ui, /if\(!configured\.length&&intent\.confidence!=='high'\)return false/);
+  // No Video agent (or an ambiguous request) never blocks: the prompt falls through to Chat.
+  assert.match(ui, /if\(!configured\.length&&\(fn==='Video'\|\|intent\.confidence!=='high'\)\)return false/);
   assert.match(ui, /outputFormat:intent\.fileFormat/);
   assert.match(server, /outputFormat:z\.enum\(/);
   for (const format of TEXT_OUTPUT_FORMATS) assert.ok(server.includes(`'${format}'`), `server output schema missing ${format}`);
   assert.match(server, /Never say you cannot generate images, video or files/);
+});
+
+test('a missing Video agent never shows a configure-video message in the chat area', () => {
+  const files = ['../src/ui/App.jsx', '../src/ui/WorkspaceSection.jsx', '../server/app.js']
+    .map(f => fs.readFileSync(new URL(f, import.meta.url), 'utf8')).join('\n');
+  for (const phrase of [/Add a video agent/i, /Configure a Video agent/i, /add the original video agent/i, /add an Image or Video agent/i]) {
+    assert.doesNotMatch(files, phrase);
+  }
+  assert.doesNotMatch(files, /setMissingAgentFunction\('Video'\)/);
+});
+
+test('any provider or model can be used: custom endpoints are enabled and model IDs are free text', async () => {
+  const { providersForFunction, providerById } = await import('../src/lib/provider-registry.js');
+  for (const id of ['openai-compatible', 'anthropic-compatible', 'azure-openai']) {
+    assert.notEqual(providerById(id)?.implemented, false, `${id} must not be disabled`);
+    assert.ok(providersForFunction('Chat').some(p => p.id === id), `${id} must be selectable for Chat`);
+  }
+  const agentsUi = fs.readFileSync(new URL('../src/ui/AgentsWorkspace.jsx', import.meta.url), 'utf8');
+  assert.match(agentsUi, /Model ID<input required/);
+  assert.doesNotMatch(agentsUi, /<option[^>]*>[^<]*Model ID/);
 });

@@ -47,15 +47,34 @@ test('date parsing handles ISO, month-name and month-only formats', () => {
   assert.deepEqual(parseDates('Marketing 2026'), []);
 });
 
+// The catalog now asks `discover(provider, cfg, modelIds)` for lifecycle evidence. Tests inject it and feed the
+// documentation text through the real extractDeprecations parser, so no network or Gemini key is needed.
+const DOC_URL = 'https://platform.openai.com/docs/deprecations';
+function discoverFrom({ pages, results, search, calls }) {
+  return async (provider, cfg, modelIds) => {
+    const hits = search ? await search() : (calls.search += 1, results || [{ url: DOC_URL, snippet: '' }]);
+    const official = hits.filter((h) => new URL(h.url).hostname === 'platform.openai.com');
+    if (!official.length) throw new Error('No official documentation source was returned.');
+    const deprecated = [];
+    for (const hit of official) {
+      calls.fetch += 1;
+      const found = extractDeprecations(pages[hit.url] ?? '', { now: NOW });
+      for (const [id, info] of found) {
+        const real = modelIds.find((m) => m.toLowerCase() === id);
+        if (real && new URL(hit.url).hostname === 'platform.openai.com') deprecated.push({ id: real, status: info.status, date: info.date, source: hit.url });
+      }
+    }
+    return { deprecated, sources: [...new Set(deprecated.map((x) => x.source))] };
+  };
+}
 function catalog({ env = {}, pages = {}, results, store, search } = {}) {
   const calls = { search: 0, fetch: 0 };
   const records = new Map();
   const c = createModelCatalog({
-    env: { MODEL_SEARCH_API_KEY: 'k', ...env },
+    env: { GEMINI_API_KEY: 'k', ...env },
     now: () => NOW,
     store: store === undefined ? { get: async (id) => records.get(id) || null, set: async (id, v) => { records.set(id, v); } } : store,
-    search: search || (async () => { calls.search += 1; return results || [{ url: 'https://platform.openai.com/docs/deprecations', snippet: '' }]; }),
-    fetchPage: async (url) => { calls.fetch += 1; return pages[url] ?? ''; },
+    discover: discoverFrom({ pages, results, search: search && (async () => { calls.search += 1; return search(); }), calls }),
   });
   return { c, calls, records };
 }
@@ -80,7 +99,7 @@ test('results from non-official hosts are ignored', async () => {
 });
 
 test('fails open without a search key, on search errors, and when everything would be hidden', async () => {
-  const noKey = catalog({ env: { MODEL_SEARCH_API_KEY: '' } });
+  const noKey = catalog({ env: { GEMINI_API_KEY: '' } });
   assert.deepEqual((await noKey.c.filterActiveModels('openai', ['a-1', 'b-2'])).active, ['a-1', 'b-2']);
 
   const broken = catalog({ search: async () => { throw new Error('boom'); } });
@@ -114,12 +133,12 @@ test('MODEL_CATALOG_ENABLED=false disables filtering', async () => {
 test('a failed refresh keeps the last good data and backs off', async () => {
   let fail = false; let searches = 0; let t = NOW;
   const records = new Map();
+  const calls = { search: 0, fetch: 0 };
   const c = createModelCatalog({
-    env: { MODEL_SEARCH_API_KEY: 'k', MODEL_CATALOG_TTL_HOURS: '1' },
+    env: { GEMINI_API_KEY: 'k', MODEL_CATALOG_TTL_HOURS: '1' },
     now: () => t,
     store: { get: async (id) => records.get(id) || null, set: async (id, v) => { records.set(id, v); } },
-    search: async () => { searches += 1; if (fail) throw new Error('down'); return [{ url: 'https://platform.openai.com/docs/deprecations' }]; },
-    fetchPage: async () => OPENAI_PAGE,
+    discover: discoverFrom({ pages: { [DOC_URL]: OPENAI_PAGE }, calls, search: async () => { searches += 1; if (fail) throw new Error('down'); return [{ url: DOC_URL }]; } }),
   });
   assert.deepEqual((await c.filterActiveModels('openai', ['gpt-4-0613', 'gpt-4.1'])).hidden.map((x) => x.id), ['gpt-4-0613']);
   fail = true; t += 2 * 3_600_000;

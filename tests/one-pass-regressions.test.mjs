@@ -52,8 +52,10 @@ test('A8 native auth exchange is rate limited and native URL handling is scheme-
 });
 test('A12 GitHub OAuth no longer requests read:org', async () => {
   const server = await read('server/app.js');
-  assert.match(server, /scope','repo read:user user:email'/);
-  assert.doesNotMatch(server, /scope','repo read:user user:email read:org'/);
+  // Scopes now come from stateDataScope(); assert on what is requested, not on one source string.
+  assert.match(server, /function stateDataScope\([^)]*\)\{[^}]*'repo read:user user:email'/);
+  const scopeFn = server.match(/function stateDataScope\([^)]*\)\{[^}]*\}/)?.[0] || '';
+  assert.ok(scopeFn && !/read:org/.test(scopeFn), 'OAuth scope must not include read:org');
 });
 test('A13 auth errors are not automatically dismissed and global handlers preserve error detail', async () => {
   const app = await read('src/ui/App.jsx');
@@ -87,7 +89,9 @@ test('C13 Capacitor build refuses to ship without a configured API origin and sk
 
 test('Creator chat hides stale configure-agent prompt when a compatible creator agent exists and groups history by date', async () => {
   const ui = await read('src/ui/WorkspaceSection.jsx');
-  assert.match(ui, /missingAgentFunction&&!\(role==='Creator'&&agents\.some/);
+  // The stale configure-agent card is no longer rendered in the chat area at all.
+  assert.doesNotMatch(ui, /missing-agent-card/);
+  assert.doesNotMatch(ui, /<[^>]*>\s*(?:Configure|Add) (?:an? )?\w+ agent/i);
   assert.match(ui, /chat-history-group-title/);
   assert.match(ui, /creator-chat-header/);
 });
