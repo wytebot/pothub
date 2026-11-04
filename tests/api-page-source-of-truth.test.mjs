@@ -9,7 +9,7 @@ const policy = fs.readFileSync(new URL('../server/agent-mode-policy.js', import.
 test('all UI AI actions source candidates from API & Agents Dexie records', () => {
   assert.match(ui, /async function functionAgents\(fn\).*db\.agents\.where\('function'\)/);
   assert.match(ui, /async function sendMessage\(overrideText\).*functionAgents\('Chat'\)/);
-  assert.match(ui, /async function generateImage\(\).*functionAgents\('Image'\)/);
+  assert.match(ui, /async function generateImage\([^)]*\).*functionAgents\('Image'\)/);
   assert.match(ui, /async function generateVideo\(.*functionAgents\('Video'\)/);
   assert.match(ui, /async function developerChat\(payload\).*functionAgents\('Chat'\)/);
   assert.doesNotMatch(ui, /developerAgentMode|savingAgentMode|\/api\/settings\/agent-mode/);
