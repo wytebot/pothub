@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, Lock, BookMarked, RefreshCw } from "lucide-react";
+import { Plus, Lock, BookMarked, RefreshCw, AlertCircle, Search, FolderGit2 } from "lucide-react";
 import { promptDialog } from "../dialog";
 import { toastError } from "../toast";
 import { LICENSES } from "../licenses";
 
-export default function Repositories({ repos, repoLimit, loading, onOpen, onCreate, onRefresh }) {
+export default function Repositories({ repos = [], repoLimit, loading, error = "", onOpen, onCreate, onRefresh }) {
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
 
   const createRepository = async () => {
     const result = await promptDialog({
@@ -14,94 +15,47 @@ export default function Repositories({ repos, repoLimit, loading, onOpen, onCrea
       fields: [
         { key: "name", label: "Repository name", placeholder: "my-project" },
         { key: "description", label: "Description (optional)", placeholder: "What is this project?", required: false },
-        {
-          key: "license",
-          label: "License",
-          type: "select",
-          required: false,
-          defaultValue: "",
-          options: LICENSES.map((l) => ({ value: l.key, label: l.name })),
-        },
+        { key: "license", label: "License", type: "select", required: false, defaultValue: "", options: LICENSES.map((l) => ({ value: l.key, label: l.name })) },
         { key: "private", label: "Private repository", type: "checkbox", required: false },
       ],
     });
     if (!result) return;
     setBusy(true);
     try {
-      const repo = await onCreate({
-        name: result.name.trim(),
-        description: result.description?.trim(),
-        private: !!result.private,
-        license_template: result.license || undefined,
-      });
+      const repo = await onCreate({ name: result.name.trim(), description: result.description?.trim(), private: !!result.private, license_template: result.license || undefined });
       onOpen(repo);
-    } catch (e) {
-      toastError(e.message);
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { toastError(e.message); }
+    finally { setBusy(false); }
   };
 
+  const filtered = repos.filter(r => `${r.full_name || ""} ${r.description || ""} ${r.language || ""}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <div className="page">
       <header>
-        <div>
-          <span className="eyebrow">GITHUB</span>
-          <h1>Repositories</h1>
-        </div>
-        <button aria-label="Refresh repositories" disabled={loading} onClick={onRefresh}>
-          <RefreshCw size={16} className={loading ? "spin" : ""} />
-        </button>
-        <button className="primary" disabled={busy} onClick={createRepository}>
-          <Plus size={16} />
-          New
-        </button>
+        <div><span className="eyebrow">GITHUB</span><h1>Repositories</h1><small className="muted">{repos.length} discovered</small></div>
+        <button aria-label="Refresh repositories" title="Refresh repositories" disabled={loading} onClick={() => onRefresh?.()}><RefreshCw size={16} className={loading ? "spin" : ""} /></button>
+        <button className="primary" disabled={busy} onClick={createRepository}><Plus size={16} />New</button>
       </header>
-      {repoLimit?.limit != null && repoLimit.total > repoLimit.limit && (
-        <p className="muted" style={{ padding: "0 16px" }}>
-          Showing {repoLimit.limit} of {repoLimit.total} repositories on the 
-        </p>
-      )}
+      {repoLimit?.limit != null && repoLimit.total > repoLimit.limit && <p className="muted" style={{ padding: "0 16px" }}>Showing {repoLimit.limit} of {repoLimit.total} repositories on the current plan.</p>}
+      {repos.length > 0 && <label className="repo-search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Filter repositories…" /></label>}
+      {error && <section className="panel repo-state repo-error" role="alert"><AlertCircle size={19}/><div><b>Repository discovery needs attention</b><p>{error}</p><button disabled={loading} onClick={()=>onRefresh?.()}><RefreshCw size={14}/> Retry</button></div></section>}
       <section className="panel">
-        {repos.map((r) => (
+        {loading && !repos.length ? <div className="repo-state" role="status"><RefreshCw size={18} className="spin"/><span>Discovering repositories from GitHub…</span></div>
+        : filtered.map((r) => (
           <button className="repoRow" key={r.id} onClick={() => onOpen(r)}>
             <span className="repoRowIcon">{r.private ? <Lock size={15} /> : <BookMarked size={15} />}</span>
-            <span className="repoRowBody">
-              <b>{r.full_name}</b>
-              {r.description && <small className="repoDesc">{r.description}</small>}
-              <small className="repoMeta">
-                <span className={`pill ${r.private ? "pillPrivate" : "pillPublic"}`}>{r.private ? "Private" : "Public"}</span>
-                {r.language && <span className="langDot" style={{ "--lang-color": languageColor(r.language) }}>{r.language}</span>}
-                {typeof r.stargazers_count === "number" && r.stargazers_count > 0 && <span>★ {r.stargazers_count}</span>}
-                <span>{r.default_branch}</span>
-              </small>
-            </span>
-            <span className="chev">›</span>
+            <span className="repoRowBody"><b>{r.full_name}</b>{r.description && <small className="repoDesc">{r.description}</small>}
+              <small className="repoMeta"><span className={`pill ${r.private ? "pillPrivate" : "pillPublic"}`}>{r.private ? "Private" : "Public"}</span>{r.language && <span className="langDot" style={{ "--lang-color": languageColor(r.language) }}>{r.language}</span>}{typeof r.stargazers_count === "number" && r.stargazers_count > 0 && <span>★ {r.stargazers_count}</span>}<span>{r.default_branch}</span></small>
+            </span><span className="chev">›</span>
           </button>
         ))}
-        {!repos.length && <p className="muted">{loading ? "Loading repositories…" : "No repositories loaded."}</p>}
+        {!loading && repos.length > 0 && !filtered.length && <div className="repo-state"><Search size={18}/><span>No repositories match “{query}”.</span></div>}
+        {!loading && !repos.length && !error && <div className="repo-state"><FolderGit2 size={22}/><div><b>No repositories found</b><p>GitHub returned an empty repository list. Check that the connected account has repositories and that organization SSO access is authorized.</p><button onClick={()=>onRefresh?.()}><RefreshCw size={14}/> Refresh and retry</button></div></div>}
       </section>
+      <p className="muted repo-access-note">Private repositories are listed only when the connected GitHub authorization has access to them.</p>
     </div>
   );
 }
 
-const LANG_COLORS = {
-  JavaScript: "#f1e05a",
-  TypeScript: "#3178c6",
-  Python: "#3572A5",
-  HTML: "#e34c26",
-  CSS: "#563d7c",
-  Java: "#b07219",
-  Go: "#00ADD8",
-  Rust: "#dea584",
-  Ruby: "#701516",
-  PHP: "#4F5D95",
-  Swift: "#F05138",
-  Kotlin: "#A97BFF",
-  "C++": "#f34b7d",
-  C: "#555555",
-  Shell: "#89e051",
-};
-function languageColor(lang) {
-  return LANG_COLORS[lang] || "#8d99a6";
-}
+const LANG_COLORS = { JavaScript:"#f1e05a",TypeScript:"#3178c6",Python:"#3572A5",HTML:"#e34c26",CSS:"#563d7c",Java:"#b07219",Go:"#00ADD8",Rust:"#dea584",Ruby:"#701516",PHP:"#4F5D95",Swift:"#F05138",Kotlin:"#A97BFF","C++":"#f34b7d",C:"#555555",Shell:"#89e051" };
+function languageColor(lang) { return LANG_COLORS[lang] || "#8d99a6"; }

@@ -475,7 +475,7 @@ app.get('/api/github/repos',async(req,res)=>{
   const firstPagePath='/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&sort=updated&direction=desc&per_page=100&page=1';
   const {identity,firstPage}=await fetchGithubRepositoryBootstrap(githubJson,firstPagePath);
   const scopes=String(identity.headers.get('x-oauth-scopes')||'').split(',').map(v=>v.trim()).filter(Boolean);
-  const access=validateGithubRepoAccess({scopes,githubUserId:identity.data?.id,sessionUserId:s.user.id});
+  const linkedGithubUserId=s.linkedAccounts?.github?.id || (s.authProvider==='github' ? s.user.id : null);const access=validateGithubRepoAccess({scopes,githubUserId:identity.data?.id,sessionUserId:s.user.id,linkedGithubUserId});
   if(!access.ok)throw Object.assign(new Error(access.message),{status:access.status,code:access.code,reconnect:access.reconnect});
   const result=await discoverGithubRepositories(async page=>{
    const response=await githubJson(`/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&sort=updated&direction=desc&per_page=100&page=${page}`);

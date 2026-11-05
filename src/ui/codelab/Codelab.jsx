@@ -32,6 +32,7 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
     [repos, setRepos] = useState([]),
     [repoLimit, setRepoLimit] = useState(null),
     [reposLoading, setReposLoading] = useState(false),
+    [reposError, setReposError] = useState(""),
     [repo, setRepo] = useState(null),
     [working, setWorking] = useState(null),
     [searchQuery, setSearchQuery] = useState(""),
@@ -50,7 +51,11 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
   const lastForegroundRefreshRef = useRef(0);
 
   const loadRepos = async ({ silent = false } = {}) => {
-    if (!user?.id || !user.githubConnected) return [];
+    if (!user?.id || !user.githubConnected) {
+      setReposError("Connect a GitHub account to discover repositories.");
+      return [];
+    }
+    if (!silent) setReposError("");
     // One request per signed-in account. This prevents an old request from a
     // previous account/session from ever replacing the current user's list.
     if (reposRequestRef.current && reposUserRef.current === String(user.id)) return reposRequestRef.current;
@@ -64,6 +69,7 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
     }
 
     if (!navigator.onLine) {
+      setReposError(cachedRepos.length ? "You're offline. Showing your last saved repository list." : "You're offline. Connect to the internet and retry repository discovery.");
       setRepos(cachedRepos);
       setRepoLimit(cached?.repoLimit || null);
       setReposLoading(false);
@@ -90,6 +96,7 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
             return cachedRepos;
           }
           setRepos(nextRepos);
+          setReposError("");
           setRepoLimit(nextLimit);
           saveState(cacheKey, { repos: nextRepos, repoLimit: nextLimit, savedAt: d.savedAt || Date.now(), stale: !!d.stale });
           return nextRepos;
@@ -111,7 +118,9 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
         setRepos(cachedRepos);
         setRepoLimit(cached?.repoLimit || null);
       }
-      if (!silent) toastError(last?.message || "Could not refresh repositories. Your saved repository list is still available.");
+      const message = last?.message || "Could not refresh repositories.";
+      setReposError(cachedRepos.length ? `${message} Showing your last saved repository list.` : message);
+      if (!silent) toastError(message);
       return cachedRepos;
     })();
 
@@ -463,7 +472,7 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
           </button>
         )}
         {page === "home" && <Home repos={repos} loading={reposLoading} onOpen={open} onCreate={createRepo} />}
-        {page === "repos" && <Repositories repos={repos} repoLimit={repoLimit} loading={reposLoading} onOpen={open} onCreate={createRepo} onRefresh={loadRepos} />}
+        {page === "repos" && <Repositories repos={repos} repoLimit={repoLimit} loading={reposLoading} error={reposError} onOpen={open} onCreate={createRepo} onRefresh={loadRepos} />}
         {page === "changes" && <Changes repo={repo} changes={workingChanges} onSelect={openFile} onDiscard={discardWorkingChange} onResume={() => { if (repo) { restoreWorkingFromCache(); navigate("project"); } }} />}
         {page === "actions" && <Actions repos={repos} />}
         {page === "github" && <GitHubHub repos={repos} />}

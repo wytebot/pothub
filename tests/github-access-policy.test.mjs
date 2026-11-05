@@ -13,3 +13,7 @@ test('GitHub repository access rejects a different connected account',()=>{
 test('GitHub repository access accepts the correct account and repo scope',()=>{
  assert.deepEqual(validateGithubRepoAccess({scopes:['repo','read:org'],githubUserId:'123',sessionUserId:123}),{ok:true});
 });
+
+test('linked GitHub account ID is used instead of the PotHub account ID',()=>{
+ assert.deepEqual(validateGithubRepoAccess({scopes:['repo'],githubUserId:'98765',sessionUserId:'pothub-user-42',linkedGithubUserId:'98765'}),{ok:true});
+});

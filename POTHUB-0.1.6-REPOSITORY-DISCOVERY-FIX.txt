@@ -1,0 +1,16 @@
+PotHub 0.1.6 — affected-file patch
+
+Files:
+- server/app.js: repository authorization now matches the GitHub token identity against the linked GitHub account ID, rather than incorrectly comparing it to the PotHub account ID for linked providers.
+- server/github-access-policy.js: supports explicit linked GitHub identity while retaining legacy primary-GitHub behavior.
+- src/ui/codelab/Codelab.jsx: surfaces repository discovery errors and offline state.
+- src/ui/codelab/pages/Repositories.jsx: adds loading, actionable error, retry, true-empty, filter-empty, and refresh states.
+- tests/github-access-policy.test.mjs: adds linked-account mapping regression coverage.
+- package.json / package-lock.json: version 0.1.6.
+
+Private repositories:
+GitHub discovery requests visibility=all and owner/collaborator/organization_member affiliations. Private repositories are returned only if the linked token actually has the required GitHub access and organization SSO authorization.
+
+Validation performed:
+- GitHub access policy tests: 4/4 passed.
+- Full production build and live OAuth/GitHub API verification were not run.
