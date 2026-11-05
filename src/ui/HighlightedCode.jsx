@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Copy, Download } from 'lucide-react';
 import 'highlight.js/styles/github-dark.css';
 
 const LANGUAGE_LOADERS = {
@@ -31,5 +32,8 @@ async function getHighlighter(){
 export default function HighlightedCode({code,language=''}){
   const [html,setHtml]=useState('');
   useEffect(()=>{let active=true;getHighlighter().then(hljs=>{let value;try{const lang=aliases[language]||language;value=lang&&hljs.getLanguage(lang)?hljs.highlight(code,{language:lang}).value:hljs.highlightAuto(code).value}catch{value=String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}if(active)setHtml(value)}).catch(()=>{if(active)setHtml(String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'))});return()=>{active=false}},[code,language]);
-  return <pre className="markdown-code"><code dangerouslySetInnerHTML={{__html:html||String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}}/></pre>;
+  const extension=({javascript:'js',typescript:'ts',python:'py',bash:'sh',shell:'sh',json:'json',yaml:'yml',html:'html',xml:'xml',css:'css',sql:'sql',java:'java',diff:'diff'})[String(language||'').toLowerCase()]||'txt';
+  const download=()=>{const blob=new Blob([String(code)],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`pothub-code.${extension}`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)};
+  const copy=()=>navigator.clipboard?.writeText(String(code)).catch(()=>{});
+  return <div className="markdown-code-wrap"><div className="markdown-code-actions"><span>{language||'code'}</span><button type="button" title="Copy code" aria-label="Copy code" onClick={copy}><Copy size={14}/></button><button type="button" title="Download code" aria-label="Download code" onClick={download}><Download size={14}/></button></div><pre className="markdown-code"><code dangerouslySetInnerHTML={{__html:html||String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}}/></pre></div>;
 }
