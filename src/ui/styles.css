@@ -613,3 +613,25 @@ html{font-size:var(--pothub-root-font-size,16px)}
 .vb-callback-value button{flex:0 0 auto}
 .vb-error-inline{color:var(--danger,#ff7777);font-size:13px;margin:0}
 @media(max-width:560px){.vb-callback-value{align-items:stretch;flex-direction:column}.vb-callback-value button{width:100%}}
+
+/* Auth issue sheet: exact sign-in failure reasons */
+.auth-issue-backdrop{position:fixed;inset:0;z-index:2100;display:flex;align-items:flex-end;justify-content:center;background:rgba(1,4,9,.72);padding:0}
+.auth-issue-sheet{width:min(100%,560px);max-height:88dvh;overflow:auto;overscroll-behavior:contain;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -12px 40px #0009}
+.auth-issue-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.auth-issue-head>svg{width:20px;height:20px;color:var(--danger);flex-shrink:0}
+.auth-issue-head h2{margin:0;font-size:16px;flex:1}
+.auth-issue-head button{min-height:32px;width:32px;padding:0}
+.auth-issue-message{font-size:14px;line-height:1.5;margin:0 0 10px}
+.auth-issue-block{border:1px solid var(--border);background:var(--panel2);border-radius:9px;padding:10px 12px;margin:0 0 10px;font-size:13px}
+.auth-issue-block>b{display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.auth-issue-block code,.auth-issue-meta code{font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap}
+.auth-issue-block ol{margin:0;padding-left:18px;display:grid;gap:5px;line-height:1.45}
+.auth-issue-block dl{margin:0;display:grid;gap:8px}
+.auth-issue-block dt{font-size:11px;color:var(--muted)}
+.auth-issue-block dd{margin:2px 0 0;display:flex;align-items:flex-start;gap:8px;justify-content:space-between}
+.auth-issue-copy{min-height:28px;padding:2px 8px;font-size:12px;flex-shrink:0}
+.auth-issue-copy svg{width:13px;height:13px}
+.auth-issue-meta{font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.5}
+.auth-issue-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.auth-issue-actions button{flex:1 1 140px}
+@media(min-width:700px){.auth-issue-backdrop{align-items:center}.auth-issue-sheet{border-radius:16px;padding-bottom:16px}}
