@@ -1,0 +1,19 @@
+PotHub v0.1.4 — Agent workspace sync fix
+
+Affected files only:
+- src/ui/App.jsx
+  * Forces an awaited account-workspace sync before resolving saved Chat agents in Creator chat and Codelab developer chat.
+  * Refreshes the local agent list after sync so newly saved agents are available to the current request.
+  * Surfaces sync failure rather than sending an agent ID that the server cannot resolve.
+- src/lib/agent-routing.js
+  * Preserves agentId metadata while interleaving fallback candidates.
+- package.json
+  * Version bumped to 0.1.4.
+
+Why this fixes the screenshot:
+Agent health testing is local and can succeed before the debounced cloud sync finishes. Server-side chat/Codelab routes resolve agent IDs from the cloud workspace. A prompt sent during that gap therefore reaches the server without a resolvable server-side agent. The request path now waits for the sync to finish before selecting and submitting the agent IDs.
+
+Install:
+Extract at the repository root, replacing only the included paths. Commit and push to main. Then verify the new Vercel deployment uses the new commit.
+
+Validation scope: source-level checks only; a full production build and live deployment/OAuth test have not been run.
