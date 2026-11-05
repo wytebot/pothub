@@ -23,7 +23,7 @@ export function interleaveAgentCandidates(agents, limit = 8) {
       const identity = `${agent.provider}\u0000${agent.baseUrl || ''}\u0000${agent.key}\u0000${model}\u0000${agent.task || 'all'}`;
       if (seen.has(identity)) continue;
       seen.add(identity);
-      result.push({ key: agent.key, model, provider: agent.provider, baseUrl: agent.baseUrl || '', task: agent.task || 'all', ...(agent.agentId ? { agentId: String(agent.agentId) } : {}) });
+      result.push({ key: agent.key, model, provider: agent.provider, baseUrl: agent.baseUrl || '', task: agent.task || 'all', ...(agent.modelEnv ? { modelEnv: String(agent.modelEnv) } : {}), ...(agent.keyEnv ? { keyEnv: String(agent.keyEnv) } : {}), ...(agent.fallbackEnv ? { fallbackEnv: String(agent.fallbackEnv) } : {}), ...(agent.agentId ? { agentId: String(agent.agentId) } : {}) });
     }
   }
   return result;

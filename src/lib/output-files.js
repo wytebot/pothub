@@ -230,3 +230,9 @@ export async function buildOutputFile(format, text, { title = '' } = {}) {
   if (!data || (typeof data === 'string' && !data.trim())) return null;
   return { name: `${base}.${format}`, type: mimeForFormat(format), data };
 }
+
+/** Bound extracted attachment text before it enters a chat request. */
+export function boundAttachmentText(value, maxChars = 80000) {
+  const limit = Math.max(1, Math.min(Number(maxChars) || 80000, 100000));
+  return String(value ?? '').slice(0, limit);
+}

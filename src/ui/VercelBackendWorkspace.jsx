@@ -43,7 +43,7 @@ export default function VercelBackendWorkspace({api,onReconnect,onNotice,onSaved
    const token=result.backendToken;
    for(const fn of ['Chat','Diagnosis','Fix generation']){
     const old=await db.agents.where('function').equals(fn).filter(a=>a.label==='Vercel Backend'&&a.provider==='openai-compatible').first();
-    await saveAgent({id:old?.id,function:fn,provider:'openai-compatible',baseUrl:url,model:model.trim(),models:[model.trim(),...fallbackModels],modelVariants:fallbackModels.join('\n'),key:token,label:'Vercel Backend',default:true});
+    await saveAgent({id:old?.id,function:fn,provider:'openai-compatible',baseUrl:url,model:model.trim(),models:[model.trim(),...fallbackModels],modelVariants:fallbackModels.join('\n'),modelEnv:modelEnv.trim(),keyEnv:keyEnv.trim(),fallbackEnv:fallbackEnv.trim(),key:token,label:'Vercel Backend',default:true});
    }
    setApiKey('');setConfig(result.config);setConfigured(true);notify('Backend settings saved to Vercel and the Vercel Backend agent was added for Chat, Diagnosis and Fix. Redeploy the selected project to activate its environment variables.');
    await onSaved?.();
@@ -67,6 +67,8 @@ export default function VercelBackendWorkspace({api,onReconnect,onNotice,onSaved
    <div className="vb-section-head"><div><h2>Vercel OAuth callback</h2><p>This exact URL must be registered in your Vercel OAuth app's Authorization Callback URLs. A mismatch causes Vercel's “Invalid redirect” error before PotHub can receive the login response.</p></div></div>
    <div className="vb-callback-value"><code>{redirectInfo?.redirectUri||'Callback URL unavailable — check APP_URL / VERCEL_REDIRECT_URI settings.'}</code><button type="button" className="secondary" disabled={!redirectInfo?.redirectUri} onClick={async()=>{try{await navigator.clipboard.writeText(redirectInfo.redirectUri);notify('Vercel callback URL copied.')}catch{fail('Could not copy automatically. Select and copy the callback URL above.')}}}>Copy URL</button></div>
    <p className="vb-muted">In Vercel → your Sign in with Vercel app → Manage → Authorization Callback URLs, add the URL above exactly. Use the same HTTPS domain, path and spelling; do not add a trailing slash. Do not register <code>/api/vercel/connect</code> or a preview deployment URL.</p>
+   {redirectInfo?.registeredDomain&&<p className={redirectInfo.isValid?'vb-muted':'vb-error-inline'}>{redirectInfo.isValid?'Registered domain matches the resolved callback.':`Domain mismatch: Vercel is configured for ${redirectInfo.registeredDomain}, but PotHub resolves ${redirectInfo.redirectUri}.`}</p>}
+   {redirectInfo&&!redirectInfo.registeredDomain&&<p className="vb-muted">To enable automatic domain comparison, set <code>VERCEL_REGISTERED_DOMAIN</code> in PotHub to the domain registered in the Vercel OAuth console.</p>}
    {redirectInfo?.error&&<p className="vb-error-inline">{redirectInfo.error}</p>}
   </div>
   {!connected?<div className="panel vb-connect"><h2>Connect your Vercel account</h2><p>PotHub will open Vercel's own authorization page. If Vercel requests an email verification code, enter it there; PotHub will not ask you to copy that code into the app.</p><button className="primary" onClick={onReconnect} disabled={!!busy}>Connect / reauthorize Vercel</button></div>:<>
