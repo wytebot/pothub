@@ -563,3 +563,53 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 /* Font-size preference now scales the app's rem-based typography, including navigation and settings. */
 html{font-size:var(--pothub-root-font-size,16px)}
 @media(prefers-reduced-motion:reduce){.welcome-orbit,.welcome-spark,.pothub-google-button{animation:none!important;transition:none!important}}
+
+/* Vercel Backend Manager */
+.vercel-backend-page{width:100%;max-width:980px;margin:0 auto;padding:clamp(14px,3vw,28px);display:flex;flex-direction:column;gap:16px;color:var(--text,#f5f5f5)}
+.vercel-backend-page .page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.vercel-backend-page .page-heading h1{margin:0 0 6px;font-size:clamp(1.35rem,4vw,1.8rem)}
+.vercel-backend-page .page-heading p,.vercel-backend-page .panel p{color:var(--muted,#a4a4a4);line-height:1.55}
+.vercel-backend-page .panel{padding:clamp(14px,3vw,22px);border:1px solid var(--border,rgba(255,255,255,.1));border-radius:18px;background:var(--panel,rgba(255,255,255,.035));}
+.vercel-backend-page h2{font-size:1.05rem;margin:0 0 5px}
+.vb-section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:15px}
+.vb-section-head p{font-size:.88rem;margin:4px 0 0}
+.vb-state{flex:none;font-size:.75rem;color:#86d6ad;border:1px solid rgba(91,190,139,.3);padding:5px 9px;border-radius:99px}
+.vb-project-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:8px}
+.vb-project{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:12px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:12px;background:transparent;color:inherit;min-width:0}
+.vb-project.active{border-color:var(--accent,#a78bfa);background:rgba(139,92,246,.09)}
+.vb-project-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:rgba(255,255,255,.07);flex:none}
+.vb-project-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.vb-project-copy strong,.vb-project-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vb-project-copy small,.vb-muted{color:var(--muted,#999);font-size:.78rem}
+.vb-project-check{font-size:.76rem;color:var(--muted,#999);flex:none}
+.vb-selected-note{font-size:.82rem;margin:12px 0 0}
+.vb-config{display:flex;flex-direction:column;gap:13px}
+.vb-config label{display:flex;flex-direction:column;gap:6px;font-size:.85rem;font-weight:600}
+.vb-config input:not([type=checkbox]),.vb-config textarea{width:100%;min-width:0;border:1px solid var(--border,rgba(255,255,255,.14));border-radius:11px;background:rgba(0,0,0,.17);color:inherit;padding:12px 13px;font:inherit;font-weight:400;outline:none}
+.vb-config input:focus,.vb-config textarea:focus{border-color:var(--accent,#a78bfa);box-shadow:0 0 0 2px rgba(139,92,246,.12)}
+.vb-config textarea{resize:vertical}
+.vb-two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.vb-targets{display:flex;flex-direction:column;gap:10px;font-size:.85rem}
+.vb-targets>div{display:flex;flex-wrap:wrap;gap:8px}
+.vb-targets label{display:flex;flex-direction:row;align-items:center;gap:7px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:99px;padding:8px 11px;font-weight:500}
+.vb-targets input{accent-color:var(--accent,#a78bfa)}
+.vb-security-note,.vb-warning{padding:13px;border-radius:12px;background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.2);font-size:.82rem}
+.vb-security-note p,.vb-warning p{margin:5px 0 0;font-size:.8rem}
+.vb-warning{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.2)}
+.vb-warning p{margin-bottom:8px}
+.vb-meta{display:grid;grid-template-columns:minmax(100px,.7fr) minmax(0,1.5fr);gap:8px 12px;margin:10px 0 15px;font-size:.82rem}
+.vb-meta span{color:var(--muted,#999)}
+.vb-meta strong{overflow-wrap:anywhere;font-weight:600}
+.vb-feedback{padding:12px 14px;border-radius:12px;font-size:.84rem;line-height:1.5;overflow-wrap:anywhere}
+.vb-feedback.error{background:rgba(239,68,68,.09);border:1px solid rgba(239,68,68,.25);color:#ffb5b5}
+.vb-feedback.success{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:#a7e8c1}
+.vb-feedback button{margin-left:8px;text-decoration:underline}
+@media(max-width:560px){.vercel-backend-page{padding:12px;gap:12px}.vb-two-col{grid-template-columns:1fr}.vb-section-head{flex-direction:column}.vb-meta{grid-template-columns:1fr;gap:3px}.vb-meta strong{margin-bottom:7px}}
+
+/* Vercel OAuth callback diagnostics */
+.vb-callback-guide{display:grid;gap:12px}
+.vb-callback-value{display:flex;align-items:center;gap:10px;min-width:0}
+.vb-callback-value code{display:block;min-width:0;flex:1;overflow-wrap:anywhere;padding:12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:12px;background:rgba(255,255,255,.035);font-size:12px;line-height:1.5}
+.vb-callback-value button{flex:0 0 auto}
+.vb-error-inline{color:var(--danger,#ff7777);font-size:13px;margin:0}
+@media(max-width:560px){.vb-callback-value{align-items:stretch;flex-direction:column}.vb-callback-value button{width:100%}}

@@ -42,7 +42,7 @@ Only configure these if you use the corresponding feature or need to override it
 
 - `AI_FALLBACK_BASE_URL`, `AI_FALLBACK_API_KEY`, `AI_FALLBACK_MODEL` — server-side OpenAI-compatible fallback provider. Keep the key private. The current readiness check still expects `GEMINI_API_KEY`.
 - `AI_MAX_PROMPT_CHARS`, `AI_MAX_OUTPUT_TOKENS`, `AI_MAX_OPERATION_COST_USD` — server-side AI limits.
-- `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` — explicitly allows trusted custom HTTPS agent endpoints; leave unset unless needed.
+- `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS` — defaults to `true` in the server code so configured public HTTPS backends work without an extra dashboard step. Set it to `false` to disable custom agent endpoints. Requests still pass HTTPS, DNS/IP and SSRF safety checks.
 - `POTHUB_VIDEO_MAX_BYTES` — video response size limit in bytes; default is 26214400 (25 MiB), with a hard maximum of 25 MiB.
 - `FLW_MODE` — `production` for live v4 keys; anything else uses the v4 sandbox.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — native Android server OAuth only, not browser Google login.
@@ -93,7 +93,7 @@ Never commit `.env` files or credentials. If any secret is exposed, revoke/rotat
 
 ## Additional BYOK / recovery / pricing notes
 
-No new environment variable is required for the current provider-registry, live-model-discovery, recovery-sheet, Verified Fix, or local-library additions. Existing `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` remains the opt-in gate for trusted custom public HTTPS endpoints. Keep it unset unless you have reviewed the endpoint. Image adapters support Gemini, OpenAI Images, Stability, Replicate, fal and Black Forest Labs. Video adapters support Gemini, Runway, Luma, Kling and Replicate. Each provider still requires a valid BYOK credential and model ID; provider-specific billing is charged by the upstream provider separately.
+No new environment variable is required for the current provider-registry, live-model-discovery, recovery-sheet, Verified Fix, or local-library additions. Custom public HTTPS agent endpoints are enabled by default in the server code; set `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=false` to disable them. HTTPS, DNS/IP and SSRF checks still apply. Image adapters support Gemini, OpenAI Images, Stability, Replicate, fal and Black Forest Labs. Video adapters support Gemini, Runway, Luma, Kling and Replicate. Each provider still requires a valid BYOK credential and model ID; provider-specific billing is charged by the upstream provider separately.
 
 The pricing analysis uses an assumed 60% target margin and illustrative provider rate inputs in `server/pricing.js`. It does not change `PACKS`, public prices or credit costs. Reconcile all rate-card inputs with current vendor invoices and actual Flutterwave/Play fee contracts before approving price changes.
 
@@ -104,7 +104,7 @@ No new runtime environment variable is required for credit reservations, provide
 
 ## Additional image adapters
 
-No new environment variables are required. Image provider credentials are BYOK and remain transient in the authenticated POST request; they are not added to Vercel environment variables or persisted server-side. Custom image API endpoints continue to require `POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true` and must be public HTTPS endpoints.
+No new environment variables are required. Image provider credentials are BYOK and remain transient in the authenticated POST request; they are not added to Vercel environment variables or persisted server-side. Custom image API endpoints use the same default-enabled gate and must still be public HTTPS endpoints.
 
 ## Additional security and asynchronous media configuration
 
@@ -154,7 +154,7 @@ PotHub uses Sign in with Vercel OAuth so each developer connects their own Verce
 | `VERCEL_CLIENT_SECRET` | Client Secret from the same Vercel OAuth app; keep server-only |
 | `VERCEL_REDIRECT_URI` | `https://YOUR-POTHUB-DOMAIN/api/vercel/callback` (required for production; must match exactly) |
 
-**Fix for “Invalid redirect URL”:** use the same canonical production hostname everywhere. If PotHub is deployed at `https://pothub-self.vercel.app`, set `APP_URL=https://pothub-self.vercel.app`, `FRONTEND_URL=https://pothub-self.vercel.app`, `APP_ORIGIN=https://pothub-self.vercel.app`, and `VERCEL_REDIRECT_URI=https://pothub-self.vercel.app/api/vercel/callback`. Replace that example hostname with your actual deployed domain. In the Vercel OAuth app's settings, add that exact full callback URL as an allowed/redirect URL—same scheme, host, path, and no trailing slash or query string. Do not register the Vercel dashboard URL, `/api/vercel/connect`, a preview deployment URL, or a different custom domain. If you change domains, update both sides and redeploy. The code rejects non-HTTPS, localhost, query-string, and wrong-path callback values with a clearer configuration error. `VERCEL_REDIRECT_URI` is the only new/explicit variable for this callback; no new API token variable is required.
+**Fix for “Invalid redirect URL”:** use the same canonical production hostname everywhere. If PotHub is deployed at `https://pothub-self.vercel.app`, set `APP_URL=https://pothub-self.vercel.app`, `FRONTEND_URL=https://pothub-self.vercel.app`, `APP_ORIGIN=https://pothub-self.vercel.app`, and `VERCEL_REDIRECT_URI=https://pothub-self.vercel.app/api/vercel/callback`. Replace that example hostname with your actual deployed domain. In the Vercel OAuth app's settings, add that exact full callback URL as an allowed/redirect URL—same scheme, host, path, and no trailing slash or query string. Do not register the Vercel dashboard URL, `/api/vercel/connect`, a preview deployment URL, or a different custom domain. If you change domains, update both sides and redeploy. The code prefers `VERCEL_REDIRECT_URI`, then `POTHUB_API_ORIGIN`, then Vercel's stable `VERCEL_PROJECT_PRODUCTION_URL`, then legacy `APP_URL`; it avoids deployment-specific preview URLs. The Backend page now displays and copies the exact callback URL that must be registered. The code rejects non-HTTPS, localhost, query-string, and wrong-path callback values with a clearer configuration error. `VERCEL_REDIRECT_URI` is the only new/explicit variable for this callback; no new API token variable is required.
 
 In the Vercel app's Manage settings, enable the `openid`, `email`, `profile`, and `offline_access` identity scopes and the read permissions needed for listing projects, reading deployments, and reading deployment events/logs. The app's available API permissions are controlled by its Vercel dashboard configuration; the OAuth scopes alone do not grant deployment API permissions. PotHub uses PKCE and a short-lived, HttpOnly, signed state cookie, stores per-user access/refresh tokens encrypted in Firestore, and rotates refresh tokens server-side. Keep `SESSION_SECRET`, `POTHUB_VAULT_ENCRYPTION_KEY` (or the existing strong `SESSION_SECRET` fallback), and Firebase Admin/Firestore configured.
 
