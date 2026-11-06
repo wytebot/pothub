@@ -6,9 +6,39 @@ import { Capacitor } from '@capacitor/core';
 
 // The existing app is deliberately client-rendered: Firebase Auth, Capacitor,
 // IndexedDB and browser storage must not be initialized during Next.js SSR.
-const App = dynamic(() => import('../src/ui/App.jsx'), {
+// A failed or stalled app-chunk request must never leave the user on an
+// endless loading screen. Keep the client-only boundary, but fail visibly
+// after a generous mobile-network timeout and provide a safe retry.
+const loadPothubApp = () => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(
+      'Pothub could not finish loading its app files. Check your connection and reload.'
+    )), 45000);
+  });
+  return Promise.race([import('../src/ui/App.jsx'), timeout])
+    .finally(() => clearTimeout(timeoutId));
+};
+
+function AppLoading({ error }) {
+  if (error) {
+    return <main className="app-crash-screen" role="alert">
+      <div className="app-crash-card">
+        <h1>Pothub could not load</h1>
+        <p>Your saved workspace data has not been cleared. The app bundle failed to load.</p>
+        <details open><summary>What happened</summary><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12}}>{String(error?.message || error)}</pre></details>
+        <button type="button" onClick={() => window.location.reload()}>Retry loading Pothub</button>
+      </div>
+    </main>;
+  }
+  return <main className="app-crash-screen" aria-live="polite">
+    <div className="app-crash-card"><h1>Loading Pothub…</h1><p>Preparing your workspace securely.</p><p role="status">This can take a little longer on a slow connection.</p></div>
+  </main>;
+}
+
+const App = dynamic(loadPothubApp, {
   ssr: false,
-  loading: () => <main className="app-crash-screen" aria-live="polite"><div className="app-crash-card"><h1>Loading Pothub…</h1><p>Preparing your workspace securely.</p></div></main>,
+  loading: AppLoading,
 });
 
 export default function HomePage() {
