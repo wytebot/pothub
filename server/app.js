@@ -395,7 +395,12 @@ app.get('/api/health',async(req,res)=>{
 function safeRequestOrigin(req){
   try { return apiOrigin(req); } catch { const host=String(req?.headers?.['x-forwarded-host']||req?.headers?.host||'').split(',')[0].trim(); return host&&/^[A-Za-z0-9.:[\]-]+$/.test(host)?`https://${host}`:'https://localhost'; }
 }
+const HARDCODED_VERCEL_REDIRECT_URI='https://pothub-self.vercel.app/api/vercel/callback';
 function vercelRedirectSource(req){
+  if(process.env.VERCEL_REDIRECT_URI_OVERRIDE)return {value:String(process.env.VERCEL_REDIRECT_URI_OVERRIDE).trim().replace(/\/+$/,''),source:'VERCEL_REDIRECT_URI_OVERRIDE'};
+  return {value:HARDCODED_VERCEL_REDIRECT_URI,source:'built-in (hard-coded in server/app.js)'};
+}
+function vercelRedirectSourceFromEnv(req){
   const clean=v=>String(v||'').trim().replace(/^["']|["']$/g,'').trim().replace(/\/+$/,'');
   const explicit=clean(process.env.VERCEL_REDIRECT_URI),apiBase=clean(process.env.POTHUB_API_ORIGIN),appUrl=clean(process.env.APP_URL);
   const fallbackHost=String(req?.headers?.['x-forwarded-host']||req?.headers?.host||'').split(',')[0].trim();
@@ -546,7 +551,7 @@ function authConfigWarnings(req){
     let vHost='';try{vHost=new URL(vercelRedirectUri(req)).host.toLowerCase()}catch(e){w.push(String(e?.detail||e?.message||e).slice(0,260))}
     if(vHost&&apiHost&&vHost!==apiHost)w.push(`The Vercel callback host (${vHost}) differs from the API origin (${apiHost}).`);
     if(vHost&&reqHost&&vHost!==reqHost)w.push(`The Vercel callback host (${vHost}) differs from the host serving this request (${reqHost}). The Authorization Callback URL registered in the Vercel app must be exactly the Vercel callback shown here.`);
-    if(!process.env.VERCEL_REDIRECT_URI)w.push('VERCEL_REDIRECT_URI is not set on this deployment, so the callback is derived from other settings. If you just added it, redeploy: environment variables only apply to new deployments.');
+    
     if(String(process.env.SESSION_SECRET||'').length<32)w.push('SESSION_SECRET is missing or shorter than 32 characters.');
     if(!githubOAuth().ok)w.push(`GitHub OAuth: ${githubConfigProblem(githubOAuth())}`);
     if(!vercelOAuth().ok)w.push('VERCEL_CLIENT_ID / VERCEL_CLIENT_SECRET are not both set on this deployment.');
@@ -673,7 +678,7 @@ app.get('/api/github/repos',async(req,res)=>{
   const firstPagePath='/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&sort=updated&direction=desc&per_page=100&page=1';
   const {identity,firstPage}=await fetchGithubRepositoryBootstrap(githubJson,firstPagePath);
   const scopes=String(identity.headers.get('x-oauth-scopes')||'').split(',').map(v=>v.trim()).filter(Boolean);
-  const access=validateGithubRepoAccess({scopes,githubUserId:identity.data?.id,sessionUserId:s.user.id});
+  const access=validateGithubRepoAccess({scopes,githubUserId:identity.data?.id,sessionUserId:s.user.id,linkedGithubUserId:s.linkedAccounts?.github?.id||s.user?.githubId||''});
   if(!access.ok)throw Object.assign(new Error(access.message),{status:access.status,code:access.code,reconnect:access.reconnect});
   const result=await discoverGithubRepositories(async page=>{
    const response=await githubJson(`/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&sort=updated&direction=desc&per_page=100&page=${page}`);

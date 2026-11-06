@@ -635,3 +635,17 @@ html{font-size:var(--pothub-root-font-size,16px)}
 .auth-issue-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .auth-issue-actions button{flex:1 1 140px}
 @media(min-width:700px){.auth-issue-backdrop{align-items:center}.auth-issue-sheet{border-radius:16px;padding-bottom:16px}}
+
+/* Vercel Backend: default (ticked) AIs and backend-only switch */
+.vb-agents{display:grid;gap:10px}
+.vb-switch{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel2)}
+.vb-switch input,.vb-agent-row input{width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:var(--accent,#6366f1)}
+.vb-switch span,.vb-agent-row span{display:grid;gap:2px;flex:1;min-width:0}
+.vb-switch small,.vb-agent-row small{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.vb-agent-list{display:grid;gap:8px}
+.vb-agent-row{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel2);cursor:pointer}
+.vb-agent-row.on{border-color:var(--accent,#6366f1)}
+.vb-agent-row em{font-style:normal;font-size:11px;color:var(--muted)}
+.vb-agent-row.on em{color:var(--accent,#6366f1);font-weight:600}
+.vb-add-ai{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+.vb-add-ai select,.vb-add-ai input{min-height:40px;min-width:0}

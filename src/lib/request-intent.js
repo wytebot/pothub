@@ -66,6 +66,46 @@ const CHAT_GUARDS = [
   /\b(?:difference between|compare|comparison|tutorial|guide to|tips for|best way to|steps to|ideas for|names for|alternatives to)\b/,
 ];
 
+
+/**
+ * Hard guards: text that mentions media words but is NOT a request for the app to render media.
+ * These never route to the Image/Video agent, even with a creation verb. Add phrases here
+ * whenever a false positive turns up.
+ */
+const NEGATED_CREATION = /\b(?:don'?t|do not|dont|never|stop|avoid|skip|without|no need (?:to|for)|instead of|rather than|not necessary to|unnecessary to)\b.{0,40}\b(?:generat\w*|creat\w*|mak\w*|draw\w*|render\w*|produc\w*|design\w*|paint\w*)\b/;
+const NEGATED_MEDIA = /\b(?:no|not|without|skip|avoid|don'?t (?:need|want|use)|do not (?:need|want|use)|stop (?:using|sending|making))\s+(?:an?\s+|any\s+|the\s+|more\s+)?(?:new\s+)?(?:image|images|picture|pictures|photo|photos|illustration|illustrations|video|videos|logo|icon|icons)\b/;
+const NOT_A_COMMAND = [
+  // Meta-talk about the assistant or earlier output.
+  /^(?:you|your|that|this|it|those|these|the (?:image|picture|photo|video|logo|result|output))\b/,
+  /^(?:i|we|he|she|they)\s+(?:did(?:n'?t| not)|do(?:n'?t| not)|never|already|was|were|saw|found|made|drew|created|generated)\b/,
+  /^(?:don'?t|do not|never|stop|no|not|without|avoid|skip|nothing|nope|cancel|undo|ignore|forget)\b/,
+  /^(?:thanks|thank you|thx|great|nice|cool|perfect|awesome|good|wow|lol|hmm|yes|yeah|yep|sure|done|got it)\b[^a-z]*$/,
+  // Software / infrastructure senses of image, icon, render, etc.
+  /\b(?:docker|container|base|iso|disk|vm|virtual machine|boot|kernel|ami|oci)\s+images?\b/,
+  /\b(?:image|img|icon|logo|avatar|thumbnail|banner|poster|video)s?\s+(?:tag|tags|src|alt|attribute|url|link|path|size|dimensions|optimi[sz]ation|upload|uploads|uploader|picker|cropper|loader|lazy[- ]?load\w*|cache|caching|file|files|buffer|processing|recognition|classification|segmentation|dataset|model|hosting|cdn|prop|props|field|column|bucket|storage|metadata|exif|compression|format|ratio|resolution|quality|permission|permissions)\b/,
+  /\b(?:broken|missing|blurry|blurred|pixelated|stretched|cropped|distorted|slow|corrupt\w*|failing|not (?:loading|showing|displaying|working|appearing|found|rendering))\s+(?:image|images|picture|photo|icon|logo|thumbnail|avatar|video)s?\b/,
+  /\b(?:image|images|picture|photo|icon|logo|thumbnail|avatar|video|banner)s?\s+(?:is|are|isn'?t|aren'?t|won'?t|doesn'?t|don'?t|not|keeps?|fails?|failed|errors?)\b/,
+  /<img\b|\bsrc=|\balt=|background-image|object-fit|\bcss\b|\bhtml\b|\bjsx\b|\btsx\b|\bsvg (?:code|markup|path|element|tag)\b|\bwebmanifest\b|\bmanifest\.json\b/,
+  /\b(?:make|create|generate|set)\s+(?:an?\s+|the\s+|this\s+|that\s+)?(?:image|picture|photo|icon|logo|thumbnail|avatar|banner|video)\s+(?:smaller|bigger|larger|wider|taller|responsive|lazy|clickable|rounded|circular|transparent|darker|lighter|sharper|visible|accessible|fit|load|center\w*|full[- ]?width|a link|a button)\b/,
+  // Text deliverables that merely mention a media noun.
+  /\b(?:write|draft|compose|list|suggest|brainstorm|outline)\b.{0,40}\b(?:ideas?|names?|slogans?|taglines?|captions?|copy|wording|descriptions?|briefs?|checklists?|plans?|outlines?|summar(?:y|ies)|steps|prompts?|alt text|hashtags?)\b/,
+  /\b(?:generate|create|make|write)\s+(?:some\s+|the\s+|an?\s+)?(?:alt text|captions?|hashtags?|image prompts?)\b/,
+  // Phrasal / figurative senses of art verbs.
+  /\b(?:draw|drawing|sketch|sketching)\s+(?:up|out|on|from|upon|back|near|attention|lessons?|inspiration|parallels?|conclusions?|comparisons?|distinctions?|lines?|blank|a (?:line|blank|conclusion|comparison|parallel|distinction|bath|breath|salary|card|crowd|weapon|gun|sword|check|cheque))\b/,
+  /\billustrate\s+(?:how|why|that|what|when|with\s+(?:an?\s+)?(?:example|examples|code|numbers|data)|the (?:concept|idea|point|difference|principle|process))\b/,
+  /\bpaint(?:ing)?\s+(?:a (?:picture|vision|scenario|story)\s+of how|the (?:wall|walls|room|house|fence|door|ceiling|car|deck))\b/,
+  /\b(?:design|build|create|make|generate)\s+(?:an?\s+|the\s+)?(?:database|schema|api|system|architecture|algorithm|data model|workflow|pipeline|curriculum|experiment|survey|test plan|interface|layout|user flow|strategy|process|policy|sitemap|wireframe|prototype|(?:app|website|landing page|dashboard|web page)(?!\s+(?:icon|logo|banner|splash|screenshot|mockup|mock-up|poster|flyer|illustration)))\b/,
+  /\b(?:render|rendering|renders)\s+(?:the\s+|a\s+|an\s+)?(?:page|view|component|template|html|markdown|ui|screen|list|table|state|props|text|string|chart|graph)\b/,
+  /\b(?:icon|logo|image|picture)\s+(?:library|pack|set|font|sprite|sheet)s?\b/,
+];
+/** Pasted content (code, logs, long documents) is data for Chat, never a media command. */
+function looksLikePastedContent(raw) {
+  if (raw.length > 700) return true;
+  if (/```|\n\s*(?:at\s+\S+\(|\w+Error:|npm ERR|Traceback|import |from \S+ import |const |let |var |function |def |class |<\/?[a-z]+[ >])/i.test(raw)) return true;
+  if ((raw.match(/\n/g) || []).length >= 6) return true;
+  return false;
+}
+
 /** Strong evidence the user wants the app (not just text) to produce the media itself. */
 const STRONG_IMAGE_TAIL = /\b(?:of|showing|depicting|featuring|with|for|that shows|where)\b/;
 
@@ -118,6 +158,7 @@ function detectFileFormat(text) {
  * @returns {{task:'chat'|'image'|'video', confidence:'high'|'medium'|'low', reason:string, chain?:'image-to-video', fileFormat?:string}}
  */
 export function classifyRequest(value, context = {}) {
+  const pasted = looksLikePastedContent(String(value || ''));
   const raw = normalise(value);
   const attachments = Array.isArray(context.attachments) ? context.attachments : [];
   const hasImage = attachments.some((a) => String(a?.type || '').startsWith('image/'));
@@ -134,6 +175,11 @@ export function classifyRequest(value, context = {}) {
     }
   }
   if (hasImage && /\b(?:animate|bring (?:it|this|that|them) to life|make (?:it|this|that|them) (?:move|come alive)|turn (?:it|this|that|them) into (?:a |an )?(?:video|clip|animation)|(?:video|clip|animation) (?:from|of) (?:this|the attached|my) (?:image|photo|picture))\b/.test(text)) return base('video', 'high', 'attached image + motion request', { chain: 'image-to-video' });
+  // Not a command at all: pasted code/logs/long text, negations ("don't generate an image"), meta-talk,
+  // software senses of image/icon/render, and text deliverables. Never spend the Image/Video function on these.
+  if (pasted) return base('chat', 'low', 'guarded: pasted content');
+  if (NEGATED_CREATION.test(text) || NEGATED_MEDIA.test(text)) return base('chat', 'low', 'guarded: media creation is negated');
+  if (NOT_A_COMMAND.some((rx) => rx.test(text))) return base('chat', 'low', 'guarded: not a media-creation command');
   // Preserve the established English how-to/code/analysis boundary before multilingual matching.
   if (/^(?:how|what|why|when|where|which|who|is|are|does|do|did|should i|can i)\b/i.test(text) || CHAT_GUARDS.some(rx => rx.test(text))) return base('chat', 'low', 'guarded: how-to, code or analysis request');
   // Data-driven multilingual detection. CJK scripts are matched by substrings rather than word boundaries.
