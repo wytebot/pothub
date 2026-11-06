@@ -16,8 +16,8 @@ test('server validates upload ownership, expiry and exact declared size before r
   assert.match(lib,/user-uploads\/\$\{uidHash\}\//);
   assert.match(lib,/const cap=Math\.max\(1024,Math\.min\(Number\(maxBytes\)\|\|1024\*1024,1024\*1024\)\)/);
 });
-test('long Codelab prompts are converted to a PDF while original text remains the model context',()=>{
-  assert.match(workspace,/rawText\.length>8000/);
+test('long repository prompts are sent as typed (no PDF conversion cap) and attachment text stays the model context',()=>{
+  assert.doesNotMatch(workspace,/rawText\.length>8000/);
   assert.match(workspace,/typeof f\.pothubTextContent==='string'/);
   assert.match(app,/function makeTextPdfAttachment\(source\)/);
 });

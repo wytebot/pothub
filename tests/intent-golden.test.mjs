@@ -38,9 +38,9 @@ test('golden-set image/video/file/edit precision and recall stay above 99%, medi
   console.log('[intent golden metrics]',JSON.stringify(metrics),'media false-positive rate',falsePositives/negativeMedia.length);
 });
 
-test('classifier and server output-format enum stay synchronized', () => {
-  const match=serverSource.match(/outputFormat:z\.enum\(\[([^\]]+)\]\)/);
-  assert.ok(match,'server outputFormat enum is present');
-  const serverFormats=[...match[1].matchAll(/'([^']+)'/g)].map(m=>m[1]).sort();
-  assert.deepEqual(serverFormats,expectedFormats);
+test('server accepts every classifier output format (open extension schema, no stale enum)', () => {
+  const match=serverSource.match(/outputFormat:z\.string\(\)\.regex\((\/[^/]+\/)\)/);
+  assert.ok(match,'server outputFormat schema is an extension pattern');
+  const rx=new RegExp(match[1].slice(1,-1));
+  for(const format of expectedFormats)assert.match(format,rx,`server rejects ${format}`);
 });

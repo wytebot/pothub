@@ -19,7 +19,7 @@ export const INTENT_LEXICON = {
  ru:{image:['изображение','картинка','фото','портрет','иллюстрация','логотип','плакат','рисунок'],video:['видео','ролик','анимация','анимацию','фильм'],verbs:['создай','создать','сгенерируй','сгенерировать','нарисуй','сделай','разработай'],polite:['пожалуйста','мне нужно','я хочу','можешь','не могли бы'],questions:['как','что такое','почему','объясни','проанализируй','кратко','переведи','опиши'],code:['код','функция','скрипт','api','учебник','промпт','программирование']},
  tr:{image:['görsel','resim','fotoğraf','portre','illüstrasyon','logo','afiş','çizim'],video:['video','klip','animasyon','film'],verbs:['oluştur','üret','çiz','tasarla','hazırla'],polite:['lütfen','istiyorum','ihtiyacım var','yapabilir misin'],questions:['nasıl','nedir','neden','açıkla','analiz et','özetle','çevir','tanımla'],code:['kod','fonksiyon','betik','api','öğretici','istem','programlama']}
 };
-export const OUTPUT_FORMATS = ['txt','md','csv','json','html','docx','pdf','xlsx','zip','pptx','xml','yaml','py','js','ts','css','sql','sh'];
+export const OUTPUT_FORMATS = ['txt','md','csv','json','html','docx','pdf','xlsx','zip','pptx','xml','yaml','py','js','ts','css','sql','sh','tsv','rtf','svg','ics','vcf','jsonl','toml','jsx','tsx','srt','vtt'];
 
 /** Image-to-image operation vocabulary. Edit operations are never sent to generation-only providers. */
 export const IMAGE_EDIT_LEXICON = {

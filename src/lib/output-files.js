@@ -2,11 +2,27 @@
  * Turn an assistant reply into a downloadable file in the format the prompt asked for.
  * Pure helpers (no React, no Dexie) so they run in the browser, the Capacitor APK and Node tests.
  *
- * Supported here: txt, md, csv, json, html, docx. PDF is produced by the caller (App.jsx owns the
- * PDF writer). Anything else returns null so the caller can say so plainly instead of faking a file.
+ * Built here: txt, md, csv, tsv, json, html, docx, xlsx, pptx, rtf, zip and every plain-text or source-code
+ * format listed in RAW_TEXT_MIME (the model's file content is delivered verbatim under the requested extension).
+ * PDF is produced by the caller (App.jsx owns the PDF writer). Binary media such as png/mp3/mp4 cannot be
+ * written as text; buildOutputFile returns null for those so the caller can say so plainly.
  */
 
-export const TEXT_OUTPUT_FORMATS = ['txt','md','csv','json','html','docx','pdf','xlsx','zip','pptx','xml','yaml','py','js','ts','css','sql','sh'];
+// Plain-text / source formats delivered verbatim (extension -> MIME).
+export const RAW_TEXT_MIME = {
+  tsv: 'text/tab-separated-values', jsonl: 'application/x-ndjson', htm: 'text/html', jsx: 'text/jsx', tsx: 'text/tsx', mjs: 'text/javascript', cjs: 'text/javascript',
+  scss: 'text/x-scss', less: 'text/x-less', rb: 'text/x-ruby', php: 'application/x-httpd-php', java: 'text/x-java-source', kt: 'text/x-kotlin', swift: 'text/x-swift',
+  go: 'text/x-go', rs: 'text/x-rust', c: 'text/x-c', h: 'text/x-c', cpp: 'text/x-c++src', hpp: 'text/x-c++src', cs: 'text/x-csharp', ps1: 'text/x-powershell',
+  bat: 'text/x-msdos-batch', bash: 'text/x-shellscript', lua: 'text/x-lua', r: 'text/x-r', dart: 'text/x-dart', toml: 'application/toml', ini: 'text/plain', env: 'text/plain',
+  log: 'text/plain', srt: 'application/x-subrip', vtt: 'text/vtt', tex: 'application/x-tex', ics: 'text/calendar', vcf: 'text/vcard', svg: 'image/svg+xml', rtf: 'application/rtf',
+  yml: 'application/yaml', conf: 'text/plain', properties: 'text/plain', graphql: 'application/graphql', proto: 'text/plain', diff: 'text/x-diff', patch: 'text/x-diff',
+  tf: 'text/plain', vue: 'text/plain', svelte: 'text/plain', dockerfile: 'text/plain', gitignore: 'text/plain', makefile: 'text/plain',
+};
+const CORE_FORMATS = ['txt','md','csv','json','html','docx','pdf','xlsx','zip','pptx','xml','yaml','py','js','ts','css','sql','sh'];
+export const TEXT_OUTPUT_FORMATS = [...new Set([...CORE_FORMATS, ...Object.keys(RAW_TEXT_MIME)])];
+// Binary media/containers that cannot be authored as a text reply.
+const BINARY_ONLY = new Set(['png','jpg','jpeg','gif','webp','bmp','ico','mp3','wav','ogg','flac','m4a','mp4','mov','avi','mkv','webm','exe','apk','ipa','dmg','iso','bin','dll','so','7z','rar','tar','gz','tgz']);
+export const isBinaryOnlyFormat = (format) => BINARY_ONLY.has(String(format || '').toLowerCase());
 
 const MIME = {
   txt: 'text/plain',
@@ -21,7 +37,7 @@ const MIME = {
 };
 
 export function mimeForFormat(format) {
-  return MIME[format] || 'application/octet-stream';
+  return MIME[format] || RAW_TEXT_MIME[format] || 'application/octet-stream';
 }
 
 export function safeBaseName(value, fallback = 'pothub-output') {
@@ -161,13 +177,78 @@ function namedFences(source) {
 }
 function toXml(source) { const raw = firstFence(source, ['xml']) || source.trim(); return /^<\?xml\b|^<[A-Za-z_:][\w:.-]*(?:\s|>)/.test(raw) ? raw + '\n' : ''; }
 function toYaml(source) { const raw = firstFence(source, ['yaml','yml']) || source.trim(); return raw && !/```/.test(raw) && (/^[\w.-]+\s*:\s*.+/m.test(raw) || /^\s*-\s+\S+/m.test(raw)) ? raw + '\n' : ''; }
-async function toZip(source, title) {
-  const files = namedFences(source); if (!files.length) return null;
-  const JSZip = (await import('jszip')).default; const zip = new JSZip(); const used = new Set(); const manifest = [];
-  for (const file of files) { let name=file.name,n=2; while(used.has(name.toLowerCase())) { const dot=name.lastIndexOf('.'); name=dot>0?`${file.name.slice(0,dot)}-${n++}${file.name.slice(dot)}`:`${file.name}-${n++}`; } used.add(name.toLowerCase()); const bytes=new TextEncoder().encode(file.content); if(bytes.byteLength>2*1024*1024) continue; zip.file(name,bytes); manifest.push(`- ${name} (${bytes.byteLength} bytes)`); }
-  if(!manifest.length) return null; zip.file('README.md',`# ${title || 'PotHub export'}\n\nFiles included:\n${manifest.join('\n')}\n`); const data=await zip.generateAsync({type:'uint8array',compression:'DEFLATE'}); return data.byteLength<=10*1024*1024?data:null;
+const EXT_FOR_LANG = { javascript:'js', js:'js', jsx:'jsx', typescript:'ts', ts:'ts', tsx:'tsx', python:'py', py:'py', bash:'sh', sh:'sh', shell:'sh', zsh:'sh', json:'json', html:'html', css:'css', scss:'scss', sql:'sql', yaml:'yaml', yml:'yml', xml:'xml', md:'md', markdown:'md', java:'java', go:'go', golang:'go', rust:'rs', rs:'rs', ruby:'rb', rb:'rb', php:'php', c:'c', cpp:'cpp', 'c++':'cpp', csharp:'cs', 'c#':'cs', kotlin:'kt', swift:'swift', toml:'toml', ini:'ini', csv:'csv', svg:'svg', text:'txt', txt:'txt', diff:'diff', powershell:'ps1', lua:'lua', dart:'dart', r:'r', env:'env' };
+const LANG_ALIASES = { js:['js','javascript','node','mjs','cjs'], ts:['ts','typescript'], py:['py','python'], sh:['sh','bash','shell','zsh'], yaml:['yaml','yml'], yml:['yaml','yml'], rb:['rb','ruby'], rs:['rs','rust'], kt:['kt','kotlin'], cs:['cs','csharp','c#'], cpp:['cpp','c++'], go:['go','golang'], ps1:['ps1','powershell'], md:['md','markdown'], txt:['txt','text'], htm:['htm','html'], jsonl:['jsonl','ndjson','json'], tex:['tex','latex'] };
+
+function fenceBlocks(source) {
+  const lines = String(source || '').split(/\r?\n/), out = []; let prev = '';
+  for (let i = 0; i < lines.length; i++) {
+    const open = lines[i].match(/^\s*```+\s*([^\s`]*)\s*(.*)$/);
+    if (open) {
+      const body = []; let j = i + 1;
+      for (; j < lines.length && !/^\s*```+\s*$/.test(lines[j]); j++) body.push(lines[j]);
+      out.push({ lang: (open[1] || '').toLowerCase(), info: open[2] || '', before: prev, content: body.join('\n') });
+      i = j; prev = ''; continue;
+    }
+    if (lines[i].trim()) prev = lines[i].trim();
+  }
+  return out;
 }
 
+function cleanArchivePath(raw) {
+  let name = String(raw || '').trim().replace(/^NEW:/i, '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/[^a-zA-Z0-9._/-]/g, '-');
+  name = name.split('/').filter((part) => part && part !== '.' && part !== '..').map((part) => part.replace(/[. ]+$/g, '')).join('/');
+  if (!name || name.split('/').some((part) => /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) return '';
+  return name;
+}
+
+/** Files for an archive: explicit names (file=/path=/```js:path/a line holding only a path) first, then language-based names, then the whole reply. */
+export function archiveEntries(source) {
+  const out = [];
+  fenceBlocks(source).forEach((b, i) => {
+    const fromInfo = (b.info.match(/(?:file|path|filename|name|title)\s*=\s*["']?([^\s"']+)/i) || [])[1] || (b.lang.match(/:([\w./-]+\.[\w]{1,8})$/) || [])[1];
+    const fromLine = b.before.length <= 160 ? (b.before.match(/^[\s#*_>\-\d.)(`"'\[]*(?:file|path|filename)?\s*:?\s*[\s`*"'(\[]*((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9]{1,8})[\s`*"')\]:]*$/i) || [])[1] : '';
+    const lang = b.lang.replace(/:.*$/, '');
+    const ext = EXT_FOR_LANG[lang] || (/^[a-z0-9]{1,6}$/.test(lang) && lang !== 'codeblock' ? lang : 'txt');
+    const name = cleanArchivePath(fromInfo || fromLine) || `file-${i + 1}.${ext}`;
+    if (b.content.trim()) out.push({ name, content: b.content });
+  });
+  if (!out.length && String(source || '').trim()) out.push({ name: 'response.md', content: String(source).trim() });
+  return out;
+}
+
+async function toZip(source, title) {
+  const files = archiveEntries(source); if (!files.length) return null;
+  const JSZip = (await import('jszip')).default; const zip = new JSZip(); const used = new Set(); const manifest = [];
+  for (const file of files) {
+    let name = file.name, n = 2;
+    while (used.has(name.toLowerCase())) { const dot = name.lastIndexOf('.'); name = dot > 0 ? `${file.name.slice(0, dot)}-${n++}${file.name.slice(dot)}` : `${file.name}-${n++}`; }
+    used.add(name.toLowerCase());
+    const bytes = new TextEncoder().encode(file.content);
+    zip.file(name, bytes); manifest.push(`- ${name} (${bytes.byteLength} bytes)`);
+  }
+  if (!used.has('readme.md')) zip.file('README.md', `# ${title || 'PotHub export'}\n\nFiles included:\n${manifest.join('\n')}\n`);
+  return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+}
+
+// ---- verbatim text formats and a few generated ones
+function toRawText(format, source) {
+  const langs = LANG_ALIASES[format] || [format];
+  const named = namedFences(source).find((f) => f.name.toLowerCase().endsWith('.' + format));
+  if (named) return named.content + '\n';
+  const same = firstFence(source, langs); if (same.trim()) return same + '\n';
+  const blocks = fenceBlocks(source).filter((b) => b.content.trim());
+  if (blocks.length) return blocks.sort((a, b) => b.content.length - a.content.length)[0].content + '\n';
+  return String(source).trim() + '\n';
+}
+function toTsv(text) {
+  const fenced = firstFence(text, ['csv', 'tsv']);
+  const rows = fenced.trim() ? (/\t/.test(fenced) ? fenced.split(/\r?\n/).filter(Boolean).map((l) => l.split('\t')) : parseCsvRows(fenced)) : parseMarkdownTable(text);
+  return rows && rows.length ? rows.map((r) => r.map((c) => String(c ?? '').replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\r\n') + '\r\n' : '';
+}
+function toSvg(text) { const m = String(text).match(/<svg[\s\S]*<\/svg>/i); return m ? (/xmlns=/.test(m[0].slice(0, 200)) ? m[0] : m[0].replace(/^<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"')) + '\n' : ''; }
+function rtfEscape(t) { return String(t).replace(/[\\{}]/g, '\\$&').replace(/[^\x00-\x7f]/g, (c) => { const code = c.charCodeAt(0); return `\\u${code > 32767 ? code - 65536 : code}?`; }); }
+function toRtf(text) { return '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Calibri;}}\\f0\\fs22 ' + markdownToPlain(text).split(/\r?\n/).map(rtfEscape).join('\\par\n') + '}'; }
 
 function parseCsvRows(csv) {
   const rows=[]; let row=[], cell='', quoted=false; const s=String(csv||'').replace(/^\uFEFF/,'');
@@ -221,11 +302,20 @@ export async function buildOutputFile(format, text, { title = '' } = {}) {
     case 'docx': data = await toDocx(source, ''); break;
     case 'xml': data = toXml(source); break;
     case 'yaml': data = toYaml(source); break;
-    case 'py': case 'js': case 'ts': case 'html': case 'css': case 'sql': case 'sh': { const fence = namedFences(source).find(f => f.name.toLowerCase().endsWith('.'+format)); data = fence ? fence.content + '\n' : (firstFence(source, [format]) ? firstFence(source, [format])+'\n' : ''); break; }
+    case 'tsv': data = toTsv(source); break;
+    case 'rtf': data = toRtf(source); break;
+    case 'svg': data = toSvg(source); break;
+    case 'py': case 'js': case 'ts': case 'css': case 'sql': case 'sh': data = toRawText(format, source); break;
     case 'zip': { const archive = await toZip(source, title); if (!archive) return null; data = archive; break; }
-    case 'xlsx': { const workbook = await toXlsx(source, title); if (!workbook) return null; data = workbook; break; }
+    case 'xlsx': {
+      let workbook = await toXlsx(source, title);
+      if (!workbook) { const rows = markdownToPlain(source).split(/\r?\n/).filter((l) => l.trim()).map((l) => `"${l.replace(/"/g, '""')}"`); workbook = rows.length ? await toXlsx('```csv\nContent\n' + rows.join('\n') + '\n```', title) : null; }
+      if (!workbook) return null; data = workbook; break;
+    }
     case 'pptx': { const presentation = await toPptx(source, title); if (!presentation) return null; data = presentation; break; }
-    default: return null;
+    default:
+      if (isBinaryOnlyFormat(format) || !/^[a-z0-9]{1,10}$/.test(String(format))) return null;
+      data = toRawText(format, source);
   }
   if (!data || (typeof data === 'string' && !data.trim())) return null;
   return { name: `${base}.${format}`, type: mimeForFormat(format), data };

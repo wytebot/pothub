@@ -132,6 +132,33 @@ const FILE_FORMATS = [
   ['css', /\bcss file\b|(?:^|[^a-z0-9_])\.css\b/],
   ['sql', /\bsql file\b|(?:^|[^a-z0-9_])\.sql\b/],
   ['sh', /\b(?:shell script|bash script|\.sh)\b/],
+  ['tsv', /\btsv\b|tab[- ]separated/],
+  ['rtf', /\brtf\b|rich text (?:file|format|document)/],
+  ['svg', /\bsvg (?:file|image|graphic|icon|logo)\b|(?:^|[^a-z0-9_])\.svg\b/],
+  ['ics', /\bics file\b|\bicalendar\b|(?:^|[^a-z0-9_])\.ics\b/],
+  ['vcf', /\bvcf\b|\bvcard\b/],
+  ['jsonl', /\bjsonl\b|\bndjson\b/],
+  ['toml', /\btoml\b/],
+  ['ini', /\bini file\b|(?:^|[^a-z0-9_])\.ini\b/],
+  ['env', /(?:^|[^a-z0-9_])\.env\b/],
+  ['jsx', /\bjsx file\b|(?:^|[^a-z0-9_])\.jsx\b/],
+  ['tsx', /\btsx file\b|(?:^|[^a-z0-9_])\.tsx\b/],
+  ['java', /\bjava file\b|(?:^|[^a-z0-9_])\.java\b/],
+  ['kt', /\bkotlin file\b|(?:^|[^a-z0-9_])\.kt\b/],
+  ['swift', /\bswift file\b|(?:^|[^a-z0-9_])\.swift\b/],
+  ['go', /\bgolang file\b|\bgo source file\b|(?:^|[^a-z0-9_])\.go\b/],
+  ['rs', /\brust file\b|(?:^|[^a-z0-9_])\.rs\b/],
+  ['cpp', /\bc\+\+ file\b|\bcpp file\b|(?:^|[^a-z0-9_])\.cpp\b/],
+  ['cs', /\bc# file\b|\bcsharp file\b|(?:^|[^a-z0-9_])\.cs\b/],
+  ['c', /\bc source file\b|(?:^|[^a-z0-9_])\.c\b/],
+  ['php', /\bphp file\b|(?:^|[^a-z0-9_])\.php\b/],
+  ['rb', /\bruby file\b|(?:^|[^a-z0-9_])\.rb\b/],
+  ['ps1', /\bpowershell (?:script|file)\b|(?:^|[^a-z0-9_])\.ps1\b/],
+  ['bat', /\bbatch (?:script|file)\b|(?:^|[^a-z0-9_])\.bat\b/],
+  ['srt', /\bsrt\b|\bsubtitle file\b/],
+  ['vtt', /\bvtt\b/],
+  ['tex', /\blatex (?:file|document)\b|(?:^|[^a-z0-9_])\.tex\b/],
+  ['log', /\blog file\b|(?:^|[^a-z0-9_])\.log\b/],
   ['pdf', /\bpdf\b/],
   ['docx', /\b(?:docx|word (?:doc|document|file))\b/],
   ['xlsx', /\b(?:xlsx|excel(?: file| sheet| spreadsheet)?|spreadsheet)\b/],
@@ -145,7 +172,7 @@ const FILE_FORMATS = [
 const FILE_REQUEST = new RegExp(
   `^${POLITE}(?:${CREATE_VERB}|write|export|save|prepare|build|put together|give me|send me|convert|turn)\\b.{0,100}\\b(?:file|document|pdf|docx|xlsx|csv|spreadsheet|report|download(?:able)?)\\b`,
 );
-const DOWNLOAD_HINT = /\b(?:as|into|in|to) (?:a |an )?(?:downloadable |\.?)(?:pdf|docx|xlsx|csv|json|markdown|md|txt|html|zip)\b|\bdownloadable (?:file|pdf|document)\b/;
+const DOWNLOAD_HINT = /\b(?:as|into|in|to) (?:a |an )?(?:downloadable |\.?)(?:pdf|docx|xlsx|csv|json|markdown|md|txt|html|zip|tsv|rtf|svg|jsonl|toml)\b|\bdownloadable (?:file|pdf|document)\b/;
 
 function detectFileFormat(text) {
   for (const [format, rx] of FILE_FORMATS) if (rx.test(text)) return format;

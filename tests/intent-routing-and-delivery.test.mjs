@@ -87,8 +87,9 @@ test('client routes by intent confidence and the server tells the model about ro
   // No Video agent (or an ambiguous request) never blocks: the prompt falls through to Chat.
   assert.match(ui, /if\(!configured\.length&&\(fn==='Video'\|\|intent\.confidence!=='high'\)\)return false/);
   assert.match(ui, /outputFormat:intent\.fileFormat/);
-  assert.match(server, /outputFormat:z\.enum\(/);
-  for (const format of TEXT_OUTPUT_FORMATS) assert.ok(server.includes(`'${format}'`), `server output schema missing ${format}`);
+  assert.match(server, /outputFormat:z\.string\(\)\.regex\(\/\^\[a-z0-9\]\{1,10\}\$\/\)/);
+  assert.match(server, /outputFormatInstruction\(i\.outputFormat\)/);
+  for (const format of TEXT_OUTPUT_FORMATS) assert.match(format, /^[a-z0-9]{1,10}$/, `server output schema would reject ${format}`);
   assert.match(server, /Never say you cannot generate images, video or files/);
 });
 
