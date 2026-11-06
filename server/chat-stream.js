@@ -24,13 +24,15 @@ export async function providerErrorDetail(response){
  * Also accepts endpoints that ignore stream:true and answer with one JSON document, and surfaces
  * in-stream error events instead of reporting "no text".
  */
-export async function readChatStream(response,kind,onToken){
+export async function readChatStream(response,kind,onToken,meta={}){
   const reader=response.body.getReader(),decoder=new TextDecoder();
   let buffer='',full='',raw='';
   const fail=e=>{throw new Error(`AI endpoint error: ${clean(e?.message||e?.type||e)}`)};
   const feed=obj=>{
     if(obj?.error)fail(obj.error);
     if(obj?.type==='error')fail(obj.error||obj.message||'stream error');
+    const fr=kind==='anthropic'?(obj?.type==='message_delta'?obj?.delta?.stop_reason:''):obj?.choices?.[0]?.finish_reason;
+    if(fr==='length'||fr==='max_tokens')meta.finish='length';
     const text=kind==='anthropic'?obj?.delta?.text:partsText(obj?.choices?.[0]?.delta?.content);
     if(typeof text==='string'&&text){full+=text;onToken(text)}
   };
@@ -54,6 +56,7 @@ export async function readChatStream(response,kind,onToken){
     let doc=null;try{doc=JSON.parse(raw.trim())}catch{}
     if(doc){
       if(doc.error)fail(doc.error);
+      if(doc.choices?.[0]?.finish_reason==='length'||doc.stop_reason==='max_tokens')meta.finish='length';
       const text=kind==='anthropic'?partsText(doc.content):(partsText(doc.choices?.[0]?.message?.content)||String(doc.output_text||''));
       if(text){full=text;onToken(text)}
     }
