@@ -12,3 +12,12 @@ test('Vercel OAuth callback uses an explicit validated HTTPS callback URI',()=>{
  assert.match(docs,/VERCEL_REDIRECT_URI/);
  assert.match(docs,/must match exactly/);
 });
+
+test('Vercel redirect URI honors VERCEL_REDIRECT_URI before the built-in fallback',()=>{
+ const start=app.indexOf('function vercelRedirectSource(req)');
+ const end=app.indexOf('function vercelRedirectSourceFromEnv(req)',start);
+ const source=app.slice(start,end);
+ assert.match(source,/VERCEL_REDIRECT_URI_OVERRIDE/);
+ assert.match(source,/vercelRedirectSourceFromEnv\(req\)/);
+ assert.doesNotMatch(source,/return \{value:HARDCODED_VERCEL_REDIRECT_URI,source:'built-in \(hard-coded in server\/app\.js\)'\}/);
+});

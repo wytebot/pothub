@@ -399,8 +399,15 @@ function safeRequestOrigin(req){
 }
 const HARDCODED_VERCEL_REDIRECT_URI='https://pothub-self.vercel.app/api/vercel/callback';
 function vercelRedirectSource(req){
-  if(process.env.VERCEL_REDIRECT_URI_OVERRIDE)return {value:String(process.env.VERCEL_REDIRECT_URI_OVERRIDE).trim().replace(/\/+$/,''),source:'VERCEL_REDIRECT_URI_OVERRIDE'};
-  return {value:HARDCODED_VERCEL_REDIRECT_URI,source:'built-in (hard-coded in server/app.js)'};
+  // Prefer the explicitly configured callback. The previous implementation
+  // ignored VERCEL_REDIRECT_URI and always sent the built-in URL to Vercel,
+  // even when the operator had registered a different production callback.
+  const clean = value => String(value || '').trim().replace(/^["']|["']$/g, '').trim().replace(/\/+$/, '');
+  const override = clean(process.env.VERCEL_REDIRECT_URI_OVERRIDE);
+  if (override) return { value: override, source: 'VERCEL_REDIRECT_URI_OVERRIDE' };
+  const configured = vercelRedirectSourceFromEnv(req);
+  if (configured.value) return configured;
+  return { value: HARDCODED_VERCEL_REDIRECT_URI, source: 'built-in fallback (set VERCEL_REDIRECT_URI explicitly)' };
 }
 function vercelRedirectSourceFromEnv(req){
   const clean=v=>String(v||'').trim().replace(/^["']|["']$/g,'').trim().replace(/\/+$/,'');

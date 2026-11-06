@@ -185,8 +185,8 @@ export async function wytelabGithub(req,res,p,s){
       const owner=decodeURIComponent(driveExport[1]),repo=decodeURIComponent(driveExport[2]),b=await body(req);
       return json(res,501,{error:"Google Drive export is not available inside PotHub Codelab."});
     }
-    const safePath=(value)=>{const x=String(value||"").replaceAll("\\","/").replace(/^\/+/,"");const parts=x.split("/").filter(Boolean);if(!x||parts.some(v=>v===".."||v==="."))throw Object.assign(new Error("Invalid repository path."),{status:400});return parts.join("/")};
-     const isWorkflowPath=(path)=>String(path||"").replaceAll("\\","/").toLowerCase().startsWith(".github/workflows/");
+    const safePath=(value)=>{const raw=String(value??"").trim();const x=raw.replaceAll("\\","/").replace(/^\/+|\/+$/g,"");const parts=x.split("/");if(!x||/[\u0000-\u001f\u007f]/.test(x)||parts.some(v=>!v||v===".."||v==="."))throw Object.assign(new Error("Invalid repository path: choose a file inside the selected repository (for example, src/App.jsx)."),{status:400,code:"INVALID_REPOSITORY_PATH"});return parts.join("/")};
+    const isWorkflowPath=(path)=>String(path||"").replaceAll("\\","/").toLowerCase().startsWith(".github/workflows/");
     const binaryExt=new Set(["png","jpg","jpeg","gif","webp","ico","bmp","svgz","pdf","zip","gz","tar","7z","rar","woff","woff2","ttf","otf","eot","mp3","mp4","mov","avi","webm","wav","exe","dll","so","dylib","class","jar","psd","ai","sqlite","db"]);
     const isBinaryPath=(p)=>binaryExt.has(String(p).split(".").pop()?.toLowerCase()||"");
     const mimeForPath=(p)=>({png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",gif:"image/gif",webp:"image/webp",ico:"image/x-icon",bmp:"image/bmp",svg:"image/svg+xml",pdf:"application/pdf",woff:"font/woff",woff2:"font/woff2",ttf:"font/ttf",otf:"font/otf",eot:"application/vnd.ms-fontobject",mp3:"audio/mpeg",mp4:"video/mp4",mov:"video/quicktime",webm:"video/webm",wav:"audio/wav"}[String(p).split(".").pop()?.toLowerCase()||""]||"application/octet-stream");
