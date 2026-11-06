@@ -10,6 +10,7 @@ import { decideOperation } from './operation-state.js';
 import { starterGrantEligibility } from './starter-credit-policy.js';
 import {grantCreditsOnce, reserveCreditReservation,commitCreditReservation as commitReservation,releaseCreditReservation as releaseReservation} from './credit-reservations.js';
 import {storeSignedObject,signStoredObject} from './signed-media.js';
+import {isFreeForeverProfile} from './free-forever-policy.js';
 
 function parseServiceAccount(rawValue){
   if(rawValue && typeof rawValue === 'object') return rawValue;
@@ -262,6 +263,18 @@ export async function getSession(req){try{const auth=String(req.headers.authoriz
 export function clearSession(res){appendSetCookie(res,`kithub_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure()}`);appendSetCookie(res,`pothub_sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure()}`)}
 export function redactSecrets(t='',max=25000){const s=String(t);return (Number.isFinite(max)?s.slice(0,max):s).replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g,'[REDACTED_GITHUB_TOKEN]').replace(/AIza[0-9A-Za-z_-]{30,}/g,'[REDACTED_GOOGLE_KEY]').replace(/FLWSECK[^\s"']+/g,'[REDACTED_FLUTTERWAVE_KEY]').replace(/(Bearer\s+)[A-Za-z0-9._-]{20,}/gi,'$1[REDACTED]').replace(/((?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi,'$1[REDACTED]')}
 export async function requireUser(req,res){const s=await getSession(req);if(!s?.user?.id||(!s?.githubToken&&!['google','vercel'].includes(s?.authProvider))){res.status(401).json({error:'Sign in to Pothub to continue.'});return null}return s}
+// Free-forever accounts (server/free-forever-policy.js). Fails closed: any lookup error means "charge normally".
+const freeForeverCache=new Map();
+export async function freeForeverState(id){
+  const userId=String(id||'');if(!userId||!ensureDatabase())return null;
+  const hit=freeForeverCache.get(userId);if(hit&&Date.now()-hit.at<60000)return hit.value;
+  let value=null;
+  try{const {data:profile,error}=await db.from('profiles').select('credits,github_login,email').eq('github_id',userId).maybeSingle();
+    if(!error&&profile&&isFreeForeverProfile(profile,userId))value={credits:Number(profile.credits||0)};
+  }catch{value=null}
+  if(freeForeverCache.size>500)freeForeverCache.clear();
+  freeForeverCache.set(userId,{at:Date.now(),value});return value;
+}
 export async function getCredits(id){
   if(!ensureDatabase())throw Error('Credit accounting is unavailable. Configure Firebase Admin and Firestore.');
   const userId=String(id||'');if(!userId)throw Error('A signed-in account is required to check credits.');
@@ -316,7 +329,7 @@ export async function failAiWorkflowBilling(lease,store=firestore){
   const ref=store.collection('ai_workflow_meters').doc(String(lease.reference));
   await store.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.exists&&String(snap.data().lockOperationId||'')===String(lease.operationId))tx.set(ref,{lockOperationId:null,lockUntil:0,updatedAt:Date.now()},{merge:true});});
 }
-export async function spendCredits(id,amount,reason,metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');const{data,error}=await db.rpc('spend_credits',{p_github_id:String(id),p_amount:amount,p_reason:reason,p_metadata:metadata});if(error)throw Error(error.message||'Unable to reserve credits.');if(!data?.ok)throw Error(data?.message||'Not enough credits.');return{credits:Number(data.credits),demo:false}}
+export async function spendCredits(id,amount,reason,metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');{const free=await freeForeverState(id);if(free)return{credits:free.credits,demo:false}}const{data,error}=await db.rpc('spend_credits',{p_github_id:String(id),p_amount:amount,p_reason:reason,p_metadata:metadata});if(error)throw Error(error.message||'Unable to reserve credits.');if(!data?.ok)throw Error(data?.message||'Not enough credits.');return{credits:Number(data.credits),demo:false}}
 export async function beginOperation(userId,operationId,payloadHash,{ttlMs=20*60*1000,store=firestore}={}){
   if(store===firestore&&!ensureDatabase())throw new Error('Operation storage is unavailable.');if(!store)throw new Error('Operation storage is unavailable.');
   const id=grantDocumentId(userId,`operation:${operationId}`),ref=store.collection('ai_operations').doc(id);
@@ -326,10 +339,10 @@ export async function finishOperation(userId,operationId,payloadHash,result,stor
 export async function failOperation(userId,operationId,payloadHash,error,store=firestore){if(store===firestore&&!ensureDatabase())return;if(!store)return;const ref=store.collection('ai_operations').doc(grantDocumentId(userId,`operation:${operationId}`));await ref.set({userId:String(userId),operationId:String(operationId),payloadHash:String(payloadHash),state:'failed',error:String(error||'Operation failed').slice(0,300),updatedAt:new Date(),expiresAt:new Date(Date.now()+24*60*60*1000)},{merge:true});}
 export function selectStaleReservationRows(rows,cutoff){return rows.filter(row=>{const v=row.expiresAt,ms=typeof v?.toMillis==='function'?v.toMillis():v instanceof Date?v.getTime():Number(v||0);return ms>0&&ms<=cutoff})}
 export async function reconcileStaleCreditReservations({olderThanMinutes=15,limit=200,dryRun=true}={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable.');const cutoff=Date.now()-Math.max(15,Math.min(10080,Number(olderThanMinutes)||60))*60000;const snap=await firestore.collection('credit_reservations').where('state','==','reserved').limit(Math.max(1,Math.min(500,Number(limit)||200))).get();const rows=selectStaleReservationRows(snap.docs.map(d=>({...d.data(),_doc:d})),cutoff).map(x=>x._doc);const results=[];for(const doc of rows){const row=doc.data();if(dryRun){results.push({id:doc.id,reference:row.reference,state:'would_release'});continue;}const released=await db.rpc('release_credit_reservation',{p_github_id:String(row.github_id),p_reference:String(row.reference)});if(released.error||!released.data?.ok)throw Error(released.error?.message||released.data?.message||`Could not release reservation ${doc.id}`);results.push({id:doc.id,reference:row.reference,state:released.data.state});}return{cutoff:new Date(cutoff).toISOString(),checked:snap.size,stale:rows.length,dryRun,results};}
-export async function reserveCredits(id,amount,reference,reason='AI operation',metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');return reserveCreditReservation(db,id,amount,reference,reason,metadata)}
-export async function commitCreditReservation(id,reference,result=null){if(!ensureDatabase())throw Error('Credit accounting is unavailable.');return commitReservation(db,id,reference,result)}
-export async function releaseCreditReservation(id,reference){if(!ensureDatabase())throw Error('Credit accounting is unavailable.');return releaseReservation(db,id,reference)}
-export async function spendCreditsOnce(id,amount,reference,reason='AI operation',metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');const{data,error}=await db.rpc('spend_credits_once',{p_github_id:String(id),p_amount:amount,p_reference:String(reference),p_reason:reason,p_metadata:metadata});if(error)throw Error(error.message||'Unable to charge credits.');if(!data?.ok)throw Error(data?.message||'Not enough credits.');return{credits:Number(data.credits),duplicate:!!data.duplicate,demo:false}}
+export async function reserveCredits(id,amount,reference,reason='AI operation',metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');{const free=await freeForeverState(id);if(free)return{credits:free.credits,duplicate:false,state:'reserved',reservationId:`free-forever:${String(reference)}`,result:null,demo:false}}return reserveCreditReservation(db,id,amount,reference,reason,metadata)}
+export async function commitCreditReservation(id,reference,result=null){if(!ensureDatabase())throw Error('Credit accounting is unavailable.');if(await freeForeverState(id)){try{return await commitReservation(db,id,reference,result)}catch{return{ok:true,duplicate:true,state:'free-forever'}}}return commitReservation(db,id,reference,result)}
+export async function releaseCreditReservation(id,reference){if(!ensureDatabase())throw Error('Credit accounting is unavailable.');if(await freeForeverState(id)){try{return await releaseReservation(db,id,reference)}catch{return{ok:true,duplicate:true,state:'free-forever'}}}return releaseReservation(db,id,reference)}
+export async function spendCreditsOnce(id,amount,reference,reason='AI operation',metadata={}){if(!ensureDatabase())throw Error('Credit accounting is unavailable. Firebase Firestore is not configured.');{const free=await freeForeverState(id);if(free)return{credits:free.credits,duplicate:false,demo:false}}const{data,error}=await db.rpc('spend_credits_once',{p_github_id:String(id),p_amount:amount,p_reference:String(reference),p_reason:reason,p_metadata:metadata});if(error)throw Error(error.message||'Unable to charge credits.');if(!data?.ok)throw Error(data?.message||'Not enough credits.');return{credits:Number(data.credits),duplicate:!!data.duplicate,demo:false}}
 export async function addCredits(id,amount,reference,reason='Credit pack purchase'){if(!ensureDatabase())throw Error('Configure Firebase Firestore before enabling real credit purchases.');return grantCreditsOnce(db,id,amount,reference,reason)}
 export async function storeSignedMedia({buffer,mimeType,userId,kind='image',expiresMs=60*60*1000}){
   ensureFirebaseInitialized();if(!firestoreInstance)throw new Error('Media storage requires Firebase Admin.');
