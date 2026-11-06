@@ -66,12 +66,16 @@ export const repairPrompt = (issues) => `An automatic check of your previous ans
  *  - runs one correction pass when invalid JSON/JS or placeholders are found.
  * runTurn({history,maxTokens,onToken}) -> {text, finish:'length'|''}
  */
-export async function runCompleteChat({ runTurn, onToken, signal, maxTokens = 8192, maxContinuations = 3, repair = true, deadlineAt = Infinity }) {
+export async function runCompleteChat({ runTurn, onToken, signal, maxTokens = 0, maxContinuations = 40, repair = true, deadlineAt = Infinity }) {
   let tokens = maxTokens, full = '', history = [], continuations = 0, lastFinish = '';
   const turn = async (emit) => {
     for (;;) {
       try { return await runTurn({ history, maxTokens: tokens, onToken: emit }); }
-      catch (e) { if (e?.tokenLimit && tokens > 1024) { tokens = Math.max(1024, Math.floor(tokens / 2)); continue; } throw e; }
+      catch (e) {
+        if (e?.tokenLimit && !tokens) { tokens = 32768; continue; } // no app cap was sent; the provider rejected its own default, so find its limit
+        if (e?.tokenLimit && tokens > 1024) { tokens = Math.max(1024, Math.floor(tokens / 2)); continue; }
+        throw e;
+      }
     }
   };
   for (;;) {

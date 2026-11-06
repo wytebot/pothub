@@ -10,3 +10,8 @@ test('classic OpenAI models use max_tokens and supported JSON mode only',()=>{
   assert.deepEqual(openAiRequestParams({provider:'openai',model:'gpt-4.1',maxTokens:300,jsonMode:true}),{max_tokens:300,temperature:0.2,response_format:{type:'json_object'}});
   assert.deepEqual(openAiRequestParams({provider:'groq',model:'llama-3.3-70b-versatile',maxTokens:300,jsonMode:true}),{max_tokens:300,temperature:0.2});
 });
+
+test('no token limit is sent when none is requested, so the provider default applies',()=>{
+  assert.deepEqual(openAiRequestParams({provider:'openai',model:'gpt-4.1',maxTokens:0,jsonMode:false}),{temperature:0.2});
+  assert.deepEqual(openAiRequestParams({provider:'openai',model:'gpt-5.4',maxTokens:0,jsonMode:false}),{});
+});

@@ -190,3 +190,5 @@ If existing `account_workspaces` agent records were encrypted by the older `SESS
 ### Durable jobs and large uploads
 
 Set `FIREBASE_STORAGE_BUCKET`, `POTHUB_APP_ORIGIN` (or `APP_ORIGIN`), and `POTHUB_JOB_WORKER_SECRET` (at least 32 random characters). Apply `storage.cors.json` to the actual Firebase Storage bucket. The worker secret must only be configured on a trusted worker/server, never in browser or APK variables. See `ASYNC-JOBS-AND-RESUMABLE-UPLOADS.md` for route contracts and remaining worker implementation requirements.
+
+- `AI_CHAT_MAX_OUTPUT_TOKENS` (optional) — Creator chat sends NO output-token limit by default, so only the user's own provider/model decides how long a reply can be. Set a number only if you want an operator-side cap. `AI_CHAT_MAX_CONTINUATIONS` (default 40) — how many automatic "continue" turns are chained when a provider cuts a reply off, bounded by `AI_CHAT_STREAM_BUDGET_MS`.
