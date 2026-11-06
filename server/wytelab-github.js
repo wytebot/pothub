@@ -194,7 +194,7 @@ export async function wytelabGithub(req,res,p,s){
     if(m){
       const owner=decodeURIComponent(m[1]),repo=decodeURIComponent(m[2]),kind=m[3];
       if(kind==="branches")return json(res,200,await gh(s.githubToken,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`));
-      if(kind==="file"){const path=safePath(url.searchParams.get("path")||"") ,branch=url.searchParams.get("branch")||"HEAD";const d=await gh(s.githubToken,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(branch)}`);if(Array.isArray(d))return json(res,400,{error:"The selected path is a directory, not a file."});if(isBinaryPath(path)){
+      if(kind==="file"){const path=safePath(url.searchParams.get("path")||"") ,rawBranch=String(url.searchParams.get("branch")||"").trim(),branch=/^(undefined|null|HEAD)?$/i.test(rawBranch)?"":rawBranch;const contentsPath=`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`;let d;try{d=await gh(s.githubToken,`${contentsPath}${branch?`?ref=${encodeURIComponent(branch)}`:""}`)}catch(fileErr){/* A stale or unknown branch name: read the repository default branch instead of failing. */if(branch&&(fileErr.status===404||fileErr.status===422)&&/no commit found|not found|ref/i.test(String(fileErr.message||""))){const remote=await gh(s.githubToken,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);d=await gh(s.githubToken,`${contentsPath}?ref=${encodeURIComponent(remote.default_branch||"main")}`)}else throw fileErr}if(Array.isArray(d))return json(res,400,{error:"The selected path is a directory, not a file."});if(isBinaryPath(path)){
         const size=Number(d.size||0), raw=String(d.content||"").replace(/\n/g,"");
         if(size>3*1024*1024) return json(res,200,{path,content:{__wydevBinary:true,base64:"",mime:mimeForPath(path),size,tooLarge:true,html_url:d.html_url||null},sha:d.sha,size,html_url:d.html_url||null});
         return json(res,200,{path,content:{__wydevBinary:true,base64:raw,mime:mimeForPath(path),size},sha:d.sha,size});
@@ -607,5 +607,5 @@ export async function wytelabGithub(req,res,p,s){
       return json(res,200,{ok:true,commitSha:commit.sha,html_url:commit.html_url,branch,placeholder});
     }
     return json(res,404,{error:"Route not found"});
-  }catch(e){return json(res,Number(e.status)||500,{error:e.message||"Server error",code:e.code});}
+  }catch(e){const status=Number(e.status)||500;const hint=status===401?" GitHub authorization expired. Reconnect GitHub.":status===403&&e.code!=="GITHUB_RATE_LIMIT"?" Check that PotHub has repo access (and SAML SSO authorization for organization repositories).":"";return json(res,status,{error:`${e.message||"Server error"}${hint}`.slice(0,500),code:e.code||`HTTP_${status}`,requestId:req.requestId,...(status===401?{reconnect:true}:{})});}
 }

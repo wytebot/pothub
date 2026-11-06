@@ -9,7 +9,7 @@ const agents = fs.readFileSync(new URL('../src/lib/agents.js', import.meta.url),
 const server = fs.readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
 
 test('backend-only mode filters every agent lookup to Vercel Backend agents', () => {
-  assert.match(app, /if\(await backendModeEnabled\(\)\)return orderByDefault\(pickBackendAgents\(rows\)\)/);
+  assert.match(app, /const backendOnly=await backendModeEnabled\(\);const pool=backendOnly\?pickBackendAgents\(rows\):rows/);
   assert.match(mode, /ticked\.length\?ticked:all/);
   assert.match(mode, /isBackendAgent=a=>String\(a\?\.label\|\|''\)===BACKEND_LABEL/);
 });
