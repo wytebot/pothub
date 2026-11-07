@@ -513,3 +513,30 @@
 .wl-root .editSwitch input:focus-visible+.editSwitchTrack{outline:2px solid var(--accent,#2dd4bf);outline-offset:2px}
 .wl-root .editor-locked .cm-content{cursor:default}
 .wl-root .editor-locked .editSwitchLabel{color:#f0b429}
+
+/* Termux terminal page */
+.wl-root .modalMessage{white-space:pre-wrap}
+.wl-root .termuxStatusRow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.wl-root .termuxChip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;line-height:1.6;color:var(--muted)}
+.wl-root .termuxChip.ok{color:#7ee787;border-color:#2ea04355}
+.wl-root .termuxChip.warn{color:#e3b341;border-color:#e3b34155}
+.wl-root .termuxChip.bad{color:#ff7b72;border-color:#f8514955}
+.wl-root .termuxSetup{margin-top:12px}
+.wl-root .termuxSetup ol{margin:8px 0 12px;padding-left:20px;display:flex;flex-direction:column;gap:10px}
+.wl-root .termuxSetup code,.wl-root .termuxJob code{display:block;margin:6px 0;padding:8px;background:#090c10;border-radius:6px;font:12px/1.4 monospace;color:var(--text);word-break:break-all;white-space:pre-wrap}
+.wl-root .termuxJob code{display:inline-block;margin:0;padding:3px 6px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wl-root .termuxButtons{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.wl-root .termuxPresets,.wl-root .termuxHistory{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
+.wl-root .termuxPresets button,.wl-root .termuxHistory button{min-height:34px!important;padding:4px 10px!important;font-size:12.5px}
+.wl-root .termuxSteps{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+.wl-root .termuxStep{display:flex;align-items:flex-start;gap:8px}
+.wl-root .termuxStepNo{flex-shrink:0;width:22px;height:22px;margin-top:9px;border-radius:50%;background:var(--panel2);color:var(--muted);display:grid;place-items:center;font-size:12px}
+.wl-root .termuxStep textarea{flex:1;min-width:0;resize:vertical;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#090c10;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px}
+.wl-root .termuxStep .termuxChip{margin-top:8px}
+.wl-root .termuxCheck{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:13px;color:var(--muted)}
+.wl-root .termuxOut{margin:8px 0 0;padding:10px;background:#090c10;border:1px solid var(--line);border-radius:8px;max-height:55vh;overflow:auto;white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text)}
+.wl-root .termuxJobs{display:flex;flex-direction:column;gap:8px}
+.wl-root .termuxJob{display:flex;align-items:center;gap:8px}
+.wl-root .termuxChip .spin{animation:termuxSpin 1s linear infinite}
+@keyframes termuxSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.wl-root .termuxChip .spin{animation:none}}

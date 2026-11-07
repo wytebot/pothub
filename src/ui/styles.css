@@ -725,3 +725,14 @@ html{font-size:16px}.app-shell{zoom:var(--pothub-ui-scale,1)}
 .vb-import-repo-list button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,var(--panel));}
 .vb-import-row>span{font-size:.78rem;color:var(--muted);min-width:0;overflow-wrap:anywhere;flex:1;}
 \n.vb-no-github-repos{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.vb-no-github-repos small{flex:1}\n\n.vb-function-options{display:flex;gap:5px;flex-wrap:wrap}.vb-function-options button{min-height:34px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--muted);font-size:.75rem}.vb-function-options button.active{background:color-mix(in srgb,var(--accent) 14%,var(--panel));border-color:var(--accent);color:var(--text)}\n
+/* Termux command card in chat */
+.termux-run-card{margin:12px 0 4px;padding:12px;border:1px solid var(--border,#30363d);border-left:3px solid var(--accent,#58a6ff);border-radius:12px;background:var(--panel2,#161b22)}
+.termux-run-card.ok{border-left-color:#2ea043}.termux-run-card.bad{border-left-color:#f85149}.termux-run-card.warn{border-left-color:#d29922}
+.termux-run-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin-bottom:8px}
+.termux-run-status{font-size:12.5px;color:var(--muted,#8b949e)}.termux-run-status.ok{color:#3fb950}.termux-run-status.bad{color:#f85149}.termux-run-status.warn{color:#d29922}
+.termux-run-cwd{font-size:12.5px;color:var(--muted,#8b949e);margin-bottom:6px}
+.termux-run-cmd,.termux-run-out{margin:6px 0;padding:10px;border-radius:8px;background:#090c10;color:#e6edf3;border:1px solid var(--border,#30363d);font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;overflow:auto}
+.termux-run-out{max-height:45vh}
+:root[data-theme="light"] .termux-run-cmd,:root[data-theme="light"] .termux-run-out{background:#f6f8fa;color:#1f2328}
+.termux-run-warn{margin:6px 0;color:#f85149;font-size:13px}.termux-run-note{margin:6px 0;color:var(--muted,#8b949e);font-size:13px}
+.termux-run-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}

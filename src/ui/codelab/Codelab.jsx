@@ -13,6 +13,7 @@ import Project from "./pages/Project";
 import SearchPage from "./pages/Search";
 import LegalPage from "./pages/Legal";
 import Actions from "./pages/Actions";
+import TermuxTerminal from "./pages/Terminal";
 import GitHubHub from "./pages/GitHubHub";
 import Logs from "./pages/Logs";
 import Billing from "./pages/Billing";
@@ -475,6 +476,7 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
         {page === "repos" && <Repositories repos={repos} repoLimit={repoLimit} loading={reposLoading} error={reposError} onOpen={open} onCreate={createRepo} onRefresh={loadRepos} />}
         {page === "changes" && <Changes repo={repo} changes={workingChanges} onSelect={openFile} onDiscard={discardWorkingChange} onResume={() => { if (repo) { restoreWorkingFromCache(); navigate("project"); } }} />}
         {page === "actions" && <Actions repos={repos} />}
+        {page === "terminal" && <TermuxTerminal working={working} />}
         {page === "github" && <GitHubHub repos={repos} />}
         {page === "logs" && <Logs />}
         {page === "settings" && <Settings />}

@@ -4,7 +4,7 @@ import {setCodelabApi,setCodelabContext} from './codelab/bridge';
 
 // Codelab is the WyteLab workspace running on PotHub's own session, credits and chat.
 // section: 'codelab' (WyteLab Home) or 'codelab:<page>' for every other WyteLab page.
-export const CODELAB_PAGES=['home','repos','recent','changes','actions','github','logs','billing','search','settings','help','privacy','terms','about','contact','vercel','project'];
+export const CODELAB_PAGES=['home','repos','recent','changes','actions','terminal','github','logs','billing','search','settings','help','privacy','terms','about','contact','vercel','project'];
 export const pageFromSection=s=>{const p=String(s||'').split(':')[1]||'home';return CODELAB_PAGES.includes(p)?p:'home'};
 export const sectionFromPage=p=>!p||p==='home'?'codelab':`codelab:${p}`;
 
