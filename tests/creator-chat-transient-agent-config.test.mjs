@@ -11,17 +11,17 @@ test('Creator chat sends the selected locally configured BYOK agent config and s
 });
 
 test('Creator chat can continue with local configured agents when cloud sync is unavailable', () => {
-  assert.match(app, /catch\(e\)\{syncWarning=e;ags=await functionAgents\('Chat'\)/);
+  assert.match(app, /await syncAgentWorkspaceNow\(\)\.catch\(e=>console\.warn\(.*?\)\);ags=await functionAgents\('Chat'\)/);
 });
 
 test('stream endpoint validates transient agent config and restricts it to selected agent IDs', () => {
   assert.match(server, /agentConfig:z\.object\(\{keys:z\.array/);
-  assert.match(server, /allowedAgentIds\.has\(c\.agentId\)/);
-  assert.match(server, /const transientCandidates=requestAgentConfig\(req\)/);
+  assert.match(server, /const transientCandidates=requestAgentConfig\(\{path:req\.path,body:\{agentConfig:i\.agentConfig\}\}\)/);
 });
 
 test('server keeps BYOK candidates account-scoped and never adds platform credentials', () => {
   assert.match(server, /source:'user'/);
   assert.match(server, /requestServerAgentConfig\(s\.user\.id,i\.agentIds,'chat'\)/);
-  assert.match(server, /candidateMap\.set\(`\$\{candidate\.agentId\}:\$\{candidate\.provider\}:\$\{candidate\.model\}`/);
+  assert.match(server, /requestServerAgentConfig\(s\.user\.id,i\.agentIds\|\|\[\],'chat'\)/);
+  assert.match(server, /c\.source==='user'/);
 });

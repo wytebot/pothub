@@ -25,9 +25,10 @@ test('streaming chat schema accepts bounded attachments and passes image parts t
   assert.match(server, /dataUrl:z\.string\(\)\.max\(1400000\)/);
   assert.match(server, /uploadId:z\.string\(\)\.uuid\(\)\.optional\(\)/);
   assert.match(server, /uploaded attachment could not be verified/i);
-  assert.match(server, /streamConfiguredText\(candidate,prompt,[\s\S]*?controller\.signal,extraParts\)/);
+  assert.match(server, /streamConfiguredText\(candidate,creatorPrompt,[\s\S]*?controller\.signal,extraParts\)/);
   assert.match(server, /attachmentText/);
-  assert.match(app, /attachments:attachmentPayload\.map/);
+  assert.match(app, /attachments:attachmentPayload\.length\?attachmentPayload\.map/);
+  assert.match(app, /:\(userMsg\.attachments\|\|\[\]\)/);
   assert.match(app, /async function uploadLargeAttachment\(file(?:,|\))/);
   assert.match(app, /uploadLargeAttachment\(f(?:,|\))/);
 });

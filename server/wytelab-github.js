@@ -3,6 +3,13 @@
 // PotHub's own authenticated session (s.githubToken) instead of a separate WyteLab login.
 // Credit-charged actions (pull request creation, revert) are metered by app.js before this runs.
 const GH="https://api.github.com";
+export function normalizeRepoPath(value){
+  const raw=String(value??"").trim().replaceAll("\\","/");
+  if(!raw||raw.startsWith("/")||/^[A-Za-z]:/.test(raw)||/[\u0000-\u001f\u007f]/.test(raw))throw Object.assign(new Error("Invalid repository path: choose a file inside the selected repository (for example, src/App.jsx)."),{status:400,code:"INVALID_REPOSITORY_PATH"});
+  const parts=raw.split("/").filter(part=>part&&part!==".");
+  if(!parts.length||parts.some(part=>part===".."))throw Object.assign(new Error("Invalid repository path: choose a file inside the selected repository (for example, src/App.jsx)."),{status:400,code:"INVALID_REPOSITORY_PATH"});
+  return parts.join("/");
+}
 function ghHeaders(token){return{"Authorization":`Bearer ${token}`,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"PotHub-Codelab"};}
 async function gh(token,path,opts={}){
   const controller=new AbortController();
@@ -180,12 +187,7 @@ export async function wytelabGithub(req,res,p,s){
         return json(res,202,{fork:d});
       }
     }
-    const driveExport=p.match(/^\/github\/repos\/([^/]+)\/([^/]+)\/drive-export$/);
-    if(driveExport&&req.method==="POST"){
-      const owner=decodeURIComponent(driveExport[1]),repo=decodeURIComponent(driveExport[2]),b=await body(req);
-      return json(res,501,{error:"Google Drive export is not available inside PotHub Codelab."});
-    }
-    const safePath=(value)=>{const raw=String(value??"").trim();const x=raw.replaceAll("\\","/").replace(/^\/+|\/+$/g,"");const parts=x.split("/");if(!x||/[\u0000-\u001f\u007f]/.test(x)||parts.some(v=>!v||v===".."||v==="."))throw Object.assign(new Error("Invalid repository path: choose a file inside the selected repository (for example, src/App.jsx)."),{status:400,code:"INVALID_REPOSITORY_PATH"});return parts.join("/")};
+    const safePath=normalizeRepoPath;
     const isWorkflowPath=(path)=>String(path||"").replaceAll("\\","/").toLowerCase().startsWith(".github/workflows/");
     const binaryExt=new Set(["png","jpg","jpeg","gif","webp","ico","bmp","svgz","pdf","zip","gz","tar","7z","rar","woff","woff2","ttf","otf","eot","mp3","mp4","mov","avi","webm","wav","exe","dll","so","dylib","class","jar","psd","ai","sqlite","db"]);
     const isBinaryPath=(p)=>binaryExt.has(String(p).split(".").pop()?.toLowerCase()||"");

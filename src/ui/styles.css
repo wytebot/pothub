@@ -561,7 +561,7 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 .composer-input-wrap .composer-send-icon svg{width:19px!important;height:19px!important}
 .chat-main .composer-input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 13%,transparent)}
 /* Font-size preference now scales the app's rem-based typography, including navigation and settings. */
-html{font-size:var(--pothub-root-font-size,16px)}
+html{font-size:16px}.app-shell{zoom:var(--pothub-ui-scale,1)}
 @media(prefers-reduced-motion:reduce){.welcome-orbit,.welcome-spark,.pothub-google-button{animation:none!important;transition:none!important}}
 
 /* Vercel Backend Manager */
@@ -677,3 +677,51 @@ html{font-size:var(--pothub-root-font-size,16px)}
 .agent-picker-check{color:var(--accent);font-size:16px}
 .agent-picker-foot{display:flex;gap:8px}
 .agent-picker-foot button{flex:1;min-height:40px}
+
+/* PotHub cross-platform composer, preview and Vercel management polish */
+.creator-chat-mode .composer{position:sticky;bottom:var(--pothub-keyboard-inset,0px);padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));}
+.chat-main .composer-attachment-item{display:inline-flex;align-items:center;gap:8px;max-width:min(100%,360px);min-height:42px;padding:5px 8px;background:var(--panel2,#111820);border:1px solid var(--border);border-radius:10px;}
+.chat-main .composer-attachment-item>img{width:38px;height:38px;object-fit:cover;border-radius:7px;flex:none;}
+.chat-main .composer-attachment-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;}
+.chat-main .composer-attachment-item button{flex:none;min-width:30px;width:30px;height:30px;min-height:30px;padding:4px;}
+.composer-send-icon.is-stopping{background:#b4232c!important;color:#fff!important;}
+.composer-stop-mark{position:absolute;font-size:10px;line-height:1;color:#fff;z-index:1;}
+.composer-send-icon{position:relative;}
+.zip-repo-commit{width:100%;margin:6px 0 12px;}
+.vb-import-project{display:grid;gap:8px;padding:13px;margin:12px 0;border:1px solid var(--border);border-radius:12px;background:var(--panel2);}
+.vb-import-project p{font-size:.82rem;margin:0;}
+.vb-import-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.vb-import-row select{flex:1;min-width:0;width:100%;min-height:44px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;}
+.vb-import-project small{font-size:.74rem;line-height:1.45;color:var(--muted);}
+.vb-selected-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.vb-selected-note a,.vb-dashboard-link a{color:var(--accent);font-size:.82rem;text-decoration:underline;overflow-wrap:anywhere;}
+.vb-env-manager{display:grid;gap:12px;}
+.vb-env-list{display:grid;gap:10px;}
+.vb-env-row{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.3fr) auto auto;gap:8px;align-items:end;padding:10px;border:1px solid var(--border);border-radius:11px;}
+.vb-env-row label{display:grid;gap:6px;font-size:.78rem;color:var(--muted);min-width:0;}
+.vb-env-row input:not([type=checkbox]){width:100%;min-width:0;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font:inherit;}
+.vb-env-secret{display:flex!important;align-items:center;gap:6px;white-space:nowrap;min-height:42px;}
+.vb-env-secret input{width:17px;height:17px;}
+.vb-env-row>button{min-height:38px;padding:7px;}
+.vb-dashboard-link{margin:0;font-size:.82rem;}
+@media(max-width:680px){.vb-env-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}.vb-env-row .vb-env-secret{grid-column:1;}.vb-env-row>button{grid-column:2;justify-self:end;}}
+/* The reading setting also scales markdown internals instead of only its wrapper. */
+.markdown-content p,.markdown-content li,.markdown-content blockquote,.markdown-content td,.markdown-content th,.message-body{font-size:inherit;}
+.markdown-content h1{font-size:1.65em}.markdown-content h2{font-size:1.4em}.markdown-content h3{font-size:1.2em}
+.markdown-content code,.markdown-code,.message-body pre{font-size:.88em;}
+
+.logs-workspace{width:100%;max-width:1100px;margin:0 auto;display:grid;gap:14px;}
+.log-run-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid var(--border);}
+.log-run-row>div:first-child{display:grid;gap:4px;min-width:0;}
+.log-run-row small{color:var(--muted);font-size:.78rem;overflow-wrap:anywhere;}
+.log-run-row .actions-row{margin:0;justify-content:flex-end;}
+.logs-output-panel pre{max-height:55vh;min-height:140px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;}
+@media(max-width:640px){.log-run-row{align-items:flex-start;flex-direction:column}.log-run-row .actions-row{width:100%}.log-run-row .actions-row button{flex:1;}}
+
+.vb-import-search{display:grid;gap:6px;color:var(--muted);font-size:.78rem;}
+.vb-import-search input{width:100%;min-height:42px;border:1px solid var(--border);border-radius:9px;background:var(--panel);color:var(--text);padding:10px;}
+.vb-import-repo-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:6px;max-height:210px;overflow:auto;}
+.vb-import-repo-list button{justify-content:flex-start;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--panel);border:1px solid var(--border);border-radius:9px;font-size:.78rem;}
+.vb-import-repo-list button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,var(--panel));}
+.vb-import-row>span{font-size:.78rem;color:var(--muted);min-width:0;overflow-wrap:anywhere;flex:1;}
+\n.vb-no-github-repos{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.vb-no-github-repos small{flex:1}\n\n.vb-function-options{display:flex;gap:5px;flex-wrap:wrap}.vb-function-options button{min-height:34px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--muted);font-size:.75rem}.vb-function-options button.active{background:color-mix(in srgb,var(--accent) 14%,var(--panel));border-color:var(--accent);color:var(--text)}\n

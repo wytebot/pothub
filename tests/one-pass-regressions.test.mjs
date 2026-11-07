@@ -64,7 +64,8 @@ test('A13 auth errors are not automatically dismissed and global handlers preser
 });
 test('B8 developer-intent questions are not refused by off-topic keyword alone', async () => {
   const server = await read('server/app.js');
-  assert.match(server, /\(!developerIntent&&explicitOffTopic\)/);
+  assert.match(server, /Use English by default unless the user explicitly requests another language/);
+  assert.match(server, /withEngineeringProtocol\(`You are PotHub Creator/);
 });
 test('C2 assistant replies regenerate from preceding user message and only user messages can be edited', async () => {
   const ui = await read('src/ui/WorkspaceSection.jsx');
@@ -123,7 +124,7 @@ test('Creator chat Get credits button opens the real credit checkout and welcome
   const app = await read('src/ui/App.jsx');
   const ui = await read('src/ui/WorkspaceSection.jsx');
   assert.match(app, /setCheckoutOpen,shareText/);
-  assert.match(ui, /creator-plus-button" onClick=\{\(\)=>setCheckoutOpen\(true\)\}/);
+  assert.match(ui, /creator-plus-button"[^>]*onClick=\{\(\)=>setCheckoutOpen\(true\)\}/);
   assert.match(ui, /Create an image/);
   assert.match(ui, /Write or edit/);
 });

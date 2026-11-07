@@ -13,7 +13,7 @@ test('creator messages expose working contextual copy, edit, regenerate, and sha
  assert.match(ui,/title="Edit and resend this prompt"/);
  assert.match(ui,/title="Regenerate this answer"/);
  assert.match(ui,/title="Share message"/);
- assert.match(ui,/creatorChatFollow\.resume\(\);sendMessage\(prior\.text\|\|''\)/);
+ assert.match(ui,/creatorChatFollow\.resume\(\);sendMessage\(prior\.text\|\|''\,prior\.id\)/);
 });
 test('creator transcript styles remain responsive and respect reduced motion',()=>{
  assert.match(css,/\.creator-chat-mode \.creator-message-heading/);

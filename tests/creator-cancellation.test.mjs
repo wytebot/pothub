@@ -8,9 +8,9 @@ test('Creator chat exposes an explicit Stop action and aborts its active request
   const workspace = await read('src/ui/WorkspaceSection.jsx');
   assert.match(app, /let activeCreatorChatController=null/);
   assert.match(app, /signal:controller\.signal/);
-  assert.match(app, /function stopCreatorChat\(\)\{if\(activeCreatorChatController\)activeCreatorChatController\.abort\(\)\}/);
+  assert.match(app, /async function stopCreatorChat\(\)\{if\(activeCreatorChatController&&!activeCreatorChatController\.signal\.aborted\)activeCreatorChatController\.abort\(\)/);
   assert.match(app, /stopCreatorChat,setAgentFn/);
-  assert.match(workspace, /busy==='chat'&&<button type="button" className="secondary" onClick=\{stopCreatorChat\}/);
+  assert.match(workspace, /aria-label=\{\['chat','image','video','chain'\]\.includes\(busy\)\?'Stop workflow'/);
   assert.match(app, /if\(!controller\.signal\.aborted&&e\?\.name!=='AbortError'/);
 });
 
