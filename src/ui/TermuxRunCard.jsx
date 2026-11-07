@@ -23,6 +23,7 @@ export default function TermuxRunCard({message,chat}){
     {req.cwd&&<div className="termux-run-cwd">Folder: <code>{req.cwd}</code></div>}
     <pre className="termux-run-cmd">{req.command}</pre>
     {req.extra>0&&<p className="termux-run-note">The agent proposed {req.extra} more command{req.extra>1?'s':''}. They are ignored for now; it will continue after this result.</p>}
+    {status==='awaiting'&&(req.warnings||[]).map((w,i)=><p key={i} className="termux-run-warn">{w.level==='error'?'✖':'⚠'} {w.message}</p>)}
     {status==='awaiting'&&risk&&<p className="termux-run-warn">⚠ This command {risk}. Check it carefully before running.</p>}
     {status==='interrupted'&&<p className="termux-run-note">PotHub was closed while this ran. It may still be running in Termux (Codelab → Menu → Termux → Recent jobs).</p>}
     {req.error&&<p className="termux-run-warn">{req.error}</p>}

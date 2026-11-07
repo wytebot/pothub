@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { extractRunRequest, stripRunBlocks, riskReason, formatRunResult } from '../src/lib/termux-actions.js';
+import { extractRunRequest, stripRunBlocks, riskReason, formatRunResult, lintCommand, checkRunClaims } from '../src/lib/termux-actions.js';
 import { termuxToolInstruction } from '../server/termux-tool-prompt.js';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -76,4 +76,28 @@ test('chat flow wiring: request flag, approval card, tool-result handling', () =
   const hook = read('src/ui/useTermuxChat.js');
   assert.match(hook, /approved:true/);
   assert.match(hook, /activeChatIdRef\.current!==chatAtStart/, 'results must not leak into another chat');
+});
+
+test('lintCommand catches what Termux cannot do, and leaves normal commands alone', () => {
+  const msgs = (c) => lintCommand(c).map((w) => w.level);
+  assert.ok(msgs('sudo pkg install nodejs').includes('error'));
+  assert.ok(msgs('apt-get install git').includes('error'));
+  assert.ok(msgs('systemctl restart x').includes('error'));
+  assert.ok(msgs('nano app.js').includes('warn'));
+  assert.ok(msgs('pkg install nodejs').includes('warn'));
+  assert.ok(msgs('ls /usr/bin').includes('warn'));
+  assert.ok(msgs('export K=AIzaSyA1234567890abcdefghijkl').includes('error'));
+  for (const ok of ['pkg install -y nodejs', 'npm test', 'ls -la ~', 'git status', 'cat package.json | head', 'ls $PREFIX/bin', 'echo nano is an editor']) assert.deepEqual(lintCommand(ok), [], ok);
+});
+
+test('checkRunClaims flags unverified or contradicted success claims only', () => {
+  assert.match(checkRunClaims('I ran the tests and they all passed.', 'fix the bug'), /unverified/);
+  assert.equal(checkRunClaims('Run this next:\n```pothub-run\nnpm test\n```', 'fix the bug'), '');
+  assert.equal(checkRunClaims('The tests usually take a minute. Here is the plan.', 'fix the bug'), '');
+  const failed = 'TERMUX RESULT\nCommand: npm test\nExit code: 1 (failed)\nOutput:\n```text\nboom\n```';
+  assert.match(checkRunClaims('Great, the tests passed.', failed), /exit code 1/);
+  assert.equal(checkRunClaims('The test failed: boom comes from line 4.', failed), '');
+  const ok = 'TERMUX RESULT\nCommand: npm test\nExit code: 0 (succeeded)\nOutput:\nok';
+  assert.equal(checkRunClaims('The tests passed.', ok), '');
+  assert.match(checkRunClaims('That worked.', 'TERMUX RESULT\nCommand: x\nExit code: unknown (Termux ended the process unexpectedly)'), /did not finish normally/);
 });

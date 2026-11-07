@@ -1,3 +1,4 @@
+import { extractReferencedPaths, repoTreeSummary } from '../src/lib/repo-mentions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activeMention, rankFiles, applyMention, extractMentionedPaths, truncateForContext, MAX_MENTIONED_FILES } from '../src/lib/repo-mentions.js';
@@ -93,4 +94,37 @@ test('if the file list cannot load at all, the chat still gets a context note', 
   const src = createRepoFileSource({ api: async () => { throw new Error('offline'); }, store: null });
   const out = await src.attachmentsFor('o/r', 'main', 'hi @x');
   assert.equal(out.length, 1); assert.match(out[0].textContent, /No files were attached/);
+});
+
+test('context note carries a file outline so the agent knows what exists without reading it', async () => {
+  const { src } = source();
+  const out = await src.attachmentsFor('o/r', 'main', 'hello');
+  assert.match(out[0].textContent, /Repository file outline \(\d+ files/);
+  assert.match(out[0].textContent, /server\/: .*app\.js/);
+});
+
+test('bare paths and stack-trace paths count as references, but only real files', () => {
+  const known = ['src/ui/App.jsx', 'server/app.js', 'package.json'];
+  assert.deepEqual(extractReferencedPaths('crash at src/ui/App.jsx:328:5 and (server/app.js:10) plus fake/none.js', known), ['src/ui/App.jsx', 'server/app.js']);
+  assert.deepEqual(extractReferencedPaths('see @package.json and package.json', known), ['package.json']);
+  assert.deepEqual(extractReferencedPaths('nothing here', known), []);
+});
+
+test('with no explicit file, files whose names match the request are attached and labelled as a guess', async () => {
+  const api = async (p) => p.startsWith('/api/github/files')
+    ? { files: [{ path: 'server/billing-policy.js' }, { path: 'src/ui/App.jsx' }, { path: 'public/icons/a.png' }] }
+    : { content: 'BILLING CODE' };
+  const out = await createRepoFileSource({ api, store: null }).attachmentsFor('o/r', 'main', 'the billing page is wrong');
+  assert.equal(out.length, 2);
+  assert.equal(out[1].name, 'o/r:server/billing-policy.js');
+  assert.match(out[0].textContent, /because their names match the request: server\/billing-policy\.js\. They are a guess/);
+  assert.doesNotMatch(out[0].textContent, /a\.png/);
+});
+
+test('repoTreeSummary drops noise and stays within its size bound', () => {
+  const many = Array.from({ length: 4000 }, (_, i) => `src/dir${i % 50}/file${i}.js`);
+  const t = repoTreeSummary(['package-lock.json', 'public/x.png', 'README.md', ...many], 3000);
+  assert.ok(t.text.length < 3200);
+  assert.doesNotMatch(t.text, /package-lock|x\.png/);
+  assert.ok(t.omitted > 0 && /more files not listed/.test(t.text));
 });
