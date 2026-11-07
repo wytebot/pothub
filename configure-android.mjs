@@ -1,0 +1,40 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root=process.cwd(),android=path.join(root,'android');
+function walk(dir){if(!fs.existsSync(dir))return[];return fs.readdirSync(dir,{withFileTypes:true}).flatMap(d=>{const p=path.join(dir,d.name);return d.isDirectory()?walk(p):[p]})}
+const main=walk(path.join(android,'app','src','main','java')).find(p=>path.basename(p)==='MainActivity.java');
+if(!main){console.log('Android project is not generated yet. After dependencies install, run `npx cap add android`, then `npm run android:configure` again.');process.exit(0)}
+let xmlPath=path.join(android,'app','src','main','AndroidManifest.xml'),xml=fs.readFileSync(xmlPath,'utf8');
+if(!xml.includes('android:scheme="ai.pothub.app"')){const filter='\n            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="ai.pothub.app" android:host="auth" />\n            </intent-filter>\n        ';const pos=xml.indexOf('</activity>');if(pos<0)throw new Error('Could not locate MainActivity closing </activity> in AndroidManifest.xml');xml=xml.slice(0,pos)+filter+xml.slice(pos)}
+if(!xml.includes('android.permission.WRITE_EXTERNAL_STORAGE'))xml=xml.replace(/(<manifest[^>]*>)/,'$1\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />');
+fs.writeFileSync(xmlPath,xml);
+const mainText=fs.readFileSync(main,'utf8'),pkg=mainText.match(/^\s*package\s+([A-Za-z0-9_.]+)\s*;/m)?.[1];if(!pkg)throw new Error('Could not determine the generated Android package from MainActivity.java.');
+const res=path.join(android,'app','src','main','res'),icons=path.join(root,'public','icons');const iconSizes=[['mipmap-mdpi',48],['mipmap-hdpi',72],['mipmap-xhdpi',96],['mipmap-xxhdpi',144],['mipmap-xxxhdpi',192]];for(const [folder,size] of iconSizes){const dir=path.join(res,folder);fs.mkdirSync(dir,{recursive:true});for(const name of ['ic_launcher.png','ic_launcher_round.png'])fs.copyFileSync(path.join(icons,`pothub-${size}.png`),path.join(dir,name))}const foregroundDir=path.join(res,'drawable-nodpi'),adaptiveDir=path.join(res,'mipmap-anydpi-v26'),valuesDir=path.join(res,'values');fs.mkdirSync(foregroundDir,{recursive:true});fs.mkdirSync(adaptiveDir,{recursive:true});fs.mkdirSync(valuesDir,{recursive:true});fs.copyFileSync(path.join(icons,'pothub-adaptive-foreground.png'),path.join(foregroundDir,'pothub_launcher_foreground.png'));const colorFile=path.join(valuesDir,'pothub_launcher.xml');fs.writeFileSync(colorFile,'<?xml version="1.0" encoding="utf-8"?>\n<resources><color name="pothub_launcher_background">#0B0D10</color></resources>\n');const adaptiveXml='<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/pothub_launcher_background"/><foreground android:drawable="@drawable/pothub_launcher_foreground"/></adaptive-icon>\n';fs.writeFileSync(path.join(adaptiveDir,'ic_launcher.xml'),adaptiveXml);fs.writeFileSync(path.join(adaptiveDir,'ic_launcher_round.xml'),adaptiveXml);
+const pluginTemplate=path.join(root,'android-template','app','src','main','java','app','kithub','ai','PublicDownloadsPlugin.java');if(!fs.existsSync(pluginTemplate))throw new Error('PublicDownloads plugin template is missing.');
+const pluginDir=path.join(path.dirname(main),...pkg.split('.')),pluginTarget=path.join(pluginDir,'PublicDownloadsPlugin.java');fs.mkdirSync(pluginDir,{recursive:true});let plugin=fs.readFileSync(pluginTemplate,'utf8').replace(/^package\s+[A-Za-z0-9_.]+\s*;/m,`package ${pkg};`);fs.writeFileSync(pluginTarget,plugin);
+if(!mainText.includes('PublicDownloadsPlugin.class')){let next=mainText.replace(/(public class MainActivity extends BridgeActivity\s*\{)/,'$1\n    @Override public void onCreate(android.os.Bundle savedInstanceState) {\n        registerPlugin(PublicDownloadsPlugin.class);\n        registerPlugin(AppIconPlugin.class);\n        super.onCreate(savedInstanceState);\n    }');if(next===mainText)throw new Error('Could not patch MainActivity registration.');fs.writeFileSync(main,next)}
+// Launcher-icon switching: native plugin + one activity-alias per pot/color (see scripts/android-app-icons.mjs).
+const iconPluginTemplate=path.join(root,'android-template','app','src','main','java','app','kithub','ai','AppIconPlugin.java');if(!fs.existsSync(iconPluginTemplate))throw new Error('AppIcon plugin template is missing.');
+fs.writeFileSync(path.join(pluginDir,'AppIconPlugin.java'),fs.readFileSync(iconPluginTemplate,'utf8').replace(/^package\s+[A-Za-z0-9_.]+\s*;/m,`package ${pkg};`));
+let mainNow=fs.readFileSync(main,'utf8');if(!mainNow.includes('AppIconPlugin.class')){const patched=mainNow.replace('registerPlugin(PublicDownloadsPlugin.class);','registerPlugin(PublicDownloadsPlugin.class);\n        registerPlugin(AppIconPlugin.class);');if(patched===mainNow)throw new Error('Could not register AppIconPlugin in MainActivity.');fs.writeFileSync(main,patched)}
+const {configureAppIcons}=await import('./android-app-icons.mjs');const iconResult=configureAppIcons({resDir:res,manifestPath:xmlPath,pkg});
+console.log(`Configured Pothub deep link, Downloads plugin and ${iconResult.variants+1} switchable launcher icons for generated package ${pkg}. Re-run after any clean Android regeneration.`);
+// Termux native execution bridge (optional Android provider).
+for (const file of ['TermuxRuntimePlugin.java', 'TermuxResultReceiver.java']) {
+  const source = path.join(root, 'android-template', 'app', 'src', 'main', 'java', 'app', 'kithub', 'ai', file);
+  if (!fs.existsSync(source)) throw new Error(`${file} template is missing.`);
+  fs.writeFileSync(path.join(pluginDir, file), fs.readFileSync(source, 'utf8').replace(/^package\s+[A-Za-z0-9_.]+\s*;/m, `package ${pkg};`));
+}
+let finalMain = fs.readFileSync(main, 'utf8');
+if (!finalMain.includes('TermuxRuntimePlugin.class')) {
+  if (!finalMain.includes('registerPlugin(PublicDownloadsPlugin.class);')) throw new Error('Could not register TermuxRuntimePlugin: expected plugin registration block is missing.');
+  finalMain = finalMain.replace('registerPlugin(PublicDownloadsPlugin.class);', 'registerPlugin(PublicDownloadsPlugin.class);\n        registerPlugin(TermuxRuntimePlugin.class);');
+  fs.writeFileSync(main, finalMain);
+}
+if (!xml.includes('com.termux.permission.RUN_COMMAND')) xml = xml.replace(/(<manifest[^>]*>)/, '$1\n    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />');
+if (!xml.includes('<queries>')) xml = xml.replace('</manifest>', '    <queries><package android:name="com.termux" /></queries>\n</manifest>');
+if (!xml.includes('TermuxResultReceiver')) {
+  xml = xml.replace('</application>', '    <receiver android:name=".TermuxResultReceiver" android:enabled="true" android:exported="false" />\n</application>');
+  fs.writeFileSync(xmlPath, xml);
+}
