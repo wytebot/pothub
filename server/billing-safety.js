@@ -55,3 +55,13 @@ export function isValidSharedWebhookSecret(expected, supplied, minLength = 32) {
   const a = Buffer.from(expected), b = Buffer.from(supplied);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+/** Constant-time check of an `Authorization: Bearer <secret>` header against a configured secret. */
+export function isValidBearerSecret(expected, authorizationHeader, minLength = 16) {
+  if (typeof expected !== 'string' || expected.length < minLength || typeof authorizationHeader !== 'string') return false;
+  const m = /^Bearer (\S+)$/.exec(authorizationHeader);
+  if (!m) return false;
+  const a = crypto.createHash('sha256').update(expected).digest();
+  const b = crypto.createHash('sha256').update(m[1]).digest();
+  return crypto.timingSafeEqual(a, b);
+}
