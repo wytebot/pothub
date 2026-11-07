@@ -8,9 +8,9 @@ export const CODELAB_PAGES=['home','repos','recent','changes','actions','github'
 export const pageFromSection=s=>{const p=String(s||'').split(':')[1]||'home';return CODELAB_PAGES.includes(p)?p:'home'};
 export const sectionFromPage=p=>!p||p==='home'?'codelab':`codelab:${p}`;
 
-export default function CodelabWorkspace({api,user,section,setSection,onMenu,onOpenAI,onRepoChange,credits,onOpenCredits,theme}){
+export default function CodelabWorkspace({api,user,section,setSection,onMenu,onOpenAI,onRepoChange,credits,planLabel,onOpenCredits,theme}){
   useEffect(()=>{setCodelabApi(api)},[api]);
-  useEffect(()=>{setCodelabContext({openAI:onOpenAI,openCredits:onOpenCredits,openMenu:onMenu,onRepo:onRepoChange,credits})},[onOpenAI,onOpenCredits,onMenu,onRepoChange,credits]);
+  useEffect(()=>{setCodelabContext({openAI:onOpenAI,openCredits:onOpenCredits,openMenu:onMenu,onRepo:onRepoChange,credits,planLabel})},[onOpenAI,onOpenCredits,onMenu,onRepoChange,credits,planLabel]);
   const account=useMemo(()=>user?{id:user.id,login:user.login,name:user.name}:null,[user?.id,user?.login,user?.name]);
   const page=pageFromSection(section);
   // Legal pages that WyteLab opened as separate documents are rendered in-app here.

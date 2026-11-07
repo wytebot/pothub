@@ -21,6 +21,17 @@ export const HONESTY_RULES = [
   'Write comments and explanations the way a careful senior engineer would: plain, specific, calibrated, no hype.'
 ].join(' ');
 
+export const RESPONSE_FLOW_RULES = [
+  'RESPONSE FLOW (applies unless the user asks for a specific format or length):',
+  'Do not open your reply with the conclusion, verdict, recommendation or fix.',
+  'Open by showing you understood the request: what is being asked, what you were given or inspected, and any assumption you are making.',
+  'Then work through the reasoning or evidence step by step, then state the conclusion, then give next steps and caveats.',
+  'No filler openers ("Great question", "Sure!", "Certainly") and no word-for-word restating of the question.',
+  'Keep the build-up proportional to the request: one or two sentences for a simple question, a fuller walk-through for complex work.',
+  'If the user asks for only the answer, one word, code only, a table, JSON or any exact format, or if the request is a one-line lookup where context would be padding, follow that instead.',
+  'If a chosen response style or an explicit format instruction conflicts with this flow, the style or format instruction wins.'
+].join(' ');
+
 export const DEEP_DIAGNOSIS_PROTOCOL = [
   'DEEP DIAGNOSIS PROTOCOL (use it for any bug, failing build, error log, regression or "why does this happen" question):',
   '1. Restate the symptom precisely: what was expected, what happened, and where. Quote the exact error text or log line when one exists.',
@@ -48,16 +59,17 @@ export const NO_BREAK_PROTOCOL = [
 
 const MODES = {
   // Diagnosing a repository, logs or an error: evidence first, no code changes implied.
-  diagnose: [HONESTY_RULES, DEEP_DIAGNOSIS_PROTOCOL],
+  diagnose: [HONESTY_RULES, RESPONSE_FLOW_RULES, DEEP_DIAGNOSIS_PROTOCOL],
   // Producing a patch for a known issue: change-safety first, with a short diagnosis discipline.
-  patch: [HONESTY_RULES, NO_BREAK_PROTOCOL, DEEP_DIAGNOSIS_PROTOCOL],
+  patch: [HONESTY_RULES, RESPONSE_FLOW_RULES, NO_BREAK_PROTOCOL, DEEP_DIAGNOSIS_PROTOCOL],
   // Multi-file planning and editing agents.
-  edit: [HONESTY_RULES, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL],
+  edit: [HONESTY_RULES, RESPONSE_FLOW_RULES, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL],
   // Read-only planners and tool-using agents.
-  readonly: [HONESTY_RULES, DEEP_DIAGNOSIS_PROTOCOL],
+  readonly: [HONESTY_RULES, RESPONSE_FLOW_RULES, DEEP_DIAGNOSIS_PROTOCOL],
   // General assistants: honesty always; the technical protocols only apply if the request is technical.
   chat: [
     HONESTY_RULES,
+    RESPONSE_FLOW_RULES,
     'If the request involves debugging, errors, logs or changing code, also follow these protocols; otherwise ignore them.',
     DEEP_DIAGNOSIS_PROTOCOL,
     NO_BREAK_PROTOCOL

@@ -37,18 +37,39 @@ export function freeForeverConfig(env = process.env) {
   };
 }
 
+const lc = (v) => String(v ?? '').trim().toLowerCase();
+
 /**
+ * Why an account is free-forever, or null. Checks every identity attached to the account:
+ *  - profile: Google email (google: accounts) or GitHub id/login (GitHub accounts);
+ *  - linked: the GitHub account connected to the account (OAuth-verified), by numeric id or login. Never by email.
  * @param {{github_login?:string,email?:string}|null} profile  stored profile row
  * @param {string} userId  profile document id (the GitHub numeric id for GitHub accounts)
+ * @param {{githubId?:string|number,login?:string}|null} linked  stored GitHub connection
+ * @returns {'google-email'|'github-id'|'github-login'|'linked-github-id'|'linked-github-login'|null}
  */
-export function isFreeForeverProfile(profile, userId, config = freeForeverConfig()) {
-  if (!profile || typeof profile !== 'object') return false;
-  const login = String(profile.github_login || '').trim();
-  if (/^google:/i.test(login)) {
-    const email = String(profile.email || '').trim().toLowerCase();
-    return !!email && config.emails.has(email);
+export function freeForeverMatch(profile, userId, linked = null, config = freeForeverConfig()) {
+  if (profile && typeof profile === 'object') {
+    const login = String(profile.github_login || '').trim();
+    if (/^google:/i.test(login)) {
+      const email = lc(profile.email);
+      if (email && config.emails.has(email)) return 'google-email';
+    } else if (GITHUB_LOGIN.test(login)) {
+      if (config.githubIds.has(String(userId || ''))) return 'github-id';
+      if (config.githubLogins.has(login.toLowerCase())) return 'github-login';
+    }
   }
-  if (!GITHUB_LOGIN.test(login)) return false; // vercel:*, empty, or anything that is not a real GitHub login
-  if (config.githubIds.has(String(userId || ''))) return true;
-  return config.githubLogins.has(login.toLowerCase());
+  if (linked && typeof linked === 'object') {
+    if (linked.githubId != null && config.githubIds.has(String(linked.githubId))) return 'linked-github-id';
+    const login = String(linked.login || '').trim();
+    if (GITHUB_LOGIN.test(login) && config.githubLogins.has(login.toLowerCase())) return 'linked-github-login';
+  }
+  return null;
+}
+
+export const isFreeForeverProfile = (profile, userId, config = freeForeverConfig()) => freeForeverMatch(profile, userId, null, config) !== null;
+
+/** True when at least one free-forever account is configured. Used only to tell the operator when nothing is set. */
+export function freeForeverConfigured(config = freeForeverConfig()) {
+  return config.emails.size + config.githubLogins.size + config.githubIds.size > 0;
 }

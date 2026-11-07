@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { FREE_FOREVER_DEFAULTS, freeForeverConfig, isFreeForeverProfile } from '../server/free-forever-policy.js';
+import { FREE_FOREVER_DEFAULTS, freeForeverConfig, isFreeForeverProfile, freeForeverMatch, freeForeverConfigured } from '../server/free-forever-policy.js';
 
 const EMAIL = 'owner@example.com', LOGIN = 'owner-bot';
 const cfg = freeForeverConfig({ POTHUB_FREE_FOREVER_EMAILS: EMAIL, POTHUB_FREE_FOREVER_GITHUB_LOGINS: LOGIN });
@@ -49,16 +49,39 @@ test('environment variables add accounts, including the safer numeric GitHub id'
   assert.equal(isFreeForeverProfile({ github_login: 'unlisted' }, '1', c), false);
 });
 
-test('every charge path in lib.js checks free-forever status, and lookup failure fails closed', () => {
-  assert.match(lib, /import \{isFreeForeverProfile\} from '\.\/free-forever-policy\.js'/);
+test('every charge path in lib.js goes through the guard, which honours free-forever first and fails closed', () => {
+  assert.match(lib, /import \{freeForeverMatch,freeForeverConfigured\} from '\.\/free-forever-policy\.js'/);
   for (const fn of ['spendCredits', 'reserveCredits', 'spendCreditsOnce'])
-    assert.match(lib, new RegExp(`export async function ${fn}\\([^)]*\\)\\{[^]*?freeForeverState\\(id\\)`), fn);
-  assert.match(lib, /export async function commitCreditReservation[^\n]*freeForeverState\(id\)/);
-  assert.match(lib, /export async function releaseCreditReservation[^\n]*freeForeverState\(id\)/);
-  assert.match(lib, /catch\{value=null\}/, 'a failed profile lookup must mean "charge normally"');
-  assert.match(lib, /if\(!error&&profile&&isFreeForeverProfile\(profile,userId\)\)/);
+    assert.match(lib, new RegExp(`export async function ${fn}\\([^)]*\\)\\{[^]*?agentQuotaGuard\\(id,`), fn);
+  assert.match(lib, /export async function agentQuotaGuard[^]*?if\(await freeForeverState\(id\)\)return\{unlimited:true/);
+  assert.match(lib, /catch\{value=null\}/, 'a failed profile lookup must mean "not free"');
+  assert.match(lib, /if\(!error&&profile\)\{const reason=freeForeverMatch\(profile,userId,null\)/);
+  assert.match(lib, /collection\('github_connections'\)\.doc\(owner\)\.get\(\)/, 'the connected GitHub account is checked too');
 });
 
 test('purchases and grants are untouched by the bypass', () => {
   assert.match(lib, /export async function addCredits\(id,amount,reference,reason='Credit pack purchase'\)\{if\(!ensureDatabase\(\)\)throw Error\('Configure Firebase Firestore before enabling real credit purchases\.'\);return grantCreditsOnce/);
+});
+
+test('a GitHub account linked to a Google account counts, by id or login, never by email', () => {
+  const c = freeForeverConfig({ POTHUB_FREE_FOREVER_GITHUB_LOGINS: 'owner-bot', POTHUB_FREE_FOREVER_GITHUB_IDS: '777', POTHUB_FREE_FOREVER_EMAILS: 'owner@example.com' });
+  const googleProfile = { github_login: 'google:u1', email: 'someone-else@example.com' };
+  assert.equal(freeForeverMatch(googleProfile, 'google_u1', { githubId: 777, login: 'renamed' }, c), 'linked-github-id');
+  assert.equal(freeForeverMatch(googleProfile, 'google_u1', { githubId: 1, login: 'OWNER-BOT' }, c), 'linked-github-login');
+  assert.equal(freeForeverMatch(googleProfile, 'google_u1', { githubId: 1, login: 'stranger', email: 'owner@example.com' }, c), null);
+  assert.equal(freeForeverMatch(null, 'x', { githubId: 1, login: 'bad login!' }, c), null);
+  assert.equal(freeForeverMatch(null, 'x', null, c), null);
+});
+
+test('the match reports why, so an operator can confirm which rule granted access', () => {
+  const c = freeForeverConfig({ POTHUB_FREE_FOREVER_GITHUB_LOGINS: 'owner-bot', POTHUB_FREE_FOREVER_EMAILS: 'owner@example.com', POTHUB_FREE_FOREVER_GITHUB_IDS: '5' });
+  assert.equal(freeForeverMatch({ github_login: 'google:u', email: 'Owner@Example.com' }, 'g', null, c), 'google-email');
+  assert.equal(freeForeverMatch({ github_login: 'owner-bot' }, '9', null, c), 'github-login');
+  assert.equal(freeForeverMatch({ github_login: 'any-name' }, '5', null, c), 'github-id');
+});
+
+test('freeForeverConfigured tells the operator when no environment variable is set', () => {
+  assert.equal(freeForeverConfigured(freeForeverConfig({})), false);
+  assert.equal(freeForeverConfigured(freeForeverConfig({ POTHUB_FREE_FOREVER_EMAILS: 'a@b.co' })), true);
+  assert.equal(freeForeverConfigured(freeForeverConfig({ POTHUB_FREE_FOREVER_EMAILS: '  ,  ' })), false);
 });

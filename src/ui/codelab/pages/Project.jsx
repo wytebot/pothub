@@ -1184,17 +1184,17 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
           <FileText size={16} />
           Add license
         </button>
-        <button onClick={loadPRs} disabled={busy} title="Create or review pull requests; creation costs 1 credit">
+        <button onClick={loadPRs} disabled={busy} title="Create or review pull requests">
           <GitBranch size={16} />
-          Pull Requests · 1 credit
+          Pull Requests
         </button>
-        <button className="danger" onClick={deleteRepository} disabled={busy} title="Permanently delete this GitHub repository · 1 credit">
+        <button className="danger" onClick={deleteRepository} disabled={busy} title="Permanently delete this GitHub repository">
           <Trash2 size={16} />
           Delete repository
         </button>
-        <button onClick={loadCommitHistory} disabled={revertBusy} title="Revert a commit · 1 credit">
+        <button onClick={loadCommitHistory} disabled={revertBusy} title="Revert a commit">
           <History size={16} />
-          Revert · 1 credit
+          Revert
         </button>
       </div>
       {historyOpen && (
@@ -1225,7 +1225,7 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
         <div className="changesDropdown">
           <div className="changesList">
             <button onClick={newPullRequest} disabled={prBusy}>
-              {prBusy ? "Working…" : "New pull request · 1 credit"}
+              {prBusy ? "Working…" : "New pull request"}
             </button>
             {prs.length ? (
               prs.map((pr) => (

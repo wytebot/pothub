@@ -19,9 +19,9 @@ test('Codelab AI actions pass repository, branch, file and selection context wit
   const app = await read('src/ui/App.jsx');
   for (const action of ['Explain selected code','Fix selected code','Refactor selected code','Write tests for selected code','Add comments to selected code']) assert.ok(project.includes(action));
   assert.match(project, /Show the diff and wait for explicit approval before applying anything/);
-  assert.match(app, /context\?\.prompt\|\|base/);
+  assert.match(app, /setPrompt\(context\?\.prompt\|\|''\)/);
+  assert.match(app, /const openRepoAI=async\(r,context=\{\}\)=>/);
 });
-
 test('PR, repository delete and revert are credit-charged while bulk file deletion is not', async () => {
   const app = await read('server/app.js');
   assert.match(app, /wytelabCharge=.*oneCreditMutation\('Create pull request'\)/);

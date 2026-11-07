@@ -12,10 +12,9 @@ test('Creator chat follows new responses and pauses when reader touches or scrol
   assert.match(hook, /followRef\.current=false/);
   assert.match(hook, /scrollHeight-el\.scrollTop-el\.clientHeight<56/);
 });
-test('Repository chat uses the same reader-controlled auto-follow behavior', () => {
-  assert.match(workspace, /className="edit-transcript" ref=\{repoChatFollow\.containerRef\}/);
-  assert.match(workspace, /onTouchStart=\{repoChatFollow\.onTouchStart\}/);
-  assert.match(workspace, /repoChatFollow\.resume\(\)/);
+test('Repository chat is the normal chat, so it uses the same reader-controlled auto-follow behavior', () => {
+  assert.doesNotMatch(workspace, /className="edit-transcript"/);
+  assert.match(workspace, /creatorChatFollow\.resume\(\)/);
 });
 test('Creator and developer agents receive stronger quality and honesty instructions', () => {
   assert.match(server, /highest quality your configured model supports/);

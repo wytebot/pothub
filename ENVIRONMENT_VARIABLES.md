@@ -200,3 +200,25 @@ these variables add more without a code change. PotHub is still BYOK-only: these
 - `POTHUB_FREE_FOREVER_EMAILS` — comma/space separated. Matches Google-sign-in accounts only, on the server-verified email.
 - `POTHUB_FREE_FOREVER_GITHUB_LOGINS` — matches GitHub-sign-in accounts by login.
 - `POTHUB_FREE_FOREVER_GITHUB_IDS` — matches GitHub-sign-in accounts by numeric id (preferred: a login can be renamed or re-registered by someone else, an id cannot). Find it at `https://api.github.com/users/<login>` → `"id"`.
+
+## Plans and billing
+- `NGN_PER_USD` — naira per US dollar, for example `1500`. Used only to show an indicative naira price next to the USD
+  price ($9.99/month, $99.99/year). If it is not set, no naira figure is shown; PotHub never guesses a rate.
+  Checkout is always charged in USD through the existing Flutterwave flow.
+
+### Checking that free-forever works
+Sign in as the account and open `/api/billing/status` (while signed in). Look at three fields:
+- `freeForeverConfigured` — `false` means none of the `POTHUB_FREE_FOREVER_*` variables reached this deployment (not set,
+  misspelled, set for the wrong environment, or not redeployed). Variables only apply after a redeploy.
+- `freeForever` — `true` once the signed-in account matches.
+- `freeForeverReason` — which rule matched: `google-email`, `github-login`, `github-id`, `linked-github-login`
+  or `linked-github-id`.
+A GitHub account that is only *connected* to a Google account now counts too (matched by login or numeric id, never by email).
+
+### Vercel "redirect URL invalid"
+Open `https://YOUR-DOMAIN/api/vercel/redirect-info`. `redirectUri` is the exact string PotHub sends to Vercel and
+`candidates` lists every variable that could supply it, in priority order, with the winner marked `used: true`.
+The usual causes: a higher-priority variable (`VERCEL_REDIRECT_URI_OVERRIDE`, `VERCEL_REDIRECT_URI`, `POTHUB_API_ORIGIN`) holds an
+old value that beats the one you edited; `hasHiddenWhitespaceOrQuotes: true`; the value you registered in the Vercel app differs
+by even one character (`www.`, `http`, a trailing slash, a different domain); or the `VERCEL_CLIENT_ID` belongs to a different
+Vercel app than the one where you registered the callback.
