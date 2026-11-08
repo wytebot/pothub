@@ -70,7 +70,7 @@ test('client: @ file mentions exist only for repo chats and attach file contents
   assert.match(ws, /enabled:!!chatRepo/);
   assert.match(ws, /<RepoMentionPicker/);
   assert.match(ws, /if\(mentions\.onKeyDown\(e\)\)return;/);
-  assert.match(app, /repoRow\?\.repo\?\(await appRepoFiles\.attachmentsFor\(repoRow\.repo,repoRow\.repoBranch\|\|'HEAD',text\)\)/);
+  assert.match(app, /if\(repoRow\?\.repo\)\{[^]*appRepoFiles\.attachmentsFor\(repoRow\.repo,branchName,toolResult\?'':text,\{pin:repoPin\}\)/);
   assert.match(app, /attachments:\[\.\.\.repoExtra,\.\.\.attachmentPayload\]\.map/);
 });
 

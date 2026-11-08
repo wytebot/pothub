@@ -8,9 +8,9 @@ export default function RepoMentionPicker({ items, index, onPick, onHover }) {
     <ul className="mention-list" role="listbox" aria-label="Files in this repository">
       {items.map((item, i) => (
         <li key={item.path} role="option" aria-selected={i === index} ref={i === index ? activeRef : null}
-          className={`mention-item${i === index ? ' active' : ''}`}
+          className={`mention-item${i === index ? ' active' : ''}${item.pinAll ? ' pin' : ''}`}
           onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(item)} onMouseEnter={() => onHover(i)}>
-          <span className="mention-name">{item.name}</span>
+          <span className="mention-name">{item.pinAll ? '📌 ' : ''}{item.name}</span>
           {item.dir && <span className="mention-dir">{item.dir}</span>}
         </li>
       ))}

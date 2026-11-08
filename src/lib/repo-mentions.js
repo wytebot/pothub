@@ -129,7 +129,7 @@ export function suggestFilesForText(text, paths, limit = MAX_AUTO_FILES) {
 }
 
 /** Instruction attachment that tells the model what this chat is, which files exist, and which of them it can actually read. */
-export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPaths = []) {
+export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPaths = [], pin = null) {
   const auto = new Set(autoPaths);
   const explicit = attachedPaths.filter((p) => !auto.has(p)), guessed = attachedPaths.filter((p) => auto.has(p));
   return [
@@ -137,6 +137,21 @@ export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPa
     tree?.text ? `Repository file outline (${tree.total} files, real paths on this branch; the outline shows names only, not contents):\n${tree.text}` : '',
     explicit.length ? `The user pointed at these files: ${explicit.join(', ')}. Their contents follow in separate attachments.` : 'No files were attached with @ or by path in this message.',
     guessed.length ? `PotHub also attached these files because their names match the request: ${guessed.join(', ')}. They are a guess and may not be the right ones.` : '',
-    'You can read only the attached files. Use the outline to name the exact files you need and ask the user to mention them with @path. Do not claim to have read files that are not attached, never invent a path that is not in the outline, and say plainly when you are unsure.',
+    pin?.ready
+      ? `ALL FILES PINNED. The complete repository is copied into the user's Termux at ~/.pothub/workspaces/${pin.workspace} (branch ${branch || 'default'}), so you can read every file, not just the attached ones. Use a pothub-run block with "cwd: ~/.pothub/workspaces/${pin.workspace}" to explore: list files, search with rg or grep -rn, read exact line ranges with sed -n 'START,ENDp' FILE, use git ls-files or git grep. Read-only commands run automatically and their output comes back to you; anything that changes files waits for the user's approval. Work from evidence: search, read the real code, then conclude, and never describe a file you have not read. Structure your replies with these headings when you are investigating a problem: ## Understanding, ## Investigation, ## Problem, ## Plan, ## Fix.`
+      : pin
+        ? `All files are pinned, but the repository could not be copied into Termux (${pin.reason || 'Termux is not available'}), so you can read only the outline and the attached files. Say so plainly and ask the user to connect Termux if you need more of the code.`
+        : 'You can read only the attached files. Use the outline to name the exact files you need and ask the user to mention them with @path. Do not claim to have read files that are not attached, never invent a path that is not in the outline, and say plainly when you are unsure.',
   ].filter(Boolean).join('\n');
 }
+
+/** The first row of the @ list: one tap pins the whole repository for the agent. */
+export const PIN_ALL_ITEM = { path: '*', name: 'Pin all files', dir: 'Agent reads the whole repo with terminal commands', pinAll: true };
+export const showPinAll = (query) => !query || /^(a|al|all|p|pi|pin)$/i.test(query);
+
+/** Folder name used for the repo inside Termux: owner/name -> owner__name. */
+export const repoWorkspaceName = (repo) => String(repo || '').replace('/', '__').replace(/[^A-Za-z0-9_.-]/g, '_');
+
+const TEXT_FILE = /\.(jsx?|tsx?|mjs|cjs|json|css|scss|less|md|mdx|html?|py|go|rs|java|kt|swift|sh|bash|ya?ml|toml|txt|sql|xml|vue|svelte|rb|php|c|h|cpp|hpp|cs|gradle|properties)$|(^|\/)(Dockerfile|Makefile|LICENSE|\.gitignore|\.env\.example)$/i;
+/** Files worth copying into Termux: readable source and config, never images, lockfiles, build output or secrets. */
+export const isSyncablePath = (p) => !!p && !NOISE.test(p) && TEXT_FILE.test(p) && !/(^|\/)\.env(\.|$)(?!example)/i.test(p);

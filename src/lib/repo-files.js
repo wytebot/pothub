@@ -1,4 +1,4 @@
-import { MAX_FILE_CHARS, MAX_TOTAL_CHARS, extractReferencedPaths, repoContextNote, repoTreeSummary, suggestFilesForText, truncateForContext } from './repo-mentions.js';
+import { MAX_FILE_CHARS, MAX_TOTAL_CHARS, extractReferencedPaths, isSyncablePath, repoContextNote, repoTreeSummary, repoWorkspaceName, suggestFilesForText, truncateForContext } from './repo-mentions.js';
 
 /**
  * Repository file lists and contents for @mentions.
@@ -37,7 +37,7 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
   }
 
   /** Attachments for a message: a context note plus the contents of every @mentioned file that exists. Never throws. */
-  async function attachmentsFor(repo, branch, text) {
+  async function attachmentsFor(repo, branch, text, opts = {}) {
     let paths = [];
     try { paths = await list(repo, branch); } catch { /* the chat still works without file context */ }
     const explicit = extractReferencedPaths(text, paths), auto = explicit.length ? [] : suggestFilesForText(text, paths), wanted = [...explicit, ...auto], attachments = [], attached = [], failed = [];
@@ -50,9 +50,42 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
         attachments.push({ id: `repo:${path}`.slice(0, 100), name: `${repo}:${path}`.slice(-180), type: 'text/plain', size: body.length, textContent: body });
       } catch (e) { failed.push(`${path} (${String(e?.message || 'could not be read').slice(0, 80)})`); }
     }
-    const note = repoContextNote(repo, branch, attached, paths.length ? repoTreeSummary(paths) : null, auto.filter((p) => attached.includes(p))) + (failed.length ? `\nThese mentioned files could not be attached: ${failed.join('; ')}.` : '');
+    const note = repoContextNote(repo, branch, attached, paths.length ? repoTreeSummary(paths) : null, auto.filter((p) => attached.includes(p)), opts?.pin || null) + (failed.length ? `\nThese mentioned files could not be attached: ${failed.join('; ')}.` : '');
     return [{ id: 'repo:context', name: 'repo-context.md', type: 'text/markdown', size: note.length, textContent: note }, ...attachments];
   }
 
-  return { list, read, attachmentsFor };
+  const synced = new Map();
+  /**
+   * Copy the whole repository (readable text files) into the person's Termux so the agent can search and read all of it with
+   * commands. Done once per repo and branch; `mirror` is off so edits already made in the Termux copy are not deleted.
+   * `sync` is injected (agent-runtime.syncProjectToTermux) so this stays testable.
+   */
+  async function syncToTermux(repo, branch, { sync, onProgress, signal, concurrency = 6, maxFiles = 700, maxFileChars = 400000, maxBytes = 30 * 1024 * 1024 } = {}) {
+    const key = `${repo}@${branch || ''}`, hit = synced.get(key), name = repoWorkspaceName(repo);
+    if (hit && now() - hit.at < 6 * 60 * 60 * 1000) return { ...hit.result, cached: true };
+    const paths = (await list(repo, branch)).filter(isSyncablePath).slice(0, maxFiles);
+    if (!paths.length) throw new Error('No readable source files were found in this repository.');
+    const files = {}, skipped = [];
+    let next = 0, done = 0, bytes = 0;
+    const worker = async () => {
+      while (next < paths.length) {
+        if (signal?.aborted) throw new Error('Cancelled.');
+        const path = paths[next++];
+        try {
+          const body = await read(repo, branch, path);
+          if (body.length > maxFileChars || bytes + body.length > maxBytes) skipped.push(path); else { bytes += body.length; files[path] = body; }
+        } catch { skipped.push(path); }
+        onProgress?.({ done: ++done, total: paths.length });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, paths.length) }, worker));
+    if (!Object.keys(files).length) throw new Error('None of the repository files could be read.');
+    await sync({ name, files, mirror: false, approved: true, signal });
+    const result = { workspace: name, files: Object.keys(files).length, skipped: skipped.length };
+    synced.set(key, { at: now(), result });
+    return result;
+  }
+  const forgetSync = (repo) => { for (const k of [...synced.keys()]) if (k.startsWith(`${repo}@`)) synced.delete(k); };
+
+  return { list, read, attachmentsFor, syncToTermux, forgetSync };
 }

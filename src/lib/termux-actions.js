@@ -114,3 +114,69 @@ export function checkRunClaims(reply, userMessage = '') {
     return `_Fact check: the Termux result shows exit code ${code} (failed), which does not match a claim of success above._`;
   return '';
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Read-only commands. When the whole repo is pinned the agent investigates by running many small commands; the ones that
+// can only look (never write, delete, run other programs or leave the workspace) run without a tap. Anything else waits.
+// ---------------------------------------------------------------------------------------------------------------
+const RO_PROGRAMS = new Set(['ls', 'cat', 'head', 'tail', 'wc', 'pwd', 'echo', 'grep', 'egrep', 'fgrep', 'rg', 'find', 'tree', 'stat', 'file', 'du', 'sort', 'cut', 'nl', 'diff', 'basename', 'dirname', 'cd', 'sed']);
+const RO_GIT = new Set(['ls-files', 'grep', 'log', 'show', 'diff', 'status', 'blame', 'rev-parse', 'ls-tree', 'shortlog']);
+
+function splitCommand(cmd) {
+  const s = String(cmd || '');
+  const segments = [];
+  let cur = '', q = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) {
+      if (c === q) q = '';
+      else if (c === '\n' || c === '\r' || (q === '"' && (c === '$' || c === '`' || c === '\\'))) return null;
+      cur += c; continue;
+    }
+    if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (s.startsWith('2>/dev/null', i)) { i += '2>/dev/null'.length - 1; continue; }
+    if (s.startsWith('2>&1', i)) { i += '2>&1'.length - 1; continue; }
+    if (c === '\\' || c === '`' || c === '$' || c === '\n' || c === '\r' || c === '<' || c === '>' || c === '(' || c === ')') return null;
+    if (c === '&') { if (s[i + 1] !== '&') return null; segments.push(cur); cur = ''; i++; continue; }
+    if (c === '|') { segments.push(cur); cur = ''; if (s[i + 1] === '|') i++; continue; }
+    if (c === ';') { segments.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  if (q) return null;
+  segments.push(cur);
+  return segments.map((x) => x.trim()).filter(Boolean);
+}
+function wordsOf(segment) {
+  const out = [];
+  for (const m of segment.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)) out.push(m[1] ?? m[2] ?? m[3]);
+  return out;
+}
+
+/** True only for a command made entirely of look-but-don't-touch programs, staying inside the working folder. */
+export function isReadOnlyCommand(command) {
+  const segments = splitCommand(command);
+  if (!segments || !segments.length || segments.length > 6) return false;
+  for (const seg of segments) {
+    const w = wordsOf(seg);
+    const prog = w[0];
+    if (!prog) return false;
+    if (w.slice(1).some((a) => a === '..' || a.startsWith('../') || a.includes('/../') || a.startsWith('/') || a.startsWith('~'))) return false;
+    if (prog === 'git') { if (!RO_GIT.has(w[1]) || w.some((a) => /^(-c|--output|--ext-diff|--exec|--open-files-in-pager|-O)/.test(a))) return false; continue; }
+    if (!RO_PROGRAMS.has(prog)) return false;
+    if (prog === 'find' && w.some((a) => /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/.test(a))) return false;
+    if (prog === 'rg' && w.some((a) => /^(--pre|--pre-glob|-z|--search-zip|--hostname-bin)/.test(a))) return false;
+    if (prog === 'sort' && w.some((a) => /^(-o|--output)/.test(a))) return false;
+    if (prog === 'tail' && w.some((a) => /^-[a-zA-Z]*[fF]/.test(a) || /^--follow/.test(a))) return false;
+    if (prog === 'sed' && !(w[1] === '-n' && /^[0-9]+(,[0-9]+)?p$/.test(w[2] || '') && w.length >= 4)) return false;
+    if (prog === 'diff' && w.some((a) => /^--to-file/.test(a))) return false;
+  }
+  return true;
+}
+
+/** Auto-run is only allowed inside this repository's own Termux folder. */
+export function readOnlyCwdOk(cwd, workspace) {
+  const c = String(cwd || '').trim().replace(/\/+$/, '');
+  if (!c) return true; // the runner starts in the workspace folder given to the model
+  if (c.includes('..')) return false;
+  return c === `~/.pothub/workspaces/${workspace}` || c.startsWith(`~/.pothub/workspaces/${workspace}/`) || c === `.pothub/workspaces/${workspace}` || c.startsWith(`.pothub/workspaces/${workspace}/`);
+}

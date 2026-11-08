@@ -63,10 +63,10 @@ test('server only describes the tool when the app reports Termux is connected', 
 
 test('chat flow wiring: request flag, approval card, tool-result handling', () => {
   const server = read('server/app.js');
-  assert.match(server, /termux:z\.object\(\{available:z\.boolean\(\)\}\)\.strict\(\)\.optional\(\)/);
+  assert.match(server, /termux:z\.object\(\{available:z\.boolean\(\),workspace:[^]*?repoPinned:z\.boolean\(\)\.optional\(\)\}\)\.strict\(\)\.optional\(\)/);
   assert.match(server, /\$\{termuxToolInstruction\(i\.termux\)\}/);
   const app = read('src/ui/App.jsx');
-  assert.match(app, /termuxChat\.available\?\{termux:\{available:true\}\}/);
+  assert.match(app, /termuxChat\.available\?\{termux:\{available:true,\.\.\.\(repoPin\?\.ready\?\{workspace:repoPin\.workspace,repoPinned:true\}:\{\}\)\}\}:\{\}/);
   assert.match(app, /extractRunRequest\(replyText\)/);
   assert.match(app, /toolResult\?\{task:'chat'/, 'tool results must not be re-routed to image/video or file generation');
   const ws = read('src/ui/WorkspaceSection.jsx');
