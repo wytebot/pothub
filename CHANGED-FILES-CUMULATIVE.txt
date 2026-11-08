@@ -1,0 +1,33 @@
+PotHub cumulative changed-file patch
+Base: uploaded pothub-main (18).zip
+Target: updated smart-routing + technical execution-flow source
+
+AGENT-PROVIDER-ENV-CONTRACT.md
+CHANGELOG.md
+ENVIRONMENT_VARIABLES.md
+OUTSTANDING_BLOCKERS.md
+RUNTIME-AGENT-ROUTING-AUDIT-2026-11-08.md
+TECHNICAL-EXECUTION-FLOW-UPDATE.md
+server/agent-mode-policy.js
+server/app.js
+server/engineering-protocol.js
+server/runtime-agent-registry.js
+src/lib/request-intent.js
+src/lib/termux-core.js
+src/lib/video-adapters/gemini.js
+src/ui/App.jsx
+src/ui/WorkspaceSection.jsx
+src/ui/styles.css
+src/ui/vercel/AiBackendTab.jsx
+src/ui/vercel/VariablesTab.jsx
+src/ui/vercel/useEnvDraft.js
+tests/agent-mode-isolation.test.mjs
+tests/agent-preflight-and-env-rotation.test.mjs
+tests/api-page-source-of-truth.test.mjs
+tests/backend-mode.test.mjs
+tests/chat-area-ui.test.mjs
+tests/codelab-large-upload-wiring.test.mjs
+tests/creator-chat-transient-agent-config.test.mjs
+tests/engineering-protocol.test.mjs
+tests/request-intent.test.mjs
+tests/runtime-agent-registry.test.mjs

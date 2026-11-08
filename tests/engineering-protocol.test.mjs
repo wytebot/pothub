@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  HONESTY_RULES, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL, STRUCTURED_OUTPUT_NOTE,
+  HONESTY_RULES, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL, STRUCTURED_OUTPUT_NOTE, TECHNICAL_EXECUTION_BRIEF,
   ENGINEERING_MODES, engineeringProtocol, withEngineeringProtocol,
 } from '../server/engineering-protocol.js';
 import { responseStyleFragment } from '../server/response-styles.js';
@@ -76,4 +76,14 @@ test('every AI call site in the API wraps its prompt with the protocol', () => {
 test('prompts are wrapped at the call site, never by reassigning a const prompt', () => {
   assert.doesNotMatch(app, /\bprompt=withEngineeringProtocol\(/);
   assert.doesNotMatch(app, /\b(?:plannerPrompt|finalPrompt)=withEngineeringProtocol\(/);
+});
+
+
+test('technical modes require an actionable preflight brief and truthful progress reporting', () => {
+  for (const mode of ['diagnose', 'patch', 'edit', 'readonly', 'chat']) {
+    assert.ok(engineeringProtocol(mode).includes(TECHNICAL_EXECUTION_BRIEF), mode);
+  }
+  assert.match(TECHNICAL_EXECUTION_BRIEF, /ordered implementation phases/i);
+  assert.match(TECHNICAL_EXECUTION_BRIEF, /Never invent repository reads/i);
+  assert.match(TECHNICAL_EXECUTION_BRIEF, /requirement-by-requirement reconciliation/i);
 });
