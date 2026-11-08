@@ -1,0 +1,158 @@
+/* PotHub UI additions: Vercel page, pin-all chip, live agent steps. Loaded from pages/_app.jsx. */
+
+/* ---------- repo chat: pin all files + agent steps ---------- */
+.mention-item.pin .mention-name{font-weight:700}
+.pin-chip{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px;padding:7px 12px;border:1px solid var(--border);border-radius:12px;background:var(--panel2);font-size:.85rem;animation:vxFade .2s ease both}
+.pin-chip button{background:none;border:0;color:inherit;font-size:1rem;line-height:1;min-width:32px;min-height:32px;cursor:pointer}
+.agent-steps{list-style:none;margin:0;padding:8px 10px;display:flex;flex-direction:column;gap:7px;font-size:.9rem}
+.agent-step{display:flex;align-items:center;gap:9px;opacity:.7;transition:opacity .25s ease;animation:vxRise .25s ease both}
+.agent-step.active{opacity:1;font-weight:600}
+.agent-step.error{color:var(--danger)}
+.agent-step-mark{display:inline-flex;width:18px;justify-content:center;flex:none}
+.agent-step-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- Vercel page ---------- */
+.vx-page{max-width:720px;margin:0 auto;padding:4px 2px 40px;display:flex;flex-direction:column;gap:14px}
+.vx-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.vx-header h1{margin:0 0 2px;font-size:1.6rem;letter-spacing:-.02em}
+.vx-header p{margin:0;color:var(--muted);font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62vw}
+.vx-stack{display:flex;flex-direction:column;gap:14px}
+.vx-panel{animation:vxRise .28s cubic-bezier(.2,.8,.2,1) both}
+
+.vx-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;min-width:0}
+.vx-card h2{margin:0;font-size:1rem;letter-spacing:-.01em}
+.vx-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.vx-card-head span{color:var(--muted);font-size:.8rem}
+.vx-sub{margin:-6px 0 10px;color:var(--muted);font-size:.85rem}
+.vx-empty{margin:4px 0;color:var(--muted);font-size:.9rem;line-height:1.5}
+.vx-empty-action{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:10px 6px;color:var(--muted)}
+.vx-empty-action p{margin:0;font-size:.9rem;line-height:1.5}
+.vx-hint{margin:12px 0 0;color:var(--muted);font-size:.78rem;line-height:1.55}
+.vx-hint a,.vx-env-head a{color:var(--accent);text-decoration:none}
+.vx-hint a:hover,.vx-env-head a:hover{text-decoration:underline}
+.vx-connect{text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;padding:26px 18px}
+.vx-connect p{margin:0;color:var(--muted);font-size:.9rem;line-height:1.55;max-width:42ch}
+
+/* tabs: segmented control with a sliding indicator */
+.vx-tabs{position:relative;display:grid;grid-template-columns:repeat(var(--n),1fr);padding:4px;border:1px solid var(--border);border-radius:14px;background:var(--panel2)}
+.vx-tab-indicator{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / var(--n));border-radius:10px;background:var(--panel);border:1px solid var(--border);box-shadow:0 1px 6px #0004;transform:translateX(calc(var(--i) * 100%));transition:transform .28s cubic-bezier(.3,.9,.3,1)}
+.vx-tabs button{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 4px;background:transparent;border:0;color:var(--muted);font-size:.84rem;font-weight:600;cursor:pointer;border-radius:10px;transition:color .2s ease}
+.vx-tabs button.on{color:var(--text)}
+@media(max-width:380px){.vx-tabs button span{font-size:.76rem}.vx-tabs button svg{display:none}}
+
+/* lists */
+.vx-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.vx-item,.vx-repo,.vx-var{width:100%;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:14px;background:transparent;color:inherit;text-align:left;min-width:0;min-height:56px}
+.vx-item{cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .12s ease}
+.vx-item:hover{background:var(--panel2)}
+.vx-item:active{transform:scale(.99)}
+.vx-item.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.vx-item[disabled]{opacity:.6}
+.vx-avatar{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--panel2);border:1px solid var(--border);font-size:.8rem;flex:none}
+.vx-item-copy{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.vx-item-copy strong{font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vx-item-copy small{color:var(--muted);font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vx-search{display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--border);border-radius:12px;background:var(--panel2);margin-bottom:10px;color:var(--muted)}
+.vx-search input{flex:1;min-height:44px;background:transparent;border:0;outline:0;color:var(--text);min-width:0}
+.vx-chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.vx-chips::-webkit-scrollbar{display:none}
+
+/* buttons, pills, badges */
+.vx-icon-btn{display:inline-grid;place-items:center;min-width:40px;min-height:40px;padding:0;border-radius:12px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;text-decoration:none;transition:background .18s ease,transform .12s ease}
+.vx-icon-btn:hover{background:var(--panel2)}
+.vx-icon-btn:active{transform:scale(.94)}
+.vx-icon-btn.solid{background:var(--accent);border-color:var(--accent);color:#fff}
+.vx-link{display:inline-flex;align-items:center;gap:6px;background:none;border:0;padding:4px 2px;color:var(--accent);font-size:.84rem;cursor:pointer;min-height:32px}
+.vx-link[disabled]{opacity:.5}
+.vx-small{min-height:36px;padding:0 14px;font-size:.84rem}
+.vx-pill{flex:none;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.84rem;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}
+.vx-pill.on{background:color-mix(in srgb,var(--accent) 16%,transparent);border-color:var(--accent);color:var(--text)}
+.vx-badge{flex:none;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;border:1px solid var(--border);color:var(--muted);font-size:.74rem;font-weight:600}
+.vx-badge.ok{color:#3fb950;border-color:color-mix(in srgb,#3fb950 40%,transparent)}
+.vx-badge.lock{color:var(--text)}
+.vx-btn-link{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.vx-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.vx-actions>*{flex:1 1 140px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+
+/* deployment state + live build */
+.vx-state{flex:none;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:.74rem;font-weight:700;border:1px solid var(--border);color:var(--muted)}
+.vx-state.ok{color:#3fb950;border-color:color-mix(in srgb,#3fb950 40%,transparent);background:color-mix(in srgb,#3fb950 10%,transparent)}
+.vx-state.bad{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent);background:color-mix(in srgb,var(--danger) 10%,transparent)}
+.vx-state.live{color:#d29922;border-color:color-mix(in srgb,#d29922 40%,transparent);background:color-mix(in srgb,#d29922 10%,transparent)}
+.vx-state i{width:7px;height:7px;border-radius:50%;background:currentColor;animation:vxPulse 1.2s ease-in-out infinite}
+.vx-monitor-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.vx-monitor-head>div{flex:1;min-width:0}
+.vx-monitor-head h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vx-monitor-head small{color:var(--muted);font-size:.75rem}
+.vx-progress{height:3px;border-radius:3px;overflow:hidden;background:var(--panel2);margin-bottom:10px}
+.vx-progress i{display:block;height:100%;width:40%;border-radius:3px;background:var(--accent);animation:vxSlide 1.3s ease-in-out infinite}
+.vx-log{margin:0;max-height:52dvh;min-height:180px;overflow:auto;padding:12px;border-radius:12px;background:#0b0f14;color:#c9d1d9;border:1px solid var(--border);font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}
+:root[data-theme="light"] .vx-log{background:#f6f8fa;color:#24292f}
+
+/* environment editor */
+.vx-env{display:flex;flex-direction:column;gap:12px}
+.vx-env-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vx-env-head h3{margin:0;font-size:.95rem}
+.vx-env-head a{display:inline-flex;align-items:center;gap:4px;font-size:.82rem}
+.vx-saved{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.vx-saved-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);font-size:.85rem;opacity:.75;animation:vxCollapse .35s ease both}
+.vx-saved-chip span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace}
+.vx-saved-chip small{font-size:.72rem}
+.vx-saved-chip svg{color:#3fb950;flex:none}
+.vx-row{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--border);border-radius:14px;animation:vxRise .25s ease both}
+.vx-row-fields{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center}
+.vx-row-fields input{min-width:0;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:.9rem}
+.vx-row-fields input::placeholder{color:var(--muted);opacity:.45}
+.vx-row-fields input:focus{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:0;border-color:var(--accent)}
+@media(max-width:520px){.vx-row-fields{grid-template-columns:1fr auto}.vx-row-fields input:nth-child(2){grid-column:1}.vx-row-fields .vx-icon-btn{grid-column:2;grid-row:1 / span 2}}
+.vx-kind{display:flex;gap:8px;flex-wrap:wrap}
+.vx-kind label{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--border);color:var(--muted);font-size:.82rem;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}
+.vx-kind label.on{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.vx-kind input{width:16px;height:16px;accent-color:var(--accent);margin:0}
+.vx-env-actions{display:flex;gap:8px;flex-wrap:wrap}
+.vx-env-actions>*{flex:1 1 150px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.vx-targets{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vx-targets>span{color:var(--muted);font-size:.8rem;margin-right:2px}
+.vx-field-error{margin:0;color:var(--danger);font-size:.82rem;line-height:1.45}
+.vx-label{display:block;color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.vx-domain{padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--panel2);margin-bottom:16px}
+.vx-domain-row{display:flex;align-items:center;gap:8px}
+.vx-domain-row strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.95rem}
+.vx-domain small{display:block;margin-top:6px;color:var(--muted);font-size:.76rem}
+.vx-domain small.vx-ok{color:#3fb950}
+
+/* notices */
+.vx-notice{display:flex;gap:12px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--panel2);animation:vxRise .25s ease both}
+.vx-notice p{margin:4px 0 10px;color:var(--muted);font-size:.85rem;line-height:1.5}
+.vx-notice.warn{border-color:color-mix(in srgb,#d29922 45%,transparent);background:color-mix(in srgb,#d29922 8%,transparent)}
+.vx-notice.warn>svg{color:#d29922;flex:none;margin-top:2px}
+.vx-notice.error{border-color:color-mix(in srgb,var(--danger) 45%,transparent);background:color-mix(in srgb,var(--danger) 8%,transparent)}
+.vx-notice.error p{margin:0;color:var(--text)}
+
+/* bottom sheet */
+.vx-backdrop{position:fixed;inset:0;z-index:200;background:#000b;display:flex;align-items:flex-end;justify-content:center;animation:vxFade .2s ease both}
+.vx-sheet{width:min(100%,560px);max-height:92dvh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:22px 22px 0 0;box-shadow:0 -12px 40px #0008;animation:vxUp .32s cubic-bezier(.2,.9,.25,1) both}
+@media(min-width:700px){.vx-backdrop{align-items:center;padding:20px}.vx-sheet{border-radius:22px;max-height:88dvh}}
+.vx-grabber{align-self:center;width:38px;height:4px;border-radius:4px;background:var(--border);margin:8px 0 2px}
+.vx-sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:8px 16px 12px}
+.vx-sheet-head h2{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
+.vx-sheet-head p{margin:2px 0 0;color:var(--muted);font-size:.84rem}
+.vx-sheet-body{flex:1;overflow:auto;padding:4px 16px 16px;-webkit-overflow-scrolling:touch}
+.vx-sheet-foot{padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--border);background:var(--panel)}
+.vx-deploy{width:100%;min-height:50px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:1rem;border-radius:14px}
+
+/* loading */
+.vx-skeletons{display:flex;flex-direction:column;gap:8px}
+.vx-skeletons i{display:block;height:56px;border-radius:14px;background:linear-gradient(100deg,var(--panel2) 30%,color-mix(in srgb,var(--border) 70%,transparent) 50%,var(--panel2) 70%);background-size:300% 100%;animation:vxShimmer 1.3s linear infinite}
+.vx-spinner{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:vxSpin .7s linear infinite;flex:none}
+.spin{animation:vxSpin .8s linear infinite}
+
+@keyframes vxFade{from{opacity:0}to{opacity:1}}
+@keyframes vxRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes vxUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes vxCollapse{from{opacity:1;transform:scale(1.02);background:color-mix(in srgb,var(--accent) 14%,transparent)}to{opacity:.75;transform:none}}
+@keyframes vxPulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes vxSlide{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+@keyframes vxShimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+@keyframes vxSpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.vx-page *,.vx-backdrop,.vx-sheet,.pin-chip,.agent-step{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

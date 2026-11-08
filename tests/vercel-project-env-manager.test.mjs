@@ -23,13 +23,16 @@ test('Vercel environment variable writes are bounded, validated, and never echo 
   assert.doesNotMatch(route,/res\.json\(\{[^}]*value:variable\.value/);
 });
 
-test('Vercel workspace offers GitHub import, variable editor, and direct dashboard access', async()=>{
-  const source=await read('../src/ui/VercelBackendWorkspace.jsx');
-  assert.match(source,/Import a GitHub repository/);
-  assert.match(source,/Manage variables/);
-  assert.match(source,/Save & deploy/);
-  assert.match(source,/Manage environment variables directly in Vercel/);
-  assert.match(source,/type=\"password\"/);
+test('Vercel workspace offers GitHub import, a variable editor, and direct dashboard access',async()=>{
+  const shell=await read('../src/ui/VercelBackendWorkspace.jsx'),imp=await read('../src/ui/vercel/ImportTab.jsx'),env=await read('../src/ui/vercel/EnvEditor.jsx'),vars=await read('../src/ui/vercel/VariablesTab.jsx');
+  assert.match(imp,/Import from GitHub/);
+  for(const label of ['Import','Logs','Variables','AI backend'])assert.match(shell,new RegExp(`label: '${label}'`));
+  assert.match(env,/Add variable/);
+  assert.match(env,/Sensitive<\/label>/);
+  assert.match(env,/Not sensitive<\/label>/);
+  assert.match(env,/type=\{row\.sensitive \? 'password' : 'text'\}/);
+  assert.match(env,/Open in Vercel/);
+  assert.match(vars,/Open this project’s variables in Vercel/);
 });
 
 test('chat requests are persisted before provider execution and edited in place', async()=>{
@@ -82,12 +85,12 @@ test('logs menu covers GitHub Actions and Vercel deployment failures with a repo
   assert.match(source,/Build logs:\s*\$\{buildLogs\.slice\(-16000\)\}/);
 });
 
-test('Vercel backend workspace avoids load-effect loops and preserves environment variable names', async()=>{
-  const source=await read('../src/ui/VercelBackendWorkspace.jsx');
-  assert.match(source,/const apiRef=React\.useRef\(api\);apiRef\.current=api/);
-  assert.match(source,/\},\[\]\);\s*React\.useEffect\(\(\)=>\{load\(\);apiRef\.current/);
-  assert.match(source,/key:x\.key\.trim\(\),value:x\.value/);
-  assert.ok(source.indexOf('const selectedProject=projects.find')<source.indexOf('const envDashboardUrl=selectedProject'));
+test('Vercel workspace avoids load-effect loops and keeps environment variable names exact',async()=>{
+  const shell=await read('../src/ui/VercelBackendWorkspace.jsx'),draft=await read('../src/ui/vercel/useEnvDraft.js'),lib=await read('../src/lib/vercel-env.js');
+  assert.match(shell,/const apiRef = React\.useRef\(api\); apiRef\.current = api;/);
+  assert.match(shell,/\}, \[\]\);\s*React\.useEffect\(\(\) => \{ load\(\); \}, \[load\]\);/);
+  assert.match(draft,/const apiRef = React\.useRef\(api\); apiRef\.current = api;/);
+  assert.match(lib,/key: String\(r\.key\)\.trim\(\), value: String\(r\.value\)/);
 });
 
 test('image-generation requests persist references and pass compressed image parts to Gemini', async()=>{
