@@ -1,9 +1,9 @@
 import React from 'react';
-import { Check, Github, RefreshCw, Search } from 'lucide-react';
+import { ExternalLink, Github, RefreshCw, Search } from 'lucide-react';
 import ProjectSheet from './ProjectSheet.jsx';
 import ReauthNotice from './ReauthNotice.jsx';
 import AccessTokenCard from './AccessTokenCard.jsx';
-import { assignedDomain, githubStatusFrom, linkedRepo, needsVercelReauth } from '../../lib/vercel-env.js';
+import { assignedUrl, githubStatusFrom, linkedRepo, needsVercelReauth } from '../../lib/vercel-env.js';
 
 export default function ImportTab({ api, onRefresh, projects, selectedId, onSelect, onProjectAdded, onConnectGithub, onSwitchGithub, onReauthorize, onDeployed, onNotice }) {
   const [sheet, setSheet] = React.useState(null);
@@ -45,6 +45,13 @@ export default function ImportTab({ api, onRefresh, projects, selectedId, onSele
     finally { setWorking(''); }
   }
 
+  async function toggle(project) {
+    setError(''); setReauth(false); setWorking(project.id);
+    try { await onSelect(selectedId === project.id ? null : project); }
+    catch (e) { setError(String(e?.message || e)); setReauth(needsVercelReauth(e)); }
+    finally { setWorking(''); }
+  }
+
   async function importRepo(repo) {
     setError(''); setReauth(false); setCreateBlocked(''); setWorking(repo.full_name);
     try {
@@ -73,16 +80,28 @@ export default function ImportTab({ api, onRefresh, projects, selectedId, onSele
           <button type="button" className="secondary vx-small" onClick={() => onRefresh?.()}><RefreshCw size={14} aria-hidden="true" /> Refresh</button>
         </div>
         {projects.length === 0 && <p className="vx-empty">No Vercel projects yet. Tap “Import new on Vercel”, import your repository there, then come back. PotHub refreshes by itself.</p>}
+        {projects.length > 0 && <p className="vx-hint">Tick a project to use it. Variables, Logs and AI backend then show that project.</p>}
         <ul className="vx-list">
-          {projects.map((p) => (
-            <li key={`${p.id}:${p.teamId || ''}`}>
-              <button type="button" className={`vx-item${selectedId === p.id ? ' active' : ''}`} onClick={() => pick(p)} disabled={!!working}>
-                <span className="vx-avatar" aria-hidden="true">▲</span>
-                <span className="vx-item-copy"><strong>{p.name}</strong><small>{p.framework || 'Vercel project'} · {assignedDomain(p).domain}</small></span>
-                {working === p.id ? <span className="vx-spinner" aria-label="Opening" /> : selectedId === p.id ? <Check size={18} aria-label="Selected" /> : null}
-              </button>
-            </li>
-          ))}
+          {projects.map((p) => {
+            const on = selectedId === p.id, url = assignedUrl(p);
+            return (
+              <li key={`${p.id}:${p.teamId || ''}`} className={`vx-project${on ? ' active' : ''}`}>
+                <label className="vx-check">
+                  <input type="checkbox" checked={on} disabled={!!working} onChange={() => toggle(p)} aria-label={`Use ${p.name}`} />
+                  <span aria-hidden="true" />
+                </label>
+                <div className="vx-project-main">
+                  <button type="button" className="vx-project-name" onClick={() => pick(p)} disabled={!!working}>
+                    <strong>{p.name}</strong><small>{p.framework || 'Vercel project'}</small>
+                    {working === p.id && <span className="vx-spinner" aria-label="Opening" />}
+                  </button>
+                  {url
+                    ? <a className="vx-url-btn" href={url} target="_blank" rel="noreferrer"><span>{url.replace(/^https:\/\//, '')}</span><ExternalLink size={14} aria-hidden="true" /></a>
+                    : <span className="vx-url-btn empty">No domain assigned yet</span>}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </section>
 

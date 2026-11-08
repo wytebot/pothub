@@ -3,7 +3,8 @@ import {saveAgent,decryptSecret} from '../../lib/agents';
 import {db} from '../../lib/db';
 import {BACKEND_LABEL,isBackendAgent,backendModeEnabled,backendModeStored,setBackendMode} from '../../lib/backend-mode';
 import ReauthNotice from './ReauthNotice.jsx';
-import {needsVercelReauth,envDashboardUrl} from '../../lib/vercel-env.js';
+import {needsVercelReauth,envDashboardUrl,isAiVariable} from '../../lib/vercel-env.js';
+import useProjectEnv from './useProjectEnv.js';
 
 const DEFAULTS={keyEnv:'GEMINI_API_KEY',modelEnv:'GEMINI_MODEL',fallbackEnv:'GEMINI_FALLBACK_MODELS'};
 const cleanUrl=value=>String(value||'').trim().replace(/\/+$/,'');
@@ -11,6 +12,7 @@ const parseModels=value=>[...new Set(String(value||'').split(/[\n,;]+/).map(x=>x
 
 export default function AiBackendTab({api,project,onReauthorize,onNotice,onSaved}){
  const apiRef=React.useRef(api);apiRef.current=api;
+ const env=useProjectEnv(api,project),aiVars=env.vars.filter(v=>isAiVariable(v.key));
  const selected=project?.id||'',envUrl=envDashboardUrl(project);
  const [config,setConfig]=React.useState(null),[backendUrl,setBackendUrl]=React.useState(''),[keyEnv,setKeyEnv]=React.useState(DEFAULTS.keyEnv),[modelEnv,setModelEnv]=React.useState(DEFAULTS.modelEnv),[fallbackEnv,setFallbackEnv]=React.useState(DEFAULTS.fallbackEnv);
  const [apiKey,setApiKey]=React.useState(''),[model,setModel]=React.useState(''),[fallbacks,setFallbacks]=React.useState(''),[targets,setTargets]=React.useState(['production','preview','development']);
@@ -69,8 +71,15 @@ export default function AiBackendTab({api,project,onReauthorize,onNotice,onSaved
  },[selected]);
  React.useEffect(()=>{if(selected)loadConfig()},[selected,loadConfig]);
  return <div className="vx-stack vx-ai">
-  {!project&&<section className="vx-card"><p className="vx-empty">Pick a project in Import first. The AI backend is saved to that project.</p></section>}
+  {!project&&<section className="vx-card"><p className="vx-empty">Tick a project in Import first. The AI backend is saved to that project.</p></section>}
   {project&&<>
+  {project&&<div className="panel vb-detected">
+   <div className="vb-section-head"><div><h2>AI variables on {project.name}</h2><p>Only AI keys and models are listed. This refreshes by itself when something new is added in Vercel.</p></div><button type="button" className="vx-icon-btn" aria-label="Refresh AI variables" onClick={env.reload} disabled={env.loading}>{env.loading?'…':'↻'}</button></div>
+   {env.loading&&!env.vars.length&&<div className="vx-skeletons"><i/><i/></div>}
+   {!env.loading&&!env.error&&!aiVars.length&&<p className="vb-muted">No AI variables found on this project yet. Add a provider key (for example GEMINI_API_KEY) and a model in Variables, or save a backend below.</p>}
+   {aiVars.length>0&&<ul className="vx-list">{aiVars.map(v=><li key={v.id||v.key} className="vx-var"><span className="vx-item-copy"><strong>{v.key}</strong><small>{(v.targets||[]).map(t=>t[0].toUpperCase()+t.slice(1)).join(' · ')||'No environment'}</small></span><span className={`vx-badge ${v.sensitive?'lock':''}`}>{v.sensitive?'Key / secret':'Setting'}</span></li>)}</ul>}
+   {env.error&&<p className="vx-field-error" role="alert">{env.error}</p>}
+  </div>}
   {(agentRows.length>0||runtimeRows.length>0||configured)&&<div className="panel vb-agents">
    <div className="vb-section-head"><div><h2>Your backend AIs</h2><p>Choose the server-side AI sources PotHub may use. Direct API agents are paused while this switch is on. Runtime providers are discovered from the selected Vercel project's environment map.</p></div></div>
    <label className="vb-switch"><input type="checkbox" checked={backendOn} onChange={e=>toggleBackendMode(e.target.checked)}/><span><strong>Vercel backend only</strong><small>On: PotHub does not call direct API agents; it uses only saved Vercel Backend agents and assigned runtime environment providers.</small></span></label>

@@ -219,9 +219,14 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
   }, [openPath]);
   useEffect(() => {
     if (!selected || files[selected] !== null && files[selected] !== undefined) return;
+    // Never ask GitHub for something that is not a file of this repository: a folder, a blank or stale
+    // path left over from an earlier session or another page. Clear it quietly instead of showing an error.
+    const cleanSelected = String(selected).replaceAll("\\", "/").replace(/^\/+/, "").trim();
+    const known = fileIndex.some((x) => x.path === cleanSelected);
+    if (!cleanSelected || (fileIndex.length > 0 && !known)) { setSelected(""); return; }
     let cancelled = false;
     setFileLoading(true);
-    github.file(repo.owner.login, repo.name, selected, branch).then((f) => {
+    github.file(repo.owner.login, repo.name, cleanSelected, branch).then((f) => {
       if (cancelled) return;
       const content = f.content ?? "";
       setFiles((x) => ({ ...x, [selected]: content }));

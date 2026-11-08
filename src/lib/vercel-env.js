@@ -91,3 +91,12 @@ export function githubStatusFrom({ error, data } = {}) {
   }
   return Array.isArray(data?.repos || data?.repositories) ? 'connected' : 'error';
 }
+
+/** The address Vercel really assigned (custom domain first, else the production alias), or '' when none is known yet. */
+export const assignedUrl = (project) => { const d = (project?.domains || []).find(Boolean); return d ? `https://${String(d).replace(/^https?:\/\//, '')}` : ''; };
+
+const AI_PROVIDERS = 'GEMINI|GOOGLE|OPENAI|AZURE_OPENAI|ANTHROPIC|CLAUDE|MISTRAL|GROQ|DEEPSEEK|XAI|GROK|OPENROUTER|COHERE|PERPLEXITY|TOGETHER|FIREWORKS|HF|HUGGINGFACE|REPLICATE|STABILITY|FAL|BFL|RUNWAY|LUMA|KLING|ELEVENLABS|CUSTOM_AI|VERTEX|BEDROCK';
+const AI_NAME = new RegExp(`(^|_)(${AI_PROVIDERS})(_|$)|(^|_)(AI|LLM|MODEL|MODELS|FALLBACK_MODELS|AGENT_MAP)(_|$)|^POTHUB_(AI|BACKEND)`);
+const NOT_AI = /^(NEXT_PUBLIC_FIREBASE|FIREBASE|GOOGLE_CLIENT|GOOGLE_APPLICATION|GOOGLE_OAUTH|GOOGLE_ANALYTICS|VERCEL_|GITHUB_|STRIPE|FLUTTERWAVE|SESSION_|FLW_)/;
+/** True for variables that configure an AI provider: provider keys, model names, fallbacks and PotHub's AI map. */
+export const isAiVariable = (key) => { const k = String(key || '').toUpperCase(); return !!k && !NOT_AI.test(k) && AI_NAME.test(k); };

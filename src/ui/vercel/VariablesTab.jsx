@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, Lock, Plus } from 'lucide-react';
+import { ExternalLink, Lock, Plus, RefreshCw } from 'lucide-react';
 import Sheet from './Sheet.jsx';
 import EnvEditor from './EnvEditor.jsx';
 import ReauthNotice from './ReauthNotice.jsx';
@@ -55,7 +55,15 @@ export default function VariablesTab({ api, projects, project, onSelect, onReaut
     catch (e) { setError(String(e?.message || e)); setReauth(needsVercelReauth(e)); }
     finally { setLoading(false); }
   }, []);
-  React.useEffect(() => { if (project?.id) load(); else setLoading(false); }, [project?.id, load]);
+  React.useEffect(() => { if (project?.id) load(); else { setVars([]); setLoading(false); } }, [project?.id, load]);
+  // Pick up variables added elsewhere (Vercel dashboard, another device) when the app is shown again, and every 30 s.
+  React.useEffect(() => {
+    if (!project?.id) return undefined;
+    const quiet = async () => { if (document.visibilityState !== 'visible' || adding) return; try { const d = await apiRef.current('/api/vercel/environment-variables'); setVars(d.variables || []); } catch { /* keep what is shown */ } };
+    const t = setInterval(quiet, 30000);
+    document.addEventListener('visibilitychange', quiet); window.addEventListener('focus', quiet);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', quiet); window.removeEventListener('focus', quiet); };
+  }, [project?.id, adding]);
 
   function openAdd() { draft.reset(); setAdding(true); }
   function openRotate(variable) {
@@ -87,9 +95,10 @@ export default function VariablesTab({ api, projects, project, onSelect, onReaut
       <section className="vx-card">
         <header className="vx-card-head">
           <h2>{project ? `${project.name} variables` : 'Variables'}</h2>
+          {project && <button type="button" className="vx-icon-btn" aria-label="Refresh variables" onClick={load} disabled={loading}><RefreshCw size={16} className={loading ? 'spin' : ''} /></button>}
           <button type="button" className="vx-icon-btn solid" aria-label="Add variables" onClick={openAdd} disabled={!project}><Plus size={18} /></button>
         </header>
-        {!project && <p className="vx-empty">Choose a project above to see its variables.</p>}
+        {!project && <p className="vx-empty">Tick a project in Import to see its variables.</p>}
         {project && loading && <div className="vx-skeletons"><i /><i /><i /></div>}
         {project && !loading && !error && vars.length === 0 && <p className="vx-empty">No variables on this project yet. Tap + to add one.</p>}
         <ul className="vx-list">

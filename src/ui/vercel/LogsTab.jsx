@@ -7,6 +7,45 @@ const tone = (state) => (isReady(state) ? 'ok' : isFailed(state) ? 'bad' : isBui
 
 function Pill({ state }) { return <span className={`vx-state ${tone(state)}`}>{isBuilding(state) && <i aria-hidden="true" />}{stateLabel(state)}</span>; }
 
+
+const tail = (text, n = 40) => String(text || '').split('\n').filter((l) => l.trim()).slice(-n).join('\n');
+
+/** The newest deployment's log, shown straight away and kept live while it builds. */
+function LatestLog({ api, deployment, onOpen }) {
+  const [detail, setDetail] = React.useState({ state: '', logs: '' });
+  const apiRef = React.useRef(api); apiRef.current = api;
+  const id = deployment?.id || '';
+  React.useEffect(() => {
+    if (!id) return undefined;
+    let alive = true, timer = 0;
+    setDetail({ state: stateOf(deployment), logs: '' });
+    const tick = async () => {
+      let state = '';
+      try {
+        const [s, l] = await Promise.all([
+          apiRef.current(`/api/vercel/deployment-status?deploymentId=${encodeURIComponent(id)}`),
+          apiRef.current(`/api/vercel/deployment-logs?deploymentId=${encodeURIComponent(id)}`).catch(() => null),
+        ]);
+        if (!alive) return;
+        state = String(s.state || '').toUpperCase();
+        setDetail((old) => ({ state, logs: l ? String(l.logs || '') : old.logs }));
+      } catch { /* the list below still works */ }
+      if (alive && (!state || isBuilding(state))) timer = setTimeout(tick, 4000);
+    };
+    tick();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!deployment) return null;
+  const state = detail.state || stateOf(deployment);
+  return (
+    <div className="vx-latest">
+      <div className="vx-latest-head"><strong>Latest log</strong><small>{when(deployment.createdAt)}</small><Pill state={state} /></div>
+      <pre className="vx-log vx-log-mini" tabIndex={0}>{tail(detail.logs) || (isBuilding(state) ? 'Waiting for the first build output…' : 'Loading the latest log…')}</pre>
+      <button type="button" className="secondary vx-small" onClick={() => onOpen(deployment.id)}>Open full log</button>
+    </div>
+  );
+}
+
 /** Deployment monitor: the list, and a live build log that keeps updating until the build finishes. */
 export default function LogsTab({ api, project, focusId, onFix, onCopy }) {
   const [deployments, setDeployments] = React.useState([]);
@@ -27,7 +66,7 @@ export default function LogsTab({ api, project, focusId, onFix, onCopy }) {
     catch (e) { setError(String(e?.message || e)); }
     finally { setLoading(false); }
   }, []);
-  React.useEffect(() => { loadList(); }, [loadList, project?.id]);
+  React.useEffect(() => { setDeployments([]); setOpenId(focusId || ''); loadList(); }, [loadList, project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the list fresh while something is building.
   React.useEffect(() => {
@@ -66,7 +105,7 @@ export default function LogsTab({ api, project, focusId, onFix, onCopy }) {
     try { await navigator.clipboard.writeText(detail.logs || ''); setCopied(true); setTimeout(() => setCopied(false), 1600); onCopy?.(); } catch { /* clipboard can be blocked */ }
   }
 
-  if (!project) return <section className="vx-card"><p className="vx-empty">Pick a project in Import first. Its deployments and build logs appear here.</p></section>;
+  if (!project) return <section className="vx-card"><p className="vx-empty">Tick a project in Import first. Its deployments and build logs appear here.</p></section>;
 
   if (openId) {
     const state = detail.state || stateOf(deployments.find((d) => d.id === openId));
@@ -96,6 +135,7 @@ export default function LogsTab({ api, project, focusId, onFix, onCopy }) {
       <section className="vx-card">
         <header className="vx-card-head"><h2>Deployments</h2><button type="button" className="vx-link" onClick={() => loadList()} disabled={loading}><RefreshCw size={14} aria-hidden="true" className={loading ? 'spin' : ''} /> Refresh</button></header>
         <p className="vx-sub">{project.name}</p>
+        {deployments[0] && <LatestLog key={project.id} api={api} deployment={deployments[0]} onOpen={setOpenId} />}
         {loading && deployments.length === 0 && <div className="vx-skeletons"><i /><i /><i /></div>}
         {!loading && deployments.length === 0 && !error && <p className="vx-empty">No deployments yet. Open the project in Import and tap Deploy.</p>}
         {error && <p className="vx-field-error" role="alert">{error}</p>}

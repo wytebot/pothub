@@ -4,10 +4,15 @@
 // Credit-charged actions (pull request creation, revert) are metered by app.js before this runs.
 const GH="https://api.github.com";
 export function normalizeRepoPath(value){
-  const raw=String(value??"").trim().replaceAll("\\","/");
-  if(!raw||raw.startsWith("/")||/^[A-Za-z]:/.test(raw)||/[\u0000-\u001f\u007f]/.test(raw))throw Object.assign(new Error("Invalid repository path: choose a file inside the selected repository (for example, src/App.jsx)."),{status:400,code:"INVALID_REPOSITORY_PATH"});
-  const parts=raw.split("/").filter(part=>part&&part!==".");
-  if(!parts.length||parts.some(part=>part===".."))throw Object.assign(new Error("Invalid repository path: choose a file inside the selected repository (for example, src/App.jsx)."),{status:400,code:"INVALID_REPOSITORY_PATH"});
+  // Cleans surrounding spaces, "./", control characters and Windows separators. Absolute paths (leading "/" or a drive letter), ".." and empty paths are refused, and the
+  // message says exactly what was received so the cause can be found.
+  const original=String(value??"");
+  const raw=original.replace(/[\u0000-\u001f\u007f]/g,"").trim().replaceAll("\\","/");
+  const shown=original.replace(/[\u0000-\u001f\u007f]/g,"?").slice(0,120);
+  if(raw.startsWith("/")||/^[A-Za-z]:/.test(raw))throw Object.assign(new Error(`Invalid repository path "${shown}": paths must be relative to the repository (for example, src/App.jsx).`),{status:400,code:"INVALID_REPOSITORY_PATH"});
+  const parts=raw.split("/").map(part=>part.trim()).filter(part=>part&&part!==".");
+  if(!parts.length)throw Object.assign(new Error(`Invalid repository path: no file was selected${shown.trim()?` (received "${shown}")`:""}. Tap a file in the list (for example, src/App.jsx).`),{status:400,code:"INVALID_REPOSITORY_PATH"});
+  if(parts.some(part=>part===".."))throw Object.assign(new Error(`Invalid repository path "${shown}": ".." is not allowed. Choose a file inside the selected repository.`),{status:400,code:"INVALID_REPOSITORY_PATH"});
   return parts.join("/");
 }
 function ghHeaders(token){return{"Authorization":`Bearer ${token}`,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"PotHub-Codelab"};}
@@ -196,7 +201,7 @@ export async function wytelabGithub(req,res,p,s){
     if(m){
       const owner=decodeURIComponent(m[1]),repo=decodeURIComponent(m[2]),kind=m[3];
       if(kind==="branches")return json(res,200,await gh(s.githubToken,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`));
-      if(kind==="file"){const path=safePath(url.searchParams.get("path")||"") ,rawBranch=String(url.searchParams.get("branch")||"").trim(),branch=/^(undefined|null|HEAD)?$/i.test(rawBranch)?"":rawBranch;const contentsPath=`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`;let d;try{d=await gh(s.githubToken,`${contentsPath}${branch?`?ref=${encodeURIComponent(branch)}`:""}`)}catch(fileErr){/* A stale or unknown branch name: read the repository default branch instead of failing. */if(branch&&(fileErr.status===404||fileErr.status===422)&&/no commit found|not found|ref/i.test(String(fileErr.message||""))){const remote=await gh(s.githubToken,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);d=await gh(s.githubToken,`${contentsPath}?ref=${encodeURIComponent(remote.default_branch||"main")}`)}else throw fileErr}if(Array.isArray(d))return json(res,400,{error:"The selected path is a directory, not a file."});if(isBinaryPath(path)){
+      if(kind==="file"){const path=safePath(url.searchParams.get("path")||"") ,rawBranch=String(url.searchParams.get("branch")||"").trim(),branch=/^(undefined|null|HEAD)?$/i.test(rawBranch)?"":rawBranch;const contentsPath=`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`;let d;try{d=await gh(s.githubToken,`${contentsPath}${branch?`?ref=${encodeURIComponent(branch)}`:""}`)}catch(fileErr){/* A stale or unknown branch name: read the repository default branch instead of failing. */if(branch&&(fileErr.status===404||fileErr.status===422)&&/no commit found|not found|ref/i.test(String(fileErr.message||""))){const remote=await gh(s.githubToken,`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);d=await gh(s.githubToken,`${contentsPath}?ref=${encodeURIComponent(remote.default_branch||"main")}`)}else throw fileErr}if(Array.isArray(d))return json(res,400,{error:`"${path}" is a folder, not a file. Open a file inside it.`,code:"PATH_IS_DIRECTORY"});if(isBinaryPath(path)){
         const size=Number(d.size||0), raw=String(d.content||"").replace(/\n/g,"");
         if(size>3*1024*1024) return json(res,200,{path,content:{__wydevBinary:true,base64:"",mime:mimeForPath(path),size,tooLarge:true,html_url:d.html_url||null},sha:d.sha,size,html_url:d.html_url||null});
         return json(res,200,{path,content:{__wydevBinary:true,base64:raw,mime:mimeForPath(path),size},sha:d.sha,size});

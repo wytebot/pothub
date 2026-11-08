@@ -45,11 +45,20 @@ export default function VercelBackendWorkspace({ api, onReconnect, onConnectGith
 
   /** Make this the project every other page (variables, logs, deploy) works on. */
   const selectProject = React.useCallback(async (p) => {
+    if (!p) { await apiRef.current('/api/vercel/project', { method: 'POST', body: JSON.stringify({ projectId: '' }) }); setSelectedId(''); return; }
     if (p.id !== selectedId) {
       await apiRef.current('/api/vercel/project', { method: 'POST', body: JSON.stringify({ projectId: p.id, teamId: p.teamId || null }) });
       setSelectedId(p.id);
     }
   }, [selectedId]);
+
+  // One project and none ticked yet: tick it, so the other pages are never empty for no reason.
+  const autoPicked = React.useRef(false);
+  React.useEffect(() => {
+    if (autoPicked.current || selectedId || projects.length !== 1) return;
+    autoPicked.current = true;
+    selectProject(projects[0]).catch(() => {});
+  }, [projects, selectedId, selectProject]);
 
   const projectAdded = React.useCallback((p) => { setProjects((old) => [p, ...old.filter((x) => x.id !== p.id)]); setSelectedId(p.id); }, []);
   const deployed = React.useCallback((info) => { setFocusId(info.deploymentId || ''); setTab('logs'); }, [setTab]);
