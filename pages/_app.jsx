@@ -3,6 +3,7 @@ import '../src/ui/styles.css';
 import '../src/ui/codelab/codelab.css';
 import '../src/ui/byte-bounce.css';
 import '../src/ui/arcade-hub.css';
+import '../src/ui/pothub-ui.css';
 import '../src/ui/penalty-shootout.css';
 import DeploymentUpdateNotice from '../src/ui/DeploymentUpdateNotice.jsx';
 

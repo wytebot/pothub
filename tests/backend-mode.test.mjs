@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const app = fs.readFileSync(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
-const page = fs.readFileSync(new URL('../src/ui/VercelBackendWorkspace.jsx', import.meta.url), 'utf8');
+const page = fs.readFileSync(new URL('../src/ui/vercel/AiBackendTab.jsx', import.meta.url), 'utf8');
 const mode = fs.readFileSync(new URL('../src/lib/backend-mode.js', import.meta.url), 'utf8');
 const agents = fs.readFileSync(new URL('../src/lib/agents.js', import.meta.url), 'utf8');
 const server = fs.readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');

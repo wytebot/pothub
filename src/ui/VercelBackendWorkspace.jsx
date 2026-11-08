@@ -1,116 +1,98 @@
 import React from 'react';
-import {saveAgent,decryptSecret} from '../lib/agents';
-import {db} from '../lib/db';
-import {BACKEND_LABEL,isBackendAgent,backendModeEnabled,backendModeStored,setBackendMode} from '../lib/backend-mode';
+import { KeyRound, Cpu, Rocket, ScrollText, RefreshCw } from 'lucide-react';
+import ImportTab from './vercel/ImportTab.jsx';
+import LogsTab from './vercel/LogsTab.jsx';
+import VariablesTab from './vercel/VariablesTab.jsx';
+import AiBackendTab from './vercel/AiBackendTab.jsx';
+import { linkedRepo } from '../lib/vercel-env.js';
 
-const DEFAULTS={keyEnv:'GEMINI_API_KEY',modelEnv:'GEMINI_MODEL',fallbackEnv:'GEMINI_FALLBACK_MODELS'};
-const cleanUrl=value=>String(value||'').trim().replace(/\/+$/,'');
-const parseModels=value=>[...new Set(String(value||'').split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))].slice(0,7);
+const TABS = [
+  { id: 'import', label: 'Import', Icon: Rocket },
+  { id: 'logs', label: 'Logs', Icon: ScrollText },
+  { id: 'variables', label: 'Variables', Icon: KeyRound },
+  { id: 'ai', label: 'AI backend', Icon: Cpu },
+];
+const TAB_KEY = 'pothub-vercel-tab';
+const readTab = () => { try { const t = sessionStorage.getItem(TAB_KEY); return TABS.some((x) => x.id === t) ? t : 'import'; } catch { return 'import'; } };
 
-export default function VercelBackendWorkspace({api,onReconnect,onConnectGithub,onNotice,onSaved,locked=false,onUnlock}){
- const apiRef=React.useRef(api);apiRef.current=api;
- const [connected,setConnected]=React.useState(false),[projects,setProjects]=React.useState([]),[selected,setSelected]=React.useState('');
- const [config,setConfig]=React.useState(null),[backendUrl,setBackendUrl]=React.useState(''),[keyEnv,setKeyEnv]=React.useState(DEFAULTS.keyEnv),[modelEnv,setModelEnv]=React.useState(DEFAULTS.modelEnv),[fallbackEnv,setFallbackEnv]=React.useState(DEFAULTS.fallbackEnv);
- const [apiKey,setApiKey]=React.useState(''),[model,setModel]=React.useState(''),[fallbacks,setFallbacks]=React.useState(''),[targets,setTargets]=React.useState(['production','preview','development']);
- const [busy,setBusy]=React.useState(''),[message,setMessage]=React.useState(''),[error,setError]=React.useState(''),[configured,setConfigured]=React.useState(false);
- const [agentRows,setAgentRows]=React.useState([]),[backendOn,setBackendOn]=React.useState(false),[imageModel,setImageModel]=React.useState(''),[newFn,setNewFn]=React.useState('Chat'),[newModel,setNewModel]=React.useState('');
- const [githubRepos,setGithubRepos]=React.useState([]),[githubRepoSelection,setGithubRepoSelection]=React.useState(''),[githubRepoQuery,setGithubRepoQuery]=React.useState(''),[importBusy,setImportBusy]=React.useState(false),[envOpen,setEnvOpen]=React.useState(false),[envRows,setEnvRows]=React.useState([{id:1,key:'',value:'',secret:true}]),[envBusy,setEnvBusy]=React.useState(false),[envMessage,setEnvMessage]=React.useState('');
- const reloadAgents=React.useCallback(async()=>{const order={Chat:0,Image:1,Diagnosis:2,'Fix generation':3},rows=(await db.agents.toArray()).filter(isBackendAgent).sort((a,b)=>(order[a.function]??9)-(order[b.function]??9));setAgentRows(rows);setBackendOn(await backendModeEnabled())},[]);
- React.useEffect(()=>{reloadAgents()},[reloadAgents]);
- async function toggleDefault(a){setError('');try{await db.agents.update(a.id,{default:!a.default,updatedAt:new Date().toISOString()});await reloadAgents();await onSaved?.()}catch(e){fail(e)}}
- async function toggleBackendMode(on){setError('');try{if(on&&!agentRows.length)throw new Error('Save the backend configuration first so there is a Vercel Backend AI to route through.');await setBackendMode(on);setBackendOn(on);notify(on?'Vercel backend only is ON. PotHub no longer calls provider APIs directly; chat, image and fix requests go only through the ticked Vercel Backend AIs.':'Vercel backend only is OFF. Your direct API agents work again.');await onSaved?.()}catch(e){fail(e)}}
- async function addBackendAi(e){e?.preventDefault?.();setError('');setMessage('');const modelId=newModel.trim();if(!modelId)return fail('Enter the model ID this AI should use.');const base=agentRows[0];if(!base)return fail('Save the backend configuration first.');setBusy('add');try{const token=await decryptSecret(base.secret);await saveAgent({function:newFn,provider:'openai-compatible',baseUrl:base.baseUrl,model:modelId,models:[modelId],modelVariants:'',modelEnv:base.modelEnv,keyEnv:base.keyEnv,fallbackEnv:base.fallbackEnv,key:token,label:BACKEND_LABEL,default:true,multi:true});setNewModel('');await reloadAgents();await onSaved?.();notify(`Added a ${newFn} AI (${modelId}) and ticked it as a default.`)}catch(e2){fail(e2)}finally{setBusy('')}}
- const notify=(text)=>{setMessage(text);setError('');onNotice?.(text)};
- const fail=(e)=>{setError(String(e?.message||e||'The operation could not be completed.'));setMessage('')};
- const load=React.useCallback(async()=>{
-  setBusy('load');setError('');
-  try{
-   const [status,projectData,meta]=await Promise.all([apiRef.current('/api/vercel/status'),apiRef.current('/api/vercel/projects'),apiRef.current('/api/vercel/backend/config')]);
-   setConnected(!!status.connected);setProjects(projectData.projects||[]);setSelected(meta.projectId||projectData.selectedProjectId||'');setConfig(meta.config||null);
-   if(meta.config){setBackendUrl(meta.config.backendUrl||'');setKeyEnv(meta.config.keyEnv||DEFAULTS.keyEnv);setModelEnv(meta.config.modelEnv||DEFAULTS.modelEnv);setFallbackEnv(meta.config.fallbackEnv||DEFAULTS.fallbackEnv);setModel(meta.config.model||'');setFallbacks((meta.config.fallbackModels||[]).join('\n'));setTargets(meta.config.targets||['production','preview','development']);setConfigured(String(meta.config.projectId||'')===String(meta.projectId||''))}
-   else setConfigured(false);
-  }catch(e){fail(e)}finally{setBusy('')}
- },[]);
- React.useEffect(()=>{load();apiRef.current('/api/github/repos').then(d=>setGithubRepos(d.repos||d.repositories||[])).catch(()=>setGithubRepos([]))},[load]);
- async function chooseProject(p){
-  setBusy('project');setError('');
-  try{await api('/api/vercel/project',{method:'POST',body:JSON.stringify({projectId:p.id,teamId:p.teamId||null})});setSelected(p.id);setConfigured(String(config?.projectId||'')===String(p.id));notify(`Selected ${p.name}.`)}
-  catch(e){fail(e)}finally{setBusy('')}
- }
- function toggleTarget(value){setTargets(old=>old.includes(value)?old.filter(x=>x!==value):[...old,value])}
- async function configure(e){
-  e?.preventDefault?.();setError('');setMessage('');
-  const url=cleanUrl(backendUrl),fallbackModels=parseModels(fallbacks);
-  if(!url.startsWith('https://'))return fail('Enter a public HTTPS backend URL.');
-  if(!selected)return fail('Select a Vercel project first.');
-  if(!apiKey.trim())return fail('Enter the provider API key to store in the selected Vercel project.');
-  if(!model.trim())return fail('Enter the primary model ID.');
-  if(!targets.length)return fail('Select at least one deployment target.');
-  setBusy('save');
-  try{
-   const result=await api('/api/vercel/backend/configure',{method:'POST',body:JSON.stringify({backendUrl:url,keyEnv:keyEnv.trim(),modelEnv:modelEnv.trim(),fallbackEnv:fallbackEnv.trim(),model:model.trim(),fallbackModels,apiKey:apiKey.trim(),targets})});
-   const token=result.backendToken;
-   for(const fn of ['Chat','Diagnosis','Fix generation']){
-    const old=await db.agents.where('function').equals(fn).filter(a=>a.label==='Vercel Backend'&&a.provider==='openai-compatible').first();
-    await saveAgent({id:old?.id,function:fn,provider:'openai-compatible',baseUrl:url,model:model.trim(),models:[model.trim(),...fallbackModels],modelVariants:fallbackModels.join('\n'),modelEnv:modelEnv.trim(),keyEnv:keyEnv.trim(),fallbackEnv:fallbackEnv.trim(),key:token,label:BACKEND_LABEL,default:true,multi:true});
-   }
-   if(imageModel.trim()){const oldImage=await db.agents.where('function').equals('Image').filter(isBackendAgent).first();await saveAgent({id:oldImage?.id,function:'Image',provider:'openai-compatible',baseUrl:url,model:imageModel.trim(),models:[imageModel.trim()],modelVariants:'',modelEnv:modelEnv.trim(),keyEnv:keyEnv.trim(),fallbackEnv:fallbackEnv.trim(),key:token,label:BACKEND_LABEL,default:true,multi:true})}
-   if((await backendModeStored())===null)await setBackendMode(true);
-   await reloadAgents();
-   setApiKey('');setConfig(result.config);setConfigured(true);notify('Backend settings saved to Vercel and the Vercel Backend agent was added for Chat, Diagnosis and Fix. Redeploy the selected project to activate its environment variables.');
-   await onSaved?.();
-  }catch(e){fail(e)}finally{setBusy('')}
- }
- async function testBackend(){
-  setBusy('test');setError('');setMessage('');
-  try{
-   const agent=await db.agents.where('function').equals('Chat').filter(a=>a.label==='Vercel Backend'&&a.provider==='openai-compatible').first();
-   if(!agent?.secret)throw new Error('Save the backend configuration first on this device so its encrypted access token is available.');
-   const token=await decryptSecret(agent.secret);
-   const result=await api('/api/vercel/backend/test',{method:'POST',body:JSON.stringify({backendUrl:cleanUrl(backendUrl),backendToken:token}),timeoutMs:18000,noRetry:true});
-   notify(result.note||'Backend endpoint is responding.');
-  }catch(e){fail(e)}finally{setBusy('')}
- }
- async function importGithubProject(){if(!githubRepoSelection||importBusy)return;setImportBusy(true);setError('');setMessage('');try{const result=await api('/api/vercel/import-github',{method:'POST',body:JSON.stringify({repoFullName:githubRepoSelection})});setSelected(result.project.id);setProjects(old=>[result.project,...old.filter(p=>p.id!==result.project.id)]);notify(result.note||`Imported ${githubRepoSelection} into Vercel.`);await load()}catch(e){fail(e)}finally{setImportBusy(false)}}
- function addEnvRow(){setEnvRows(old=>[...old,{id:Date.now()+Math.random(),key:'',value:'',secret:true}])}
- function updateEnvRow(id,field,value){setEnvRows(old=>old.map(row=>row.id===id?{...row,[field]:value}:row))}
- async function saveEnvironmentVariables(deployNow=false){setError('');setEnvMessage('');const variables=envRows.filter(x=>x.key.trim()||x.value).map(x=>({key:x.key.trim(),value:x.value,secret:!!x.secret}));if(!variables.length)return fail('Add at least one environment variable.');if(variables.some(x=>!x.key||!x.value))return fail('Every environment variable needs both a name and a value.');if(!targets.length)return fail('Select at least one deployment target.');setEnvBusy(true);try{const result=await api('/api/vercel/environment-variables',{method:'POST',body:JSON.stringify({variables,targets})});let note=result.note||`Saved ${result.savedKeys?.length||variables.length} variables.`;if(deployNow){try{const deployment=await api('/api/vercel/redeploy',{method:'POST',body:JSON.stringify({target:'production'}),timeoutMs:35000});note+=` Deployment queued${deployment.url?` · ${deployment.url}`:''}. ID: ${deployment.deploymentId||'pending'}.`}catch(deployError){note+=` Variables were saved, but deployment could not be started: ${deployError.message||'retry from Deploy / Redeploy'}`}}setEnvMessage(note);setEnvRows([{id:Date.now(),key:'',value:'',secret:true}]);notify(note)}catch(e){fail(e)}finally{setEnvBusy(false)}}
- const selectedProject=projects.find(p=>p.id===selected);
- const envDashboardUrl=selectedProject?(selectedProject.teamSlug?`https://vercel.com/${encodeURIComponent(selectedProject.teamSlug)}/${encodeURIComponent(selectedProject.name)}/settings/environment-variables`:`https://vercel.com/dashboard/project/${encodeURIComponent(selectedProject.id)}/settings/environment-variables`):'https://vercel.com/dashboard';
- if(locked)return <section className="vercel-backend-page"><div className="panel"><h2>Backend settings are protected</h2><p>Verify your device authenticator or PotHub passcode before changing backend credentials.</p><button type="button" className="primary" onClick={onUnlock}>Unlock backend settings</button></div></section>;
- return <section className="vercel-backend-page">
-  <div className="page-heading"><div><h1>Vercel Backend</h1><p>Configure a private AI backend and keep provider credentials in your own Vercel project.</p></div><button type="button" className="secondary" onClick={load} disabled={!!busy}>Refresh</button></div>
-  {(agentRows.length>0||configured)&&<div className="panel vb-agents">
-   <div className="vb-section-head"><div><h2>Your backend AIs</h2><p>Tick the AIs PotHub should use. Tick two or more for Chat, or for Image: PotHub tries them in the order listed and moves to the next if one fails.</p></div></div>
-   <label className="vb-switch"><input type="checkbox" checked={backendOn} onChange={e=>toggleBackendMode(e.target.checked)}/><span><strong>Vercel backend only</strong><small>On: PotHub stops calling provider APIs directly and reads only from your Vercel backend.</small></span></label>
-   {agentRows.length?<div className="vb-agent-list">{agentRows.map(a=><label key={a.id} className={`vb-agent-row ${a.default?'on':''}`}><input type="checkbox" checked={!!a.default} onChange={()=>toggleDefault(a)}/><span><strong>{a.function}</strong><small>{a.model}{(a.models||[]).length>1?` · +${a.models.length-1} fallback`:''}</small></span><em>{a.default?'Default':'Off'}</em></label>)}</div>:<p className="vb-muted">No Vercel Backend AIs yet. Save the configuration below.</p>}
-   {agentRows.length>0&&<form className="vb-add-ai" onSubmit={addBackendAi}><div className="vb-function-options" role="group" aria-label="AI function">{['Chat','Image','Diagnosis','Fix generation'].map(f=><button type="button" key={f} className={newFn===f?'active':''} aria-pressed={newFn===f} onClick={()=>setNewFn(f)}>{f}</button>)}</div><input value={newModel} onChange={e=>setNewModel(e.target.value)} placeholder="Model ID" autoCapitalize="none" autoCorrect="off" spellCheck="false"/><button type="submit" className="secondary" disabled={!!busy}>Add AI</button></form>}
-  </div>}
-  {!connected?<div className="panel vb-connect"><h2>Connect your Vercel account</h2><p>PotHub will open Vercel's own authorization page. If Vercel requests an email verification code, enter it there; PotHub will not ask you to copy that code into the app.</p><button className="primary" onClick={onReconnect} disabled={!!busy}>Connect / reauthorize Vercel</button></div>:<>
-   <div className="panel vb-projects"><div className="vb-section-head"><div><h2>1. Choose your Vercel project</h2><p>Only projects available to the connected Vercel account are listed.</p></div><span className="vb-state">Vercel connected</span></div>
-    <div className="vb-import-project"><strong>Import a GitHub repository</strong><p>Connect GitHub and choose a repository to create a linked Vercel project.</p><label className="vb-import-search">Search GitHub repositories<input value={githubRepoQuery} onChange={e=>setGithubRepoQuery(e.target.value)} placeholder="Filter your repositories"/></label><div className="vb-import-repo-list">{githubRepos.filter(r=>String(r.full_name||'').toLowerCase().includes(githubRepoQuery.toLowerCase())).slice(0,12).map(r=><button type="button" key={r.id||r.full_name} className={githubRepoSelection===r.full_name?'active':''} onClick={()=>setGithubRepoSelection(r.full_name)}>{r.full_name}</button>)}{!githubRepos.length&&<div className="vb-no-github-repos"><small>Connect GitHub or refresh the page to load repositories.</small><button type="button" className="secondary" onClick={onConnectGithub}>Connect GitHub</button></div>}</div><div className="vb-import-row"><span>{githubRepoSelection||'No repository selected'}</span><button type="button" className="secondary" disabled={!githubRepoSelection||importBusy} onClick={importGithubProject}>{importBusy?'Importing…':'Import project'}</button></div><small>Import requires the repository to be accessible to both your GitHub account and Vercel's Git integration.</small></div>
-    {projects.length?<div className="vb-project-list">{projects.map(p=><button type="button" key={`${p.id}:${p.teamId||''}`} className={`vb-project ${selected===p.id?'active':''}`} onClick={()=>chooseProject(p)} disabled={!!busy}><span className="vb-project-icon">▲</span><span className="vb-project-copy"><strong>{p.name}</strong><small>{p.framework||'Vercel project'}{p.domains?.[0]?` · ${p.domains[0]}`:''}</small></span><span className="vb-project-check">{selected===p.id?'Selected':'Select'}</span></button>)}</div>:<p className="vb-muted">{busy==='load'?'Loading projects…':'No projects found. Refresh or reconnect Vercel.'}</p>}
-    {selectedProject&&<div className="vb-selected-note">Current project: <strong>{selectedProject.name}</strong><a href={envDashboardUrl} target="_blank" rel="noreferrer">Open environment variables in Vercel ↗</a></div>}
-   </div>
-   <section className="panel vb-env-manager"><div className="vb-section-head"><div><h2>Project environment variables</h2><p>Add as many variables as needed. Secret values are sent directly to Vercel and are never read back into PotHub.</p></div><button type="button" className="secondary" onClick={()=>setEnvOpen(v=>!v)}>{envOpen?'Cancel':'Manage variables'}</button></div>{envOpen&&<><div className="vb-env-list">{envRows.map(row=><div className="vb-env-row" key={row.id}><label>Variable name<input value={row.key} onChange={e=>updateEnvRow(row.id,'key',e.target.value.replace(/[^A-Za-z0-9_]/g,''))} placeholder="MY_API_KEY" autoCapitalize="characters"/></label><label>Value<input value={row.value} onChange={e=>updateEnvRow(row.id,'value',e.target.value)} placeholder="Variable value" type={row.secret?'password':'text'} autoComplete="new-password"/></label><label className="vb-env-secret"><input type="checkbox" checked={row.secret} onChange={e=>updateEnvRow(row.id,'secret',e.target.checked)}/> Encrypt as secret</label><button type="button" className="quiet" onClick={()=>setEnvRows(old=>old.filter(x=>x.id!==row.id))} disabled={envRows.length===1}>Remove</button></div>)}</div><div className="actions-row"><button type="button" className="secondary" onClick={addEnvRow} disabled={envRows.length>=100}>+ Add variable</button><button type="button" className="secondary" disabled={envBusy||!selected} onClick={()=>saveEnvironmentVariables(false)}>{envBusy?'Saving…':'Save variables'}</button><button type="button" className="primary" disabled={envBusy||!selected} onClick={()=>saveEnvironmentVariables(true)}>{envBusy?'Saving & deploying…':'Save & deploy'}</button><button type="button" className="quiet" onClick={()=>{setEnvOpen(false);setEnvRows([{id:Date.now(),key:'',value:'',secret:true}])}}>Cancel</button></div><small>Targets use the deployment environments selected below. Changes take effect after the next deployment.</small></>}</section>
-   <form className="panel vb-config" onSubmit={configure}>
-    <div className="vb-section-head"><div><h2>2. Backend configuration</h2><p>PotHub sends AI requests to this URL. The endpoint must implement the OpenAI-compatible API.</p></div></div>
-    <label>Backend base URL<input value={backendUrl} onChange={e=>setBackendUrl(e.target.value)} placeholder="https://your-project.vercel.app/v1" autoCapitalize="none" autoCorrect="off" spellCheck="false" inputMode="url"/></label>
-    <div className="vb-two-col"><label>Provider API-key variable<input value={keyEnv} onChange={e=>setKeyEnv(e.target.value.toUpperCase())} placeholder="GEMINI_API_KEY" autoCapitalize="characters"/></label><label>Model variable<input value={modelEnv} onChange={e=>setModelEnv(e.target.value.toUpperCase())} placeholder="GEMINI_MODEL" autoCapitalize="characters"/></label></div>
-    <label>Provider API key<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder={configured?'Enter a new key to rotate the stored key':'Paste the provider key to store in Vercel'} autoComplete="new-password"/></label>
-    <label>Primary model ID<input value={model} onChange={e=>setModel(e.target.value)} placeholder="Enter the exact active model ID" autoCapitalize="none" autoCorrect="off" spellCheck="false"/></label>
-    <label>Image model ID (optional)<input value={imageModel} onChange={e=>setImageModel(e.target.value)} placeholder="Adds an Image AI that uses your backend's /images/generations" autoCapitalize="none" autoCorrect="off" spellCheck="false"/></label>
-    <label>Fallback model IDs<textarea rows={3} value={fallbacks} onChange={e=>setFallbacks(e.target.value)} placeholder="One model ID per line"/></label>
-    <label>Fallback-model environment variable<input value={fallbackEnv} onChange={e=>setFallbackEnv(e.target.value.toUpperCase())}/></label>
-    <div className="vb-targets"><strong>Apply environment variables to</strong><div>{['production','preview','development'].map(t=><label key={t}><input type="checkbox" checked={targets.includes(t)} onChange={()=>toggleTarget(t)}/>{t[0].toUpperCase()+t.slice(1)}</label>)}</div></div>
-    <div className="vb-security-note"><strong>Credential protection</strong><p>The provider key is sent directly to Vercel over HTTPS and is not saved in PotHub's database. Vercel stores it as an encrypted environment variable. A separate generated backend token is stored in the local encrypted agent vault and as a secret environment variable. Never add either secret to a NEXT_PUBLIC_ variable.</p></div>
-    <button className="primary" type="submit" disabled={!!busy||!selected}>{busy==='save'?'Saving securely…':'Save backend to Vercel'}</button>
-   </form>
-   {configured&&<div className="panel vb-status"><div className="vb-section-head"><div><h2>3. Backend status</h2><p>Configuration metadata is saved. Secret values are never read back into this page.</p></div><span className="vb-state">Configured</span></div><div className="vb-meta"><span>Backend URL</span><strong>{config?.backendUrl||backendUrl}</strong><span>API key variable</span><strong>{config?.keyEnv||keyEnv}</strong><span>Model variable</span><strong>{config?.modelEnv||modelEnv}</strong><span>Fallbacks</span><strong>{(config?.fallbackModels||parseModels(fallbacks)).join(', ')||'None configured'}</strong><span>Targets</span><strong>{(config?.targets||targets).join(', ')}</strong></div><button type="button" className="secondary" onClick={testBackend} disabled={!!busy}>{busy==='test'?'Testing endpoint…':'Test backend endpoint'}</button><p className="vb-muted">After saving environment variables, redeploy the selected Vercel project. The endpoint must expose GET /models and POST /chat/completions, and validate the generated Bearer token against POTHUB_BACKEND_TOKEN. PotHub's own server also needs POTHUB_ALLOW_CUSTOM_AGENT_ENDPOINTS=true before it can call a custom backend URL.</p></div>}
-   <p className="vb-dashboard-link"><a href={envDashboardUrl} target="_blank" rel="noreferrer">Manage environment variables directly in Vercel ↗</a></p>
-   <div className="vb-warning"><strong>Vercel permission requirement</strong><p>Environment-variable writes require a Vercel Integration with the <code>project-env-vars</code> scope. If Vercel denies the request, approve that scope for the integration and reconnect. The email verification step, if requested, stays on Vercel's own page.</p><button type="button" className="quiet" onClick={onReconnect}>Reauthorize Vercel</button></div>
-  </>}
-  {error&&<div className="vb-feedback error" role="alert">{error}{/401|authorization|token|expired/i.test(error)&&<button type="button" onClick={onReconnect}>Reauthorize</button>}</div>}
-  {message&&<div className="vb-feedback success" role="status">{message}</div>}
- </section>;
+export default function VercelBackendWorkspace({ api, onReconnect, onConnectGithub, onSwitchGithub, onNotice, onSaved, onFixBuild, locked = false, onUnlock }) {
+  const apiRef = React.useRef(api); apiRef.current = api;
+  const [tab, setTabState] = React.useState('import');
+  const [status, setStatus] = React.useState({ loading: true, connected: false, email: '' });
+  const [projects, setProjects] = React.useState([]);
+  const [selectedId, setSelectedId] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [focusId, setFocusId] = React.useState('');
+
+  React.useEffect(() => { setTabState(readTab()); }, []);
+  const setTab = React.useCallback((id) => { setTabState(id); try { sessionStorage.setItem(TAB_KEY, id); } catch { /* storage can be blocked */ } }, []);
+
+  const load = React.useCallback(async () => {
+    setStatus((s) => ({ ...s, loading: true })); setError('');
+    try {
+      const st = await apiRef.current('/api/vercel/status');
+      if (!st.connected) { setStatus({ loading: false, connected: false, email: '' }); setProjects([]); return; }
+      setStatus({ loading: false, connected: true, email: st.email || '' });
+      setSelectedId(st.selectedProjectId || '');
+      const data = await apiRef.current('/api/vercel/projects');
+      setProjects(data.projects || []);
+      setSelectedId(data.selectedProjectId || st.selectedProjectId || '');
+    } catch (e) { setStatus((s) => ({ ...s, loading: false })); setError(String(e?.message || e)); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const selected = projects.find((p) => p.id === selectedId) || null;
+
+  /** Make this the project every other page (variables, logs, deploy) works on. */
+  const selectProject = React.useCallback(async (p) => {
+    if (p.id !== selectedId) {
+      await apiRef.current('/api/vercel/project', { method: 'POST', body: JSON.stringify({ projectId: p.id, teamId: p.teamId || null }) });
+      setSelectedId(p.id);
+    }
+  }, [selectedId]);
+
+  const projectAdded = React.useCallback((p) => { setProjects((old) => [p, ...old.filter((x) => x.id !== p.id)]); setSelectedId(p.id); }, []);
+  const deployed = React.useCallback((info) => { setFocusId(info.deploymentId || ''); setTab('logs'); }, [setTab]);
+  const fix = React.useCallback(({ deploymentId, logs, project }) => {
+    const repoFullName = linkedRepo(project);
+    if (!repoFullName) { onNotice?.('This Vercel project is not linked to a GitHub repository, so there is no repo chat to send the logs to. Copy the logs instead.'); return; }
+    onFixBuild?.({ repoFullName, logs, deploymentId, projectName: project.name });
+  }, [onFixBuild, onNotice]);
+
+  if (locked) return <section className="vercel-backend-page vx-page"><div className="vx-card"><h2>Vercel settings are protected</h2><p>Verify your device authenticator or PotHub passcode before changing Vercel or backend credentials.</p><button type="button" className="primary" onClick={onUnlock}>Unlock</button></div></section>;
+
+  const index = Math.max(0, TABS.findIndex((t) => t.id === tab));
+  return (
+    <section className="vercel-backend-page vx-page">
+      <header className="vx-header">
+        <div><h1>Vercel</h1><p>{status.connected ? (status.email || 'Account connected') : 'Deploy and manage your projects'}</p></div>
+        {status.connected && <button type="button" className="vx-icon-btn" aria-label="Refresh" onClick={load} disabled={status.loading}><RefreshCw size={17} className={status.loading ? 'spin' : ''} /></button>}
+      </header>
+
+      {!status.loading && !status.connected && (
+        <div className="vx-card vx-connect">
+          <h2>Connect your Vercel account</h2>
+          <p>PotHub opens Vercel’s own authorization page. If Vercel emails you a verification code, enter it there. PotHub never asks for it.</p>
+          <button type="button" className="primary" onClick={onReconnect}>Connect Vercel</button>
+          {error && <p className="vx-field-error" role="alert">{error}</p>}
+        </div>
+      )}
+
+      {status.loading && !status.connected && <div className="vx-skeletons" aria-label="Loading Vercel"><i /><i /><i /></div>}
+
+      {status.connected && <>
+        <nav className="vx-tabs" role="tablist" aria-label="Vercel sections" style={{ '--i': index, '--n': TABS.length }}>
+          <span className="vx-tab-indicator" aria-hidden="true" />
+          {TABS.map(({ id, label, Icon }) => <button key={id} type="button" role="tab" id={`vx-tab-${id}`} aria-selected={tab === id} aria-controls={`vx-panel-${id}`} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}><Icon size={16} aria-hidden="true" /><span>{label}</span></button>)}
+        </nav>
+        {error && <p className="vx-field-error" role="alert">{error}</p>}
+        <div className="vx-panel" role="tabpanel" id={`vx-panel-${tab}`} aria-labelledby={`vx-tab-${tab}`} key={tab}>
+          {tab === 'import' && <ImportTab api={api} projects={projects} selectedId={selectedId} onSelect={selectProject} onProjectAdded={projectAdded} onConnectGithub={onConnectGithub} onSwitchGithub={onSwitchGithub || onConnectGithub} onReauthorize={onReconnect} onDeployed={deployed} onNotice={onNotice} />}
+          {tab === 'logs' && <LogsTab api={api} project={selected} focusId={focusId} onFix={fix} />}
+          {tab === 'variables' && <VariablesTab api={api} projects={projects} project={selected} onSelect={selectProject} onReauthorize={onReconnect} />}
+          {tab === 'ai' && <AiBackendTab api={api} project={selected} onReauthorize={onReconnect} onNotice={onNotice} onSaved={onSaved} />}
+        </div>
+      </>}
+    </section>
+  );
 }
