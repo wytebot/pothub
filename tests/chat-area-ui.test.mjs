@@ -25,3 +25,12 @@ test('repo file opening shows the real reason and survives a stale branch', () =
   assert.match(wl, /default_branch\|\|"main"/);
   assert.match(wl, /undefined\|null\|HEAD/);
 });
+
+
+test('technical chat displays a request execution timeline before streamed response content', () => {
+  assert.match(app, /executionSteps=showExecutionPlan\?/);
+  assert.match(app, /updateExecutionStep\(4,'active'\)/);
+  assert.match(ws, /className="execution-timeline"/);
+  assert.match(ws, /step\.detail/);
+  assert.match(css, /\.execution-step\.active/);
+});

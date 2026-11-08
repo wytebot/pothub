@@ -24,7 +24,7 @@ test('long repository prompts are sent as typed (no PDF conversion cap) and atta
 test('Codelab image attachments are forwarded only to vision-capable configured agents',()=>{
   assert.match(app,/dataUrl:a\.dataUrl/);
   assert.match(server,/const imageParts=\(i\.attachments\|\|\[\]\)\.filter\(a=>a\.dataUrl/);
-  assert.match(server,/savedCandidates\.filter\(c=>providerById\(c\.provider\)\?\.capabilities\?\.includes\('vision'\)\)/);
+  assert.match(server,/combinedCandidates\.filter\(c=>providerById\(c\.provider\)\?\.capabilities\?\.includes\('vision'\)\)/);
   assert.match(server,/extraParts:imageParts/);
 });
 test('production CI includes an Android debug build gate before deployment',()=>{

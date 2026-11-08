@@ -276,6 +276,25 @@ export function classifyRequest(value, context = {}) {
   return base('chat', 'low', 'conversation');
 }
 
+
+/** Route explicit code/log diagnosis and repair requests to their dedicated configured functions.
+ * Ambiguous questions and ordinary code-learning requests remain on Chat. */
+export function classifyAgentFunction(value, context = {}) {
+  const raw = String(value || '');
+  const text = normalise(raw);
+  const attachments = Array.isArray(context.attachments) ? context.attachments : [];
+  const hasEvidence = !!context.hasRepo || attachments.length > 0
+    || /```|`[^`]+`|\b(?:function|const|let|class|import|export|return|def|async|await|stack trace|traceback|exception|error|bug|failure|failed test|build failed|npm test|compiler error|typeerror|syntaxerror|segfault)\b/i.test(raw);
+  if (!text || !hasEvidence) return { task: 'chat', confidence: 'low', reason: 'no code or diagnostic evidence' };
+  const startsQuestion = /^(?:how|what|why|when|where|which|who|can you explain|could you explain)\b/i.test(text);
+  if (startsQuestion && !/\b(?:diagnos(?:e|is|tic)|debug(?:ging)?|troubleshoot(?:ing)?)\b/i.test(text)) return { task: 'chat', confidence: 'low', reason: 'question-style learning request' };
+  const diagnosis = /\b(?:diagnos(?:e|is|tic)|debug(?:ging)?|troubleshoot(?:ing)?|root cause|why is .* failing|analy[sz]e .* (?:error|bug|failure)|review .* (?:code|logs|stack trace))\b/i.test(text);
+  const repair = /\b(?:fix|repair|patch|correct|resolve|refactor|implement)\b/i.test(text);
+  if (diagnosis) return { task: 'diagnosis', confidence: 'high', reason: 'explicit diagnostic request with code or error evidence' };
+  if (repair) return { task: 'repair', confidence: 'high', reason: 'explicit repair request with code or error evidence' };
+  return { task: 'chat', confidence: 'low', reason: 'no explicit diagnosis or repair command' };
+}
+
 /** Backwards-compatible wrapper: the routed task only. Medium/high confidence both route. */
 export function inferRequestedTask(value, context) {
   const { task } = classifyRequest(value, context);

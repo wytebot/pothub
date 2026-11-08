@@ -18,6 +18,7 @@ export default function useEnvDraft(api) {
   const remove = React.useCallback((id) => setRows((r) => { const n = r.filter((x) => x.id !== id); return n.some((x) => !x.saved) ? n : [...n, newRow()]; }), []);
   const toggle = React.useCallback((t) => setTargets((old) => toggleTarget(old, t)), []);
   const reset = React.useCallback(() => { setRows(startRows()); setError(''); setReauth(false); setAttempted(false); }, []);
+  const replace = React.useCallback((key, sensitive = true) => { setRows([{ ...newRow(), key: String(key || ''), sensitive }]); setError(''); setReauth(false); setAttempted(false); }, []);
 
   /** Saves every filled, unsaved row. Resolves { ok, saved } and never throws. */
   const save = React.useCallback(async () => {
@@ -41,5 +42,5 @@ export default function useEnvDraft(api) {
     } finally { setBusy(false); }
   }, []);
 
-  return { rows, targets, busy, error, reauth, attempted, update, add, remove, toggle, reset, save, pending: pendingRows(rows).length, saved: rows.filter((r) => r.saved) };
+  return { rows, targets, busy, error, reauth, attempted, update, add, remove, toggle, reset, replace, save, pending: pendingRows(rows).length, saved: rows.filter((r) => r.saved) };
 }

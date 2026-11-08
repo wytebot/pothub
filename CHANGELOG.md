@@ -95,3 +95,24 @@
 Security note: removing the PIN fallback means losing access to the configured device biometric/passkey can prevent unlocking the API page. Users should disable the lock from a trusted session before losing that authenticator.
 
 | AI-API-SOURCE | Fixed (source); needs live test | Removed the separate Developer AI mode state and settings API; all Creator/Developer AI actions now require task-matched agent records from API & Agents, and the UI no longer offers a separate PotHub AI / my-agent choice. Server routing rejects missing configured candidates and does not fall back to platform keys. | `src/ui/App.jsx`, `server/app.js`, `tests/api-page-source-of-truth.test.mjs`, `tests/critical-regression-source.test.mjs`, `docs/PRICING.md`, `docs/AGENT_KEYS.md` | `api-page-source-of-truth.test.mjs` (3 tests), `critical-regression-source.test.mjs`, `agent-mode-policy.test.mjs` |
+
+## 2026-11-08 — agent preflight and environment key rotation
+- Strengthened the shared agent engineering protocol with a mandatory repository preflight: establish repo/branch/revision and scope, inspect callers/config/tests, explain the evidence-backed plan before writes, avoid unrequested commits/deploys, inspect the complete diff, and provide a verifiable delivery report.
+- Added write-only Edit / rotate controls for existing Vercel environment variables. Secret values are never fetched or displayed; users re-enter a replacement value under the same variable name and Vercel upsert updates it.
+- Added provider-key labels in the Vercel Variables page and documented the existing fixed `POTHUB_AI_*` pointer-variable contract, function mapping, strict backend/direct mode separation, and Vercel runtime limitations.
+
+## 2026-11-08 — runtime provider registry and function-aware backend routing
+
+- Added `server/runtime-agent-registry.js` to discover server-side provider credentials from conventional environment variable names and resolve task-specific models using the shared provider capability registry.
+- Added authoritative `POTHUB_AI_AGENT_MAP` support for Chat, Diagnosis, Fix, Image and Video assignments. Explicit maps prevent unassigned functions from borrowing another function's credentials or model.
+- Added authenticated, non-secret `/api/agent/runtime-env` metadata discovery for backend-mode UI selection.
+- Wired `X-Pothub-Provider-Mode: backend` through the CORS allow-list and agent request path. Runtime environment candidates are included only in backend mode; direct mode remains limited to encrypted direct-agent configuration.
+- Extended the Vercel Manage Variables page with function/model assignment controls and write-only secret rotation. The non-secret function map is stored as a Vercel environment variable and mirrored as metadata for UI display.
+- Preserved the existing Vercel Backend custom endpoint agents; they remain eligible only in backend mode and retain priority over runtime-environment candidates.
+- Added runtime registry tests for common providers, explicit task assignments, fixed legacy pointers, invalid configuration, media capability boundaries and secret-free metadata.
+- Added project-scoped runtime authorization: saving `POTHUB_AI_AGENT_MAP` also pins `POTHUB_RUNTIME_PROJECT_ID`; only an authenticated user whose selected Vercel project matches can enumerate/use runtime provider metadata and credentials.
+- Added high-confidence text intent routing for repo/code/log-backed diagnosis and repair prompts, while keeping ordinary how-to questions on Chat.
+- Routed backend runtime Video keys server-side across submit, status, result, cancellation and resume flows; browser requests carry mode metadata, never the provider key.
+- Added custom OpenAI-compatible and Azure OpenAI endpoint/model assignments with public HTTPS/DNS validation.
+- Tightened engineering prompt idempotence while preserving the original prompt text and structured-output contract.
+- Corrected Termux long-command script execution to preserve the selected HOME/workspace path by avoiding a login shell.

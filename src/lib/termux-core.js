@@ -55,7 +55,7 @@ if ! cd -- "$CWD" 2>/dev/null; then
 fi
 export PAGER=cat GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 DEBIAN_FRONTEND=noninteractive
 set -m
-bash -lc "$3" >> "$J/out" 2>&1 < /dev/null &
+bash -c "$3" >> "$J/out" 2>&1 < /dev/null &
 CH=$!
 echo "$CH" > "$J/pid"
 trap 'kill -TERM -- -"$CH" 2>/dev/null' TERM HUP INT

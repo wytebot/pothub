@@ -34,3 +34,11 @@ test('the redirect card is gone and the callback URL is hard-coded', () => {
 test('GitHub repo discovery compares the token with the linked GitHub id', () => {
   assert.match(server, /linkedGithubUserId:s\.linkedAccounts\?\.github\?\.id/);
 });
+
+
+test('backend-only mode can be enabled using project-scoped runtime environment providers without a custom proxy agent', () => {
+  assert.match(page, /runtimeRows/);
+  assert.match(page, /api\/agent\/runtime-env\?task=/);
+  assert.match(page, /!agentRows\.length&&!runtimeRows\.length/);
+  assert.match(page, /selected Vercel project's environment map/);
+});

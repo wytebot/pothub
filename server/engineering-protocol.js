@@ -32,6 +32,27 @@ export const RESPONSE_FLOW_RULES = [
   'If a chosen response style or an explicit format instruction conflicts with this flow, the style or format instruction wins.'
 ].join(' ');
 
+export const TECHNICAL_EXECUTION_BRIEF = [
+  'TECHNICAL EXECUTION BRIEF (for substantial technical, repository, debugging, integration or deployment requests):',
+  'Before proposing or performing changes, provide a concise, technically specific execution brief with: objective and scope; target repository/branch/runtime if known; evidence and files or components to inspect; ordered implementation phases; dependencies and compatibility constraints; validation commands or checks; and material risks or assumptions.',
+  'Make each phase actionable and observable (for example: inspect request handlers and callers; trace provider selection and credential resolution; identify the first failing boundary; implement the smallest compatible patch; run focused regression tests; inspect the final diff). Avoid generic labels such as "working on it" when a precise operation is known.',
+  'Keep the brief proportional: simple questions do not need a plan. For substantial changes, put the brief before the diagnosis or edits so the user can understand the intended sequence before execution.',
+  'During execution, report progress only when a real operation starts, completes, or fails. Never invent repository reads, tool calls, file edits, test runs, provider checks, deployment state or percentages. Distinguish planned work from completed work and blocked work.',
+  'When a tool or runtime exposes live progress, use it to update the current phase. Otherwise present the plan as a plan, not as a live execution log.',
+  'Close with a requirement-by-requirement reconciliation: requested outcome, evidence in changed files/tests, status (IMPLEMENTED, PARTIAL, NOT IMPLEMENTED or BLOCKED), and the exact remaining work.'
+].join(' ');
+
+export const REPOSITORY_PREFLIGHT_PROTOCOL = [
+  'REPOSITORY PREFLIGHT (mandatory before any repository fix, patch, commit or deployment):',
+  '1. Establish the actual target: repository, branch, current revision, user-requested scope and whether the operation is read-only or may write. Never assume the default branch is the requested branch.',
+  '2. Inspect before proposing edits: read the relevant source files, their direct callers, related configuration, package scripts and existing tests. For a multi-file change, map the affected modules and data flow first.',
+  '3. Explain the diagnosis and implementation plan before changing anything: confirmed evidence, likely causes, unknowns, files expected to change, compatibility constraints and validation plan. If the available tools do not support a genuine approval pause, state the plan in the response before the first write action.',
+  '4. Do not create a commit, pull request, deployment or destructive change unless the user explicitly requested that action. Prefer a reviewable branch or patch and preserve unrelated work.',
+  '5. After editing, inspect the complete diff, run the narrowest relevant checks and then broader tests/build when practical. Report exact commands and actual results; never convert a proposed check into a claimed pass.',
+  '6. Prompt-to-result reconciliation (mandatory): split the user request into every explicit requirement and compare each one against the final diff, tests and observed runtime behavior. Mark each requirement IMPLEMENTED, PARTIAL, NOT IMPLEMENTED or BLOCKED; cite the file/function/test evidence for IMPLEMENTED, state the exact missing work for PARTIAL/NOT IMPLEMENTED, and name the external dependency for BLOCKED. Never describe the whole request as complete while any requested item remains partial or unverified.' ,
+  '7. Delivery report: summarize root cause, implementation, every changed file, tests and outcomes, remaining risks, deployment/migration steps and anything not verified. Keep the result complete enough for another engineer to continue without guessing.'
+].join(' ');
+
 export const DEEP_DIAGNOSIS_PROTOCOL = [
   'DEEP DIAGNOSIS PROTOCOL (use it for any bug, failing build, error log, regression or "why does this happen" question):',
   '1. Restate the symptom precisely: what was expected, what happened, and where. Quote the exact error text or log line when one exists.',
@@ -59,19 +80,21 @@ export const NO_BREAK_PROTOCOL = [
 
 const MODES = {
   // Diagnosing a repository, logs or an error: evidence first, no code changes implied.
-  diagnose: [HONESTY_RULES, RESPONSE_FLOW_RULES, DEEP_DIAGNOSIS_PROTOCOL],
+  diagnose: [HONESTY_RULES, RESPONSE_FLOW_RULES, TECHNICAL_EXECUTION_BRIEF, REPOSITORY_PREFLIGHT_PROTOCOL, DEEP_DIAGNOSIS_PROTOCOL],
   // Producing a patch for a known issue: change-safety first, with a short diagnosis discipline.
-  patch: [HONESTY_RULES, RESPONSE_FLOW_RULES, NO_BREAK_PROTOCOL, DEEP_DIAGNOSIS_PROTOCOL],
+  patch: [HONESTY_RULES, RESPONSE_FLOW_RULES, TECHNICAL_EXECUTION_BRIEF, REPOSITORY_PREFLIGHT_PROTOCOL, NO_BREAK_PROTOCOL, DEEP_DIAGNOSIS_PROTOCOL],
   // Multi-file planning and editing agents.
-  edit: [HONESTY_RULES, RESPONSE_FLOW_RULES, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL],
+  edit: [HONESTY_RULES, RESPONSE_FLOW_RULES, TECHNICAL_EXECUTION_BRIEF, REPOSITORY_PREFLIGHT_PROTOCOL, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL],
   // Read-only planners and tool-using agents.
-  readonly: [HONESTY_RULES, RESPONSE_FLOW_RULES, DEEP_DIAGNOSIS_PROTOCOL],
+  readonly: [HONESTY_RULES, RESPONSE_FLOW_RULES, TECHNICAL_EXECUTION_BRIEF, REPOSITORY_PREFLIGHT_PROTOCOL, DEEP_DIAGNOSIS_PROTOCOL],
   // General assistants: honesty always; the technical protocols only apply if the request is technical.
   chat: [
     HONESTY_RULES,
     RESPONSE_FLOW_RULES,
-    'If the request involves debugging, errors, logs or changing code, also follow these protocols; otherwise ignore them.',
+    'If the request involves debugging, errors, logs, repository work, integrations or changing code, also follow the TECHNICAL EXECUTION BRIEF and these protocols; otherwise ignore them.',
+    TECHNICAL_EXECUTION_BRIEF,
     DEEP_DIAGNOSIS_PROTOCOL,
+    REPOSITORY_PREFLIGHT_PROTOCOL,
     NO_BREAK_PROTOCOL
   ]
 };
@@ -80,7 +103,8 @@ export const ENGINEERING_MODES = Object.freeze(Object.keys(MODES));
 
 /** The protocol text for a mode. An unknown mode gets the honesty rules only, never an exception. */
 export function engineeringProtocol(mode = 'chat') {
-  const parts = MODES[String(mode || '').toLowerCase()] || [HONESTY_RULES];
+  const normalizedMode = String(mode || '').toLowerCase();
+  const parts = MODES[normalizedMode] || [HONESTY_RULES];
   return parts.join('\n\n');
 }
 
@@ -96,8 +120,10 @@ export const STRUCTURED_OUTPUT_NOTE = 'OUTPUT FORMAT: the output format required
 
 export function withEngineeringProtocol(prompt, mode = 'chat', { structured = true } = {}) {
   const base = String(prompt ?? '');
-  if (base.includes('HONESTY RULES (apply to everything you write)')) return base;
-  return `${base}\n\n${engineeringProtocol(mode)}${structured ? `\n\n${STRUCTURED_OUTPUT_NOTE}` : ''}`;
+  const protocol = engineeringProtocol(mode);
+  let output = base.includes(protocol) ? base : `${base}\n\n${protocol}`;
+  if (structured && !output.includes(STRUCTURED_OUTPUT_NOTE)) output += `\n\n${STRUCTURED_OUTPUT_NOTE}`;
+  return output;
 }
 
 /** Extra debug guidance appended to the chat "debug" response style (the original fragment stays first). */

@@ -17,7 +17,10 @@ Set these under **Vercel → Project → Settings → Environment Variables** fo
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App Client Secret; server-only. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Full Firebase service-account JSON, stored as a server-only secret. Do not prefix with `NEXT_PUBLIC_`. |
 | `FIREBASE_PROJECT_ID` | `pothub-ca2a1` (can be inferred from service-account JSON, but set it explicitly for clarity). |
-| `GEMINI_API_KEY` | Pothub-managed server-side Gemini fallback key. The current `/api/health` readiness check expects this to be set. Never expose it to the browser. |
+| `GEMINI_API_KEY` | Optional server-side Gemini provider key for PotHub runtime agents. The current `/api/health` readiness check still expects this to be set. Never expose it to the browser. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`, `COHERE_API_KEY`, `PERPLEXITY_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `OPENROUTER_API_KEY`, `HF_TOKEN`, etc. | Optional server-side provider keys. PotHub's Manage Variables page detects supported names and lets you assign each to Chat, Diagnosis, Fix, Image or Video where the provider supports that capability. |
+| `POTHUB_AI_AGENT_MAP` | Non-secret JSON map written by Manage Variables. Assigns `{function, provider, keyEnv, model}` and optional `baseUrl`/`fallbackEnv`. An explicit map is authoritative; unassigned functions do not borrow another function's key or model. |
+| `POTHUB_RUNTIME_PROJECT_ID` | Non-secret Vercel project ID pin written automatically when saving AI assignments. Runtime keys are enabled only when the signed-in user's selected Vercel project matches this ID (or Vercel's `VERCEL_PROJECT_ID`). |
 | `FLW_CLIENT_ID` | **Required.** Flutterwave v4 client ID; server-only. |
 | `FLW_CLIENT_SECRET` | **Required.** Flutterwave v4 client secret; server-only. Use the keys for the same mode as `FLW_MODE`. |
 | `FLW_ENCRYPTION_KEY` | **Required.** v4 dashboard encryption key (32-byte base64). Card fields are AES-256-GCM encrypted with it before being sent to Flutterwave; never sent to the client. |
@@ -37,6 +40,8 @@ The current `/api/health` endpoint marks core readiness based on Firebase Admin/
 These are the only frontend build variables normally needed. Firebase web config is embedded in `src/lib/firebase.js`; its web API key is public project configuration, not an Admin credential. Never put `SESSION_SECRET`, OAuth client secrets, Firebase service-account JSON, Gemini keys, or Flutterwave secrets into any `NEXT_PUBLIC_*` variable.
 
 ## Optional variables for additional integrations
+
+For the complete provider-to-function schema, custom endpoint requirements, exact model-variable contract and backend/direct mode isolation, see `AGENT-PROVIDER-ENV-CONTRACT.md`. After changing keys or `POTHUB_AI_AGENT_MAP`, redeploy the same Vercel project that hosts PotHub's serverless runtime. Secret values are never returned by the Vercel variables list API; Edit / rotate is write-only.
 
 Only configure these if you use the corresponding feature or need to override its defaults:
 
@@ -109,7 +114,7 @@ No new environment variables are required. Image provider credentials are BYOK a
 ## Additional security and asynchronous media configuration
 
 - `APP_ORIGIN` (required for browser WebAuthn) must be the exact HTTPS origin used by the browser app, e.g. `https://your-pothub-domain.example`, with no path. It should match `FRONTEND_URL` for a same-origin deployment. The WebAuthn relying-party ID is derived from this hostname.
-- `POTHUB_VIDEO_MAX_BYTES` (optional) controls the maximum delivered video size in bytes. Default: `83886080` (80 MB). Hard maximum: 150 MB.
+- `POTHUB_VIDEO_MAX_BYTES` (optional) controls the maximum delivered video size in bytes. Default: `26214400` (25 MiB). Hard maximum: 25 MiB.
 - `@simplewebauthn/server` is installed as an application dependency for server-side registration/assertion verification. The server sets `CBOR_NATIVE_ACCELERATION_DISABLED=true` before loading it to avoid optional native CBOR acceleration issues in serverless bundles.
 
 Firestore Admin must be configured for durable `media_jobs`, provider-health persistence, WebAuthn credentials/challenges and server-verified PIN fallback. Deploy `firebase.json` TTL policies for `expiresAt` on `browser_sessions`, `native_ticket_uses`, `browser_auth_tickets`, `media_jobs`, `webauthn_challenges`, `ai_operations`, `firebase_session_exchanges`, and `vercel_refresh_locks`, plus `resetAt` on `rate_limits`.
@@ -222,3 +227,7 @@ The usual causes: a higher-priority variable (`VERCEL_REDIRECT_URI_OVERRIDE`, `V
 old value that beats the one you edited; `hasHiddenWhitespaceOrQuotes: true`; the value you registered in the Vercel app differs
 by even one character (`www.`, `http`, a trailing slash, a different domain); or the `VERCEL_CLIENT_ID` belongs to a different
 Vercel app than the one where you registered the callback.
+
+## Agent routing and write-only key rotation
+
+See `AGENT-PROVIDER-ENV-CONTRACT.md` for the stable PotHub AI environment-variable names, the distinction between provider credentials and the generated backend bearer token, and the explicit function-to-agent mapping. The Vercel Variables page now offers **Edit / rotate** for an existing variable: enter a replacement value under the same name and save it. Vercel does not return existing secret values, so PotHub cannot prefill or display them. Redeploy after rotation. The page also labels common provider key names to make them easier to identify; labels do not by themselves enable a provider protocol or assign an AI function.
