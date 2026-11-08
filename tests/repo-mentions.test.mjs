@@ -121,12 +121,42 @@ test('with no explicit file, files whose names match the request are attached an
   assert.doesNotMatch(out[0].textContent, /a\.png/);
 });
 
-test('repoTreeSummary drops noise and stays within its size bound', () => {
+test('repoTreeSummary drops noise, stays bounded, and keeps every folder reachable', () => {
   const many = Array.from({ length: 4000 }, (_, i) => `src/dir${i % 50}/file${i}.js`);
   const t = repoTreeSummary(['package-lock.json', 'public/x.png', 'README.md', ...many], 3000);
-  assert.ok(t.text.length < 3200);
+  assert.ok(t.text.length < 6200);
   assert.doesNotMatch(t.text, /package-lock|x\.png/);
-  assert.ok(t.omitted > 0 && /more files not listed/.test(t.text));
+  for (let d = 0; d < 50; d++) assert.match(t.text, new RegExp(`src/dir${d}/:`), `dir${d} is listed`);
+  assert.match(t.text, /request "src\/dir\d+\/" to read them/);
+});
+
+test('a message that names no file starts the agent with key project files, and later reads/searches reach everything', async () => {
+  const { extractReadRequests, extractSearchRequests, stripReadBlocks } = await import('../src/lib/repo-mentions.js');
+  const files = [{ path: 'package.json', size: 500 }, { path: 'src/ui/App.jsx', size: 2000 }, { path: 'src/lib/a.js', size: 100 }, { path: 'src/lib/b.js', size: 100 }, { path: 'big/huge.js', size: 900000 }, { path: 'public/x.png', size: 10 }];
+  const api = async (p) => p.startsWith('/api/github/files') ? { files } : { content: `CODE ${decodeURIComponent(p.match(/path=([^&]+)/)[1])}\nfoo_marker here` };
+  const src = createRepoFileSource({ api, store: null });
+  const out = await src.attachmentsFor('o/r', 'main', 'audit this whole project for bugs');
+  const names = out.slice(1).map((a) => a.name);
+  assert.ok(names.includes('o/r:package.json') && names.includes('o/r:src/ui/App.jsx'), 'entry/config files attached without any tag');
+  assert.ok(!names.some((n) => /x\.png/.test(n)), 'noise is never attached');
+  assert.match(out[0].textContent, /attached these key project files/);
+  assert.match(out[0].textContent, /pothub-search/);
+  // a folder request expands to the real files under it
+  const all = files.map((f) => f.path);
+  assert.deepEqual(extractReadRequests('```pothub-read\nsrc/lib/\n```', all).sort(), ['src/lib/a.js', 'src/lib/b.js']);
+  assert.deepEqual(extractReadRequests('```pothub-read\nsrc/lib/*\nnope/\n```', all).sort(), ['src/lib/a.js', 'src/lib/b.js']);
+  // search blocks are parsed and hidden from the visible reply
+  assert.deepEqual(extractSearchRequests('Looking.\n```pothub-search\nfoo_marker\n`bar`\nx\n```'), ['foo_marker', 'bar']);
+  assert.equal(stripReadBlocks('Checking.\n```pothub-search\nfoo_marker\n```'), 'Checking.');
+  // search scans every readable file, not only attached ones, and reports path:line
+  const found = await src.searchRequested('o/r', 'main', ['foo_marker']);
+  assert.match(found.text, /src\/lib\/a\.js:2: foo_marker here/);
+  assert.match(found.text, /package\.json:2/);
+  assert.doesNotMatch(found.text, /huge\.js/, 'oversized files are skipped, not downloaded');
+  assert.equal(found.scanned, 4);
+  // a search result travels as an attachment on the follow-up
+  const follow = await src.attachmentsFor('o/r', 'main', '', { force: ['src/lib/a.js'], searchResult: found.text });
+  assert.ok(follow.some((a) => a.name === 'search-results.txt' && /foo_marker/.test(a.textContent)));
 });
 
 test('a bare file name attaches the file; ambiguous names attach nothing', async () => {

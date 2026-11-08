@@ -68,12 +68,14 @@ export function truncateForContext(content, max = MAX_FILE_CHARS) {
 }
 
 const NOISE = /(^|\/)(node_modules|\.git|\.next|dist|build|coverage|\.vercel)(\/|$)|\.(png|jpe?g|gif|webp|ico|svg|woff2?|ttf|otf|mp4|webm|zip|lock)$|(^|\/)package-lock\.json$/i;
-export const MAX_TREE_CHARS = 14000;
+export const MAX_TREE_CHARS = 60000;
 export const MAX_AUTO_FILES = 8;
 
 /**
  * Plain-text outline of the repository (one line per folder, files listed under it) so the model knows which files
- * exist without reading them. Noise (images, lockfiles, build output) is dropped and the size is bounded.
+ * exist without reading them. Noise (images, lockfiles, build output) is dropped. When the full listing is bigger than
+ * the budget, the remaining folders are still listed with their file counts, so every folder stays reachable with a
+ * pothub-read request for "folder/".
  */
 export function repoTreeSummary(paths, maxChars = MAX_TREE_CHARS) {
   const useful = [...new Set((paths || []).map((p) => (typeof p === 'string' ? p : p?.path)).filter((p) => p && !NOISE.test(p)))].sort();
@@ -84,14 +86,18 @@ export function repoTreeSummary(paths, maxChars = MAX_TREE_CHARS) {
     dirs.get(dir).push(p.slice(i + 1));
   }
   const lines = [];
-  let used = 0, shown = 0;
+  let used = 0, shown = 0, folded = 0;
   for (const [dir, names] of dirs) {
-    const line = `${dir}/: ${names.join(', ')}`;
-    if (used + line.length + 1 > maxChars) break;
-    lines.push(line); used += line.length + 1; shown += names.length;
+    const full = `${dir}/: ${names.join(', ')}`;
+    const line = used + full.length + 1 <= maxChars ? full : `${dir}/: ${names.length} files (request "${dir}/" to read them)`;
+    if (line !== full) folded += names.length; else shown += names.length;
+    if (used + line.length + 1 > maxChars * 2) { lines.push(`(more folders not listed; use pothub-search to find files in them)`); break; }
+    lines.push(line); used += line.length + 1;
   }
-  const omitted = useful.length - shown;
-  if (omitted > 0) lines.push(`(${omitted} more files not listed; ask the user to mention them with @path)`);
+  const omitted = Math.max(0, useful.length - shown - folded);
+  // a folder cut off above leaves its files uncounted, so they show in `omitted`
+  if (folded) lines.push(`(${folded} files are in folders listed by count only; request the folder, for example "src/ui/", to read them)`);
+  if (omitted > 0) lines.push(`(${omitted} more files not listed; request their folder or search for them)`);
   return { text: lines.join('\n'), total: useful.length, omitted };
 }
 
@@ -165,36 +171,82 @@ export function suggestFilesForText(text, paths, limit = MAX_AUTO_FILES) {
 }
 
 /** How an agent reads any repository file that was not attached: it asks, PotHub fetches the file and sends it back. */
-export const MAX_READ_REQUEST = 10;
-export const READ_PROTOCOL = `You can read ANY file in the outline, not only the attached ones. When you need a file that is not attached, reply with a fenced block exactly like this and nothing else after it:\n\`\`\`pothub-read\nsrc/lib/firebase.js\nserver/app.js\n\`\`\`\nUse real paths from the outline, one per line, at most ${MAX_READ_REQUEST} per request. PotHub fetches them and sends their full contents back to you automatically, then you continue. Never say you cannot read a file that is in the outline; request it. Do not claim to have read files that are not attached, never describe a file you have not read, and never invent a path that is not in the outline.`;
+export const MAX_READ_REQUEST = 20;
+export const MAX_SEARCH_TERMS = 6;
+export const READ_PROTOCOL = `You can read ANY file in this repository, not only the attached ones, and the user never has to tag files for you. Work like a developer opening the project:\n1. Read the files attached to this message first.\n2. If you need more code, reply with ONE fenced block and nothing else after it. To read files or whole folders:\n\`\`\`pothub-read\nsrc/lib/firebase.js\nserver/\n\`\`\`\nUse real paths from the outline, one per line; a line ending in "/" reads that whole folder (at most ${MAX_READ_REQUEST} files per request).\n3. To find where something is used or defined across ALL files (function names, error text, env variable names, routes), search instead:\n\`\`\`pothub-search\nINVALID_REPOSITORY_PATH\nnormalizeRepoPath\n\`\`\`\nOne term per line, at most ${MAX_SEARCH_TERMS}. PotHub searches every readable file and sends back path:line matches, then you read the files that matter.\nPotHub sends the results back automatically and you continue. For a question about the code, a bug, an audit or a fix, do not answer from the outline alone and do not ask the user to tag files: search or read first. Never say you cannot read a file that is in the outline. Do not claim to have read files that are not attached or returned, never describe a file you have not read, and never invent a path.`;
 
-const READ_CLOSED = /```pothub-read[^\n]*\n([\s\S]*?)```/gi;
-const READ_OPEN_TAIL = /```pothub-read[^\n]*\n[\s\S]*$/i;
-/** Paths the agent asked to read (real repository files only, de-duplicated, capped). */
+const READ_CLOSED = /```pothub-(?:read|search)[^\n]*\n([\s\S]*?)```/gi;
+const READ_ONLY_CLOSED = /```pothub-read[^\n]*\n([\s\S]*?)```/gi;
+const SEARCH_CLOSED = /```pothub-search[^\n]*\n([\s\S]*?)```/gi;
+const READ_OPEN_TAIL = /```pothub-(?:read|search)[^\n]*\n[\s\S]*$/i;
+const READABLE_SOURCE = /\.(jsx?|tsx?|mjs|cjs|json|css|scss|md|mdx|html?|py|go|rs|java|kt|swift|sh|ya?ml|toml|txt|sql|xml|vue|svelte|rb|php|c|h|cpp|hpp|cs|gradle|properties)$/i;
+const cleanPath = (raw) => String(raw || '').trim().replace(/^[-*]\s+/, '').replace(/^@/, '').replace(/^\.?\//, '').replace(/[`'"]/g, '').replace(/:\d+(?::\d+)?$/, '');
+
+/** Paths the agent asked to read: real files, plus every readable file under a folder it named. De-duplicated and capped. */
 export function extractReadRequests(text, knownPaths, max = MAX_READ_REQUEST) {
-  const known = knownPaths instanceof Set ? knownPaths : new Set(knownPaths || []);
+  const list = knownPaths instanceof Set ? [...knownPaths] : [...(knownPaths || [])], known = new Set(list);
   const found = [];
-  for (const m of String(text || '').matchAll(READ_CLOSED)) {
+  const add = (p) => { if (!found.includes(p)) found.push(p); return found.length >= max; };
+  for (const m of String(text || '').matchAll(READ_ONLY_CLOSED)) {
     for (const raw of m[1].split('\n')) {
-      const path = raw.trim().replace(/^[-*]\s+/, '').replace(/^@/, '').replace(/^\.?\//, '').replace(/[`'"]/g, '').replace(/:\d+(?::\d+)?$/, '');
-      if (path && known.has(path) && !found.includes(path)) found.push(path);
+      const path = cleanPath(raw);
+      if (!path) continue;
+      if (known.has(path)) { if (add(path)) return found; continue; }
+      const dir = path.replace(/\/(?:\*\*?)?$/, '').replace(/\/+$/, '');
+      if (!dir || dir === '*' || dir === '**') continue;
+      const inside = list.filter((p) => p.startsWith(`${dir}/`) && !NOISE.test(p) && READABLE_SOURCE.test(p)).sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+      for (const p of inside) if (add(p)) return found;
+    }
+  }
+  return found;
+}
+
+/** Search terms the agent asked for (literal text, one per line). */
+export function extractSearchRequests(text, max = MAX_SEARCH_TERMS) {
+  const found = [];
+  for (const m of String(text || '').matchAll(SEARCH_CLOSED)) {
+    for (const raw of m[1].split('\n')) {
+      const term = raw.trim().replace(/^[-*]\s+/, '').replace(/^[`'"]+|[`'"]+$/g, '');
+      if (term.length >= 2 && term.length <= 80 && !found.includes(term)) found.push(term);
       if (found.length >= max) return found;
     }
   }
   return found;
 }
-/** Hide pothub-read blocks (finished or still streaming) from the visible reply. */
+/** Hide pothub-read / pothub-search blocks (finished or still streaming) from the visible reply. */
 export const stripReadBlocks = (text) => String(text || '').replace(READ_CLOSED, '').replace(READ_OPEN_TAIL, '').replace(/\n{3,}/g, '\n\n').trim();
 
+/** Source files ranked for a first look at a project when the message names none: entry points and configs first, shallow before deep. */
+export function rankOverviewFiles(paths, sizes = {}, text = '') {
+  const words = [...new Set(String(text || '').toLowerCase().match(/[a-z][a-z0-9]{3,}/g) || [])].filter((w) => !STOP.has(w)).slice(0, 12);
+  const rows = [];
+  for (const p of paths || []) {
+    if (NOISE.test(p) || !READABLE_SOURCE.test(p) || /(^|\/)\.env(\.|$)(?!example)/i.test(p) || /(^|\/)(tests?|__tests__|docs?)\//i.test(p) || /\.(test|spec)\./i.test(p)) continue;
+    if (/\.md$/i.test(p) && !/(^|\/)README\.md$/i.test(p)) continue;
+    const lower = p.toLowerCase(), name = base(lower), depth = p.split('/').length - 1;
+    let score = 0;
+    if (/^(package\.json|readme\.md|vercel\.json|next\.config\.m?js|capacitor\.config\.(json|ts))$/.test(lower)) score += 6;
+    if (/^(src\/)?(main|index|app)\.(jsx?|tsx?|mjs)$|^(server|api)\/(app|index|server)\.(m?js|ts)$|^src\/ui\/app\.jsx$|^pages\/(_app|index)\./.test(lower)) score += 8;
+    for (const w of words) { if (name.includes(w)) score += 5; else if (lower.includes(w)) score += 2; }
+    score -= depth * 0.8;
+    const size = Number(sizes[p]) || 0;
+    score -= Math.min(size, 300000) / 60000;
+    rows.push({ p, score, size });
+  }
+  rows.sort((a, b) => b.score - a.score || a.p.localeCompare(b.p));
+  return rows.map((r) => r.p);
+}
+
 /** Instruction attachment that tells the model what this chat is, which files exist, and which of them it can actually read. */
-export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPaths = [], pin = null, carriedPaths = []) {
-  const auto = new Set(autoPaths), carried = new Set(carriedPaths);
-  const explicit = attachedPaths.filter((p) => !auto.has(p) && !carried.has(p)), guessed = attachedPaths.filter((p) => auto.has(p)), earlier = attachedPaths.filter((p) => carried.has(p));
+export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPaths = [], pin = null, carriedPaths = [], overviewPaths = []) {
+  const auto = new Set(autoPaths), carried = new Set(carriedPaths), overview = new Set(overviewPaths);
+  const explicit = attachedPaths.filter((p) => !auto.has(p) && !carried.has(p) && !overview.has(p)), guessed = attachedPaths.filter((p) => auto.has(p)), earlier = attachedPaths.filter((p) => carried.has(p)), starter = attachedPaths.filter((p) => overview.has(p) && !auto.has(p));
   return [
     `This conversation is about the GitHub repository ${repo}${branch ? ` (branch ${branch})` : ''}.`,
     tree?.text ? `Repository file outline (${tree.total} files, real paths on this branch; the outline shows names only, not contents):\n${tree.text}` : '',
     explicit.length ? `The user pointed at these files: ${explicit.join(', ')}. Their contents follow in separate attachments.` : (earlier.length ? '' : 'No files were attached with @ or by path in this message.'),
     earlier.length ? `PotHub attached these files again because this conversation was already about them: ${earlier.join(', ')}. Their contents follow in separate attachments; use them.` : '',
+    starter.length ? `PotHub attached these key project files so you start with real code: ${starter.join(', ')}. Their contents follow in separate attachments. They are a starting point, not the whole project: read or search for anything else you need before answering.` : '',
     guessed.length ? `PotHub also attached these files because their names match the request: ${guessed.join(', ')}. They are a guess and may not be the right ones.` : '',
     pin?.ready
       ? `ALL FILES PINNED. The complete repository is copied into the user's Termux at ~/.pothub/workspaces/${pin.workspace} (branch ${branch || 'default'}), so you can read every file, not just the attached ones. Use a pothub-run block with "cwd: ~/.pothub/workspaces/${pin.workspace}" to explore: list files, search with rg or grep -rn, read exact line ranges with sed -n 'START,ENDp' FILE, use git ls-files or git grep. Read-only commands run automatically and their output comes back to you; anything that changes files waits for the user's approval. Work from evidence: search, read the real code, then conclude, and never describe a file you have not read. Structure your replies with these headings when you are investigating a problem: ## Understanding, ## Investigation, ## Problem, ## Plan, ## Fix.`
