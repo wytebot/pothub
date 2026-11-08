@@ -1,4 +1,4 @@
-import { MAX_FILE_CHARS, MAX_TOTAL_CHARS, extractReferencedPaths, isSyncablePath, repoContextNote, repoTreeSummary, repoWorkspaceName, suggestFilesForText, truncateForContext } from './repo-mentions.js';
+import { MAX_FILE_CHARS, MAX_TOTAL_CHARS, extractCarriedPaths, extractNamedPaths, extractReferencedPaths, isSyncablePath, repoContextNote, repoTreeSummary, repoWorkspaceName, suggestFilesForText, truncateForContext } from './repo-mentions.js';
 
 /**
  * Repository file lists and contents for @mentions.
@@ -40,7 +40,7 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
   async function attachmentsFor(repo, branch, text, opts = {}) {
     let paths = [];
     try { paths = await list(repo, branch); } catch { /* the chat still works without file context */ }
-    const explicit = extractReferencedPaths(text, paths), auto = explicit.length ? [] : suggestFilesForText(text, paths), wanted = [...explicit, ...auto], attachments = [], attached = [], failed = [];
+    const named = extractReferencedPaths(text, paths), bare = named.length ? [] : extractNamedPaths(text, paths), direct = [...named, ...bare], carried = direct.length ? [] : extractCarriedPaths(opts?.history, paths), auto = direct.length ? [] : suggestFilesForText(text, paths).filter((p) => !carried.includes(p)), wanted = [...new Set([...direct, ...carried, ...auto])], attachments = [], attached = [], failed = [];
     let total = 0;
     for (const path of wanted) {
       if (total >= MAX_TOTAL_CHARS) { failed.push(`${path} (skipped: context limit reached)`); continue; }
@@ -50,7 +50,7 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
         attachments.push({ id: `repo:${path}`.slice(0, 100), name: `${repo}:${path}`.slice(-180), type: 'text/plain', size: body.length, textContent: body });
       } catch (e) { failed.push(`${path} (${String(e?.message || 'could not be read').slice(0, 80)})`); }
     }
-    const note = repoContextNote(repo, branch, attached, paths.length ? repoTreeSummary(paths) : null, auto.filter((p) => attached.includes(p)), opts?.pin || null) + (failed.length ? `\nThese mentioned files could not be attached: ${failed.join('; ')}.` : '');
+    const note = repoContextNote(repo, branch, attached, paths.length ? repoTreeSummary(paths) : null, auto.filter((p) => attached.includes(p)), opts?.pin || null, carried.filter((p) => attached.includes(p))) + (failed.length ? `\nThese mentioned files could not be attached: ${failed.join('; ')}.` : '');
     return [{ id: 'repo:context', name: 'repo-context.md', type: 'text/markdown', size: note.length, textContent: note }, ...attachments];
   }
 

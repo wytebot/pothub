@@ -128,3 +128,30 @@ test('repoTreeSummary drops noise and stays within its size bound', () => {
   assert.doesNotMatch(t.text, /package-lock|x\.png/);
   assert.ok(t.omitted > 0 && /more files not listed/.test(t.text));
 });
+
+test('a bare file name attaches the file; ambiguous names attach nothing', async () => {
+  const { extractNamedPaths } = await import('../src/lib/repo-mentions.js');
+  assert.deepEqual(extractNamedPaths('show me WorkspaceSection.jsx please', FILES), ['src/ui/WorkspaceSection.jsx']);
+  assert.deepEqual(extractNamedPaths('what is in db.js?', FILES), ['src/lib/db.js']);
+  assert.deepEqual(extractNamedPaths('nothing.js here', FILES), []);
+  const many = ['a/index.js', 'b/index.js', 'c/index.js', 'd/index.js'];
+  assert.deepEqual(extractNamedPaths('open index.js', many), [], 'too ambiguous');
+  const { src } = source();
+  const out = await src.attachmentsFor('o/r', 'main', 'show me app.js');
+  assert.ok(out.some((a) => a.name === 'o/r:server/app.js' && a.textContent === 'APP CODE'));
+});
+
+test('a follow-up with no path keeps the files the conversation was about', async () => {
+  const { extractCarriedPaths } = await import('../src/lib/repo-mentions.js');
+  const history = [{ role: 'user', content: 'Why is server/app.js failing?' }, { role: 'assistant', content: 'I need to read server/app.js to answer.' }];
+  assert.deepEqual(extractCarriedPaths(history, FILES), ['server/app.js']);
+  assert.deepEqual(extractCarriedPaths([], FILES), []);
+  assert.deepEqual(extractCarriedPaths(undefined, FILES), []);
+  const { src } = source();
+  const out = await src.attachmentsFor('o/r', 'main', 'yes, go ahead', { history });
+  assert.deepEqual(out.slice(1).map((a) => [a.name, a.textContent]), [['o/r:server/app.js', 'APP CODE']]);
+  assert.match(out[0].textContent, /attached these files again because this conversation was already about them: server\/app\.js/);
+  assert.doesNotMatch(out[0].textContent, /No files were attached/);
+  const direct = await src.attachmentsFor('o/r', 'main', 'now check @src/lib/db.js', { history });
+  assert.deepEqual(direct.slice(1).map((a) => a.name), ['o/r:src/lib/db.js'], 'a file named in this message wins over earlier ones');
+});

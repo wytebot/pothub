@@ -110,6 +110,42 @@ export function extractReferencedPaths(text, knownPaths, max = MAX_MENTIONED_FIL
   return found;
 }
 
+/**
+ * Files named by bare file name, e.g. "show me firebase.js" or "what does App.jsx do". A name that matches a few
+ * files in the repository attaches all of them (up to 3); a name that matches many is too ambiguous and attaches none.
+ */
+export function extractNamedPaths(text, knownPaths, max = MAX_MENTIONED_FILES) {
+  const paths = Array.isArray(knownPaths) ? knownPaths : [...(knownPaths || [])];
+  const byName = new Map();
+  for (const p of paths) { const n = base(p).toLowerCase(); if (!byName.has(n)) byName.set(n, []); byName.get(n).push(p); }
+  const found = [];
+  for (const m of String(text || '').matchAll(/(?:^|[\s(`'"\[@])([A-Za-z0-9_.\-]+\.[A-Za-z0-9]{1,8})(?::\d+(?::\d+)?)?(?=$|[\s)`'",.;:!?\]])/g)) {
+    if (found.length >= max) break;
+    const hits = byName.get(m[1].toLowerCase());
+    if (!hits || hits.length > 3) continue;
+    for (const hit of hits) if (!found.includes(hit) && found.length < max) found.push(hit);
+  }
+  return found;
+}
+
+export const MAX_CARRIED_FILES = 3;
+
+/**
+ * Files discussed earlier in this chat (newest first), so a follow-up such as "yes, go ahead" or "fix it" still gets
+ * the code the conversation is about instead of only the outline. `history` is [{ role, content }].
+ */
+export function extractCarriedPaths(history, knownPaths, max = MAX_CARRIED_FILES) {
+  const found = [];
+  for (const m of [...(history || [])].reverse().slice(0, 8)) {
+    const text = String(m?.content ?? m?.text ?? '');
+    for (const p of [...extractReferencedPaths(text, knownPaths), ...extractNamedPaths(text, knownPaths)]) {
+      if (!found.includes(p)) found.push(p);
+      if (found.length >= max) return found;
+    }
+  }
+  return found;
+}
+
 const STOP = new Set('this that with from have what when where which there their about would could should please make does doesnt dont cant cannot into your file files code repo fix bug error issue work works working show tell help need want just like some more also then them they will the and for not you are can why how its was has had but all any'.split(' '));
 
 /** Best-guess files for a message that names none: path/word overlap only, so a wrong guess is cheap and clearly labelled. */
@@ -129,13 +165,14 @@ export function suggestFilesForText(text, paths, limit = MAX_AUTO_FILES) {
 }
 
 /** Instruction attachment that tells the model what this chat is, which files exist, and which of them it can actually read. */
-export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPaths = [], pin = null) {
-  const auto = new Set(autoPaths);
-  const explicit = attachedPaths.filter((p) => !auto.has(p)), guessed = attachedPaths.filter((p) => auto.has(p));
+export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPaths = [], pin = null, carriedPaths = []) {
+  const auto = new Set(autoPaths), carried = new Set(carriedPaths);
+  const explicit = attachedPaths.filter((p) => !auto.has(p) && !carried.has(p)), guessed = attachedPaths.filter((p) => auto.has(p)), earlier = attachedPaths.filter((p) => carried.has(p));
   return [
     `This conversation is about the GitHub repository ${repo}${branch ? ` (branch ${branch})` : ''}.`,
     tree?.text ? `Repository file outline (${tree.total} files, real paths on this branch; the outline shows names only, not contents):\n${tree.text}` : '',
-    explicit.length ? `The user pointed at these files: ${explicit.join(', ')}. Their contents follow in separate attachments.` : 'No files were attached with @ or by path in this message.',
+    explicit.length ? `The user pointed at these files: ${explicit.join(', ')}. Their contents follow in separate attachments.` : (earlier.length ? '' : 'No files were attached with @ or by path in this message.'),
+    earlier.length ? `PotHub attached these files again because this conversation was already about them: ${earlier.join(', ')}. Their contents follow in separate attachments; use them.` : '',
     guessed.length ? `PotHub also attached these files because their names match the request: ${guessed.join(', ')}. They are a guess and may not be the right ones.` : '',
     pin?.ready
       ? `ALL FILES PINNED. The complete repository is copied into the user's Termux at ~/.pothub/workspaces/${pin.workspace} (branch ${branch || 'default'}), so you can read every file, not just the attached ones. Use a pothub-run block with "cwd: ~/.pothub/workspaces/${pin.workspace}" to explore: list files, search with rg or grep -rn, read exact line ranges with sed -n 'START,ENDp' FILE, use git ls-files or git grep. Read-only commands run automatically and their output comes back to you; anything that changes files waits for the user's approval. Work from evidence: search, read the real code, then conclude, and never describe a file you have not read. Structure your replies with these headings when you are investigating a problem: ## Understanding, ## Investigation, ## Problem, ## Plan, ## Fix.`
