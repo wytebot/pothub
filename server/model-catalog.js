@@ -209,6 +209,8 @@ async function defaultFetchPage(url, hosts, signal) {
   throw new Error('Too many redirects.');
 }
 
+const SEARCH_HOSTS = { tavily: 'api.tavily.com', brave: 'api.search.brave.com' };
+
 async function defaultSearch({ query, provider, key, hosts, signal }) {
   if (provider === 'tavily') {
     const r = await fetchPinnedHttps('https://api.tavily.com/search', {
