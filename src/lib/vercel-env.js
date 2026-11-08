@@ -54,8 +54,9 @@ export function assignedDomain(project) {
   return project?.name ? { domain: `${String(project.name).toLowerCase()}.vercel.app`, confirmed: false } : { domain: '', confirmed: false };
 }
 
-/** Vercel asks the person to confirm sensitive actions (sometimes with a code it emails). That happens on Vercel's own page. */
-export const needsVercelReauth = (error) => /\b(401|403)\b|HTTP_40[13]|forbidden|not authorized|unauthori[sz]ed|permission|scope|verification|re-?authori[sz]|token (is )?(expired|invalid)|connect (your )?vercel/i.test(String(error?.message || error || ''));
+/** The server tags an error with this code only when Vercel itself asked for verification (sometimes with a code it emails). That happens on Vercel's own page. Ordinary 401/403/permission/scope errors are shown as plain errors, never as this prompt. */
+export const VERCEL_REAUTH_CODE = 'VERCEL_REAUTH_REQUIRED';
+export const needsVercelReauth = (error) => String(error?.code || '') === VERCEL_REAUTH_CODE;
 
 export const BUILDING = ['QUEUED', 'INITIALIZING', 'BUILDING'];
 export const stateOf = (d) => String(d?.state || d?.readyState || '').toUpperCase();

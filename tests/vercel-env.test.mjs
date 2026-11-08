@@ -42,9 +42,15 @@ test('links and domain', () => {
   assert.equal(linkedRepo({}), '');
 });
 
-test('reauthorization is offered for Vercel permission and verification problems only', () => {
-  for (const m of ["You don't have permission to create the project. (HTTP_403)", 'Vercel API returned 401', 'token expired', 'Verification required', 'Connect your Vercel account to continue.']) assert.equal(needsVercelReauth(new Error(m)), true, m);
-  for (const m of ['Environment variable names must be unique', 'Network request failed', 'Choose a valid deployment.']) assert.equal(needsVercelReauth(new Error(m)), false, m);
+test('reauthorization is offered only when Vercel itself asks for verification', () => {
+  assert.equal(needsVercelReauth(Object.assign(new Error('Verification required'), { code: 'VERCEL_REAUTH_REQUIRED' })), true);
+  for (const e of [
+    Object.assign(new Error("You don't have permission to create the project. (HTTP_403)"), { code: 'HTTP_403', status: 403 }),
+    Object.assign(new Error('Vercel API returned 401'), { code: 'HTTP_401', status: 401 }),
+    Object.assign(new Error('Vercel denied environment-variable access. Approve the scope request, then reauthorize.'), { code: 'VERCEL_ENV_SCOPE_REQUIRED', status: 403 }),
+    new Error('token expired'), new Error('Verification required'), new Error('Connect your Vercel account to continue.'),
+    new Error('Environment variable names must be unique'), new Error('Network request failed'), 'Verification required', null, undefined,
+  ]) assert.equal(needsVercelReauth(e), false, String(e?.message || e));
 });
 
 test('build states', () => {
