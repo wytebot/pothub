@@ -231,7 +231,7 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
       const content = f.content ?? "";
       setFiles((x) => ({ ...x, [selected]: content }));
       setBase((x) => ({ ...x, [selected]: content }));
-    }).catch((e) => { if (!cancelled) { setSelected(""); toastError(e.message); } }).finally(() => { if (!cancelled) setFileLoading(false); });
+    }).catch((e) => { if (!cancelled) { setSelected(""); if (!/INVALID_REPOSITORY_PATH/.test(String(e?.message || ""))) toastError(e.message); } }).finally(() => { if (!cancelled) setFileLoading(false); });
     return () => { cancelled = true; };
   }, [selected, branch, repo]);
   useEffect(() => {
