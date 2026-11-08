@@ -2,9 +2,10 @@ import React from 'react';
 import { Check, Github, RefreshCw, Search } from 'lucide-react';
 import ProjectSheet from './ProjectSheet.jsx';
 import ReauthNotice from './ReauthNotice.jsx';
+import AccessTokenCard from './AccessTokenCard.jsx';
 import { assignedDomain, githubStatusFrom, linkedRepo, needsVercelReauth } from '../../lib/vercel-env.js';
 
-export default function ImportTab({ api, projects, selectedId, onSelect, onProjectAdded, onConnectGithub, onSwitchGithub, onReauthorize, onDeployed, onNotice }) {
+export default function ImportTab({ api, onRefresh, projects, selectedId, onSelect, onProjectAdded, onConnectGithub, onSwitchGithub, onReauthorize, onDeployed, onNotice }) {
   const [sheet, setSheet] = React.useState(null);
   const [gh, setGh] = React.useState('checking');
   const [repos, setRepos] = React.useState([]);
@@ -13,6 +14,9 @@ export default function ImportTab({ api, projects, selectedId, onSelect, onProje
   const [working, setWorking] = React.useState('');
   const [error, setError] = React.useState('');
   const [reauth, setReauth] = React.useState(false);
+  const [createBlocked, setCreateBlocked] = React.useState('');
+  const [hasToken, setHasToken] = React.useState(false);
+  React.useEffect(() => { api('/api/vercel/status').then((d) => setHasToken(!!d?.hasPersonalToken)).catch(() => {}); }, [api]);
   const apiRef = React.useRef(api); apiRef.current = api;
 
   const loadRepos = React.useCallback(async () => {
@@ -24,6 +28,15 @@ export default function ImportTab({ api, projects, selectedId, onSelect, onProje
     } catch (e) { setRepos([]); setGh(githubStatusFrom({ error: e })); }
   }, []);
   React.useEffect(() => { loadRepos(); }, [loadRepos]);
+  // After the person imports a repository on Vercel's own page and comes back, pick up the new project by itself.
+  const waitingRef = React.useRef(false);
+  React.useEffect(() => {
+    const back = () => { if (document.visibilityState === 'visible' && waitingRef.current) { waitingRef.current = false; onRefresh?.(); } };
+    document.addEventListener('visibilitychange', back); window.addEventListener('focus', back);
+    return () => { document.removeEventListener('visibilitychange', back); window.removeEventListener('focus', back); };
+  }, [onRefresh]);
+  const vercelImportUrl = (fullName) => fullName ? `https://vercel.com/new/import?s=${encodeURIComponent(`https://github.com/${fullName}`)}` : 'https://vercel.com/new';
+  function openVercelImport(fullName) { waitingRef.current = true; window.open(vercelImportUrl(fullName), '_blank', 'noopener'); }
 
   async function pick(project) {
     setError(''); setReauth(false); setWorking(project.id);
@@ -33,13 +46,16 @@ export default function ImportTab({ api, projects, selectedId, onSelect, onProje
   }
 
   async function importRepo(repo) {
-    setError(''); setReauth(false); setWorking(repo.full_name);
+    setError(''); setReauth(false); setCreateBlocked(''); setWorking(repo.full_name);
     try {
       const d = await api('/api/vercel/import-github', { method: 'POST', body: JSON.stringify({ repoFullName: repo.full_name }), timeoutMs: 40000, noRetry: true });
       const project = { ...d.project, name: d.project.name, domains: d.project.domains || [] };
       onProjectAdded(project);
       setSheet(project);
-    } catch (e) { setError(String(e?.message || e)); setReauth(needsVercelReauth(e)); }
+    } catch (e) {
+      setError(String(e?.message || e)); setReauth(needsVercelReauth(e));
+      if (e?.code === 'VERCEL_CREATE_NOT_ALLOWED') setCreateBlocked(`https://vercel.com/new/import?s=${encodeURIComponent(`https://github.com/${repo.full_name}`)}`);
+    }
     finally { setWorking(''); }
   }
 
@@ -52,7 +68,11 @@ export default function ImportTab({ api, projects, selectedId, onSelect, onProje
     <div className="vx-stack">
       <section className="vx-card">
         <header className="vx-card-head"><h2>Your projects</h2><span>{projects.length}</span></header>
-        {projects.length === 0 && <p className="vx-empty">No Vercel projects yet. Import a GitHub repository below to create one.</p>}
+        <div className="vx-actions-row">
+          <button type="button" className="secondary vx-small" onClick={() => openVercelImport('')}>Import new on Vercel</button>
+          <button type="button" className="secondary vx-small" onClick={() => onRefresh?.()}><RefreshCw size={14} aria-hidden="true" /> Refresh</button>
+        </div>
+        {projects.length === 0 && <p className="vx-empty">No Vercel projects yet. Tap “Import new on Vercel”, import your repository there, then come back. PotHub refreshes by itself.</p>}
         <ul className="vx-list">
           {projects.map((p) => (
             <li key={`${p.id}:${p.teamId || ''}`}>
@@ -97,7 +117,7 @@ export default function ImportTab({ api, projects, selectedId, onSelect, onProje
               return (
                 <li key={r.full_name} className="vx-repo">
                   <span className="vx-item-copy"><strong>{r.full_name}</strong><small>{r.private ? 'Private' : 'Public'}{r.default_branch ? ` · ${r.default_branch}` : ''}</small></span>
-                  {done ? <span className="vx-badge ok">Imported</span> : <button type="button" className="secondary vx-small" onClick={() => importRepo(r)} disabled={!!working}>{working === r.full_name ? 'Importing…' : 'Import'}</button>}
+                  {done ? <span className="vx-badge ok">Imported</span> : <button type="button" className="secondary vx-small" onClick={() => (hasToken ? importRepo(r) : openVercelImport(r.full_name))} disabled={!!working}>{working === r.full_name ? 'Importing…' : hasToken ? 'Import' : 'Import on Vercel'}</button>}
                 </li>
               );
             })}
@@ -107,7 +127,7 @@ export default function ImportTab({ api, projects, selectedId, onSelect, onProje
         </>}
       </section>
 
-      {reauth ? <ReauthNotice onReauthorize={onReauthorize} /> : error && <div className="vx-notice error" role="alert"><div><p>{error}</p></div></div>}
+      {createBlocked ? <AccessTokenCard api={api} importUrl={createBlocked} onNotice={onNotice} onSaved={() => { setCreateBlocked(''); setError(''); setHasToken(true); }} /> : reauth ? <ReauthNotice onReauthorize={onReauthorize} /> : error && <div className="vx-notice error" role="alert"><div><p>{error}</p></div></div>}
 
       {sheet && <ProjectSheet key={sheet.id} project={sheet} api={api} onClose={() => setSheet(null)} onReauthorize={onReauthorize} onNotice={onNotice} onDeployed={(info) => { setSheet(null); onDeployed(info); }} />}
     </div>

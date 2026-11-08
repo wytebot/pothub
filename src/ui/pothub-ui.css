@@ -156,3 +156,15 @@
 @keyframes vxShimmer{from{background-position:100% 0}to{background-position:-100% 0}}
 @keyframes vxSpin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.vx-page *,.vx-backdrop,.vx-sheet,.pin-chip,.agent-step{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+.vx-token-form{display:flex;gap:8px;margin:6px 0 8px;flex-wrap:wrap}
+.vx-token-form input{flex:1 1 180px;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:inherit;font:inherit}
+.vx-open-link{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:8px 12px;border-radius:10px;text-decoration:none}
+
+/* One faded, softly blinking status line instead of a step list (no screen space is used once work finishes). */
+.status-line{display:flex;align-items:center;min-height:22px;margin:4px 0 6px;padding:0 2px;pointer-events:none;animation:vxRise .2s ease both}
+.status-line-text{font-size:13px;line-height:1.5;color:var(--muted);opacity:.55;animation:statusBlink 1.8s ease-in-out infinite;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+@keyframes statusBlink{0%,100%{opacity:.22}50%{opacity:.8}}
+.work-progress-text{animation:statusBlink 1.8s ease-in-out infinite!important;opacity:.55}
+.work-progress{min-height:22px;margin:4px 0}
+@media(prefers-reduced-motion:reduce){.status-line-text,.work-progress-text{animation:none!important;opacity:.6}}
+.vx-actions-row{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 10px}

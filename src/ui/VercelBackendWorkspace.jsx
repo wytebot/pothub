@@ -87,7 +87,7 @@ export default function VercelBackendWorkspace({ api, onReconnect, onConnectGith
         </nav>
         {error && <p className="vx-field-error" role="alert">{error}</p>}
         <div className="vx-panel" role="tabpanel" id={`vx-panel-${tab}`} aria-labelledby={`vx-tab-${tab}`} key={tab}>
-          {tab === 'import' && <ImportTab api={api} projects={projects} selectedId={selectedId} onSelect={selectProject} onProjectAdded={projectAdded} onConnectGithub={onConnectGithub} onSwitchGithub={onSwitchGithub || onConnectGithub} onReauthorize={onReconnect} onDeployed={deployed} onNotice={onNotice} />}
+          {tab === 'import' && <ImportTab api={api} onRefresh={load} projects={projects} selectedId={selectedId} onSelect={selectProject} onProjectAdded={projectAdded} onConnectGithub={onConnectGithub} onSwitchGithub={onSwitchGithub || onConnectGithub} onReauthorize={onReconnect} onDeployed={deployed} onNotice={onNotice} />}
           {tab === 'logs' && <LogsTab api={api} project={selected} focusId={focusId} onFix={fix} />}
           {tab === 'variables' && <VariablesTab api={api} projects={projects} project={selected} onSelect={selectProject} onReauthorize={onReconnect} />}
           {tab === 'ai' && <AiBackendTab api={api} project={selected} onReauthorize={onReconnect} onNotice={onNotice} onSaved={onSaved} />}

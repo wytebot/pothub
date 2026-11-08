@@ -36,20 +36,45 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
     return String(d?.content ?? '');
   }
 
+  /** Read several files with a few requests in flight, then keep as many as fit the context budget (in the order given). */
+  async function readBundle(repo, branch, paths, { concurrency = 5, maxTotal = MAX_TOTAL_CHARS } = {}) {
+    const bodies = new Array(paths.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < paths.length) {
+        const i = next++;
+        try { bodies[i] = { body: await read(repo, branch, paths[i]) }; } catch (e) { bodies[i] = { error: String(e?.message || 'could not be read').slice(0, 80) }; }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, paths.length) }, worker));
+    const attachments = [], attached = [], failed = [];
+    let total = 0;
+    paths.forEach((path, i) => {
+      const r = bodies[i];
+      if (r?.error) { failed.push(`${path} (${r.error})`); return; }
+      if (total >= maxTotal) { failed.push(`${path} (skipped: context limit reached)`); return; }
+      const body = truncateForContext(r.body, Math.min(MAX_FILE_CHARS, maxTotal - total));
+      total += body.length; attached.push(path);
+      attachments.push({ id: `repo:${path}`.slice(0, 100), name: `${repo}:${path}`.slice(-180), type: 'text/plain', size: body.length, textContent: body });
+    });
+    return { attachments, attached, failed };
+  }
+
+  /** Answer an agent's pothub-read request: the real contents of the requested files, as one tool-result message. */
+  async function readRequested(repo, branch, paths) {
+    const b = await readBundle(repo, branch, paths, { maxTotal: MAX_TOTAL_CHARS });
+    const blocks = b.attachments.map((a, i) => `### ${b.attached[i]}\n\`\`\`\n${a.textContent}\n\`\`\``);
+    const text = [`Repository files you requested from ${repo}${branch ? ` (branch ${branch})` : ''}. These are the real, complete contents; continue your answer using them.`, ...blocks, b.failed.length ? `Could not be read: ${b.failed.join('; ')}.` : ''].filter(Boolean).join('\n\n');
+    return { text, attached: b.attached, failed: b.failed };
+  }
+
   /** Attachments for a message: a context note plus the contents of every @mentioned file that exists. Never throws. */
   async function attachmentsFor(repo, branch, text, opts = {}) {
     let paths = [];
     try { paths = await list(repo, branch); } catch { /* the chat still works without file context */ }
-    const named = extractReferencedPaths(text, paths), bare = named.length ? [] : extractNamedPaths(text, paths), direct = [...named, ...bare], carried = direct.length ? [] : extractCarriedPaths(opts?.history, paths), auto = direct.length ? [] : suggestFilesForText(text, paths).filter((p) => !carried.includes(p)), wanted = [...new Set([...direct, ...carried, ...auto])], attachments = [], attached = [], failed = [];
-    let total = 0;
-    for (const path of wanted) {
-      if (total >= MAX_TOTAL_CHARS) { failed.push(`${path} (skipped: context limit reached)`); continue; }
-      try {
-        const body = truncateForContext(await read(repo, branch, path), Math.min(MAX_FILE_CHARS, MAX_TOTAL_CHARS - total));
-        total += body.length; attached.push(path);
-        attachments.push({ id: `repo:${path}`.slice(0, 100), name: `${repo}:${path}`.slice(-180), type: 'text/plain', size: body.length, textContent: body });
-      } catch (e) { failed.push(`${path} (${String(e?.message || 'could not be read').slice(0, 80)})`); }
-    }
+    const named = extractReferencedPaths(text, paths), bare = named.length ? [] : extractNamedPaths(text, paths), forced = (Array.isArray(opts?.force) ? opts.force : []).filter((p) => paths.includes(p)), direct = [...new Set([...forced, ...named, ...bare])], carried = direct.length ? [] : extractCarriedPaths(opts?.history, paths), auto = direct.length ? [] : suggestFilesForText(text, paths).filter((p) => !carried.includes(p)), wanted = [...new Set([...direct, ...carried, ...auto])], attachments = [], attached = [], failed = [];
+    const bundle = await readBundle(repo, branch, wanted);
+    attachments.push(...bundle.attachments); attached.push(...bundle.attached); failed.push(...bundle.failed);
     const note = repoContextNote(repo, branch, attached, paths.length ? repoTreeSummary(paths) : null, auto.filter((p) => attached.includes(p)), opts?.pin || null, carried.filter((p) => attached.includes(p))) + (failed.length ? `\nThese mentioned files could not be attached: ${failed.join('; ')}.` : '');
     return [{ id: 'repo:context', name: 'repo-context.md', type: 'text/markdown', size: note.length, textContent: note }, ...attachments];
   }
@@ -87,5 +112,5 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
   }
   const forgetSync = (repo) => { for (const k of [...synced.keys()]) if (k.startsWith(`${repo}@`)) synced.delete(k); };
 
-  return { list, read, attachmentsFor, syncToTermux, forgetSync };
+  return { list, read, attachmentsFor, readRequested, syncToTermux, forgetSync };
 }

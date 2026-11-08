@@ -27,10 +27,16 @@ test('repo file opening shows the real reason and survives a stale branch', () =
 });
 
 
-test('technical chat displays a request execution timeline before streamed response content', () => {
+test('technical chat shows only a faded blinking status line while working, never a step list', () => {
   assert.match(app, /executionSteps=showExecutionPlan\?/);
   assert.match(app, /updateExecutionStep\(4,'active'\)/);
-  assert.match(ws, /className="execution-timeline"/);
-  assert.match(ws, /step\.detail/);
-  assert.match(css, /\.execution-step\.active/);
+  assert.match(ws, /<StatusLine label=\{activeLabel\(m\.executionSteps\)\}\/>/);
+  assert.doesNotMatch(ws, /className="execution-timeline"/);
+  assert.match(fs.readFileSync(new URL('../src/ui/pothub-ui.css', import.meta.url), 'utf8'), /\.status-line-text\{[^}]*animation:statusBlink/);
+});
+
+test('agents can request any repository file and PotHub fetches it', () => {
+  assert.match(app, /extractReadRequests\(replyText/);
+  assert.match(app, /readPaths:readReq/);
+  assert.match(app, /slice\(0,Math\.max\(1,24-attachmentPayload\.length\)\)/);
 });

@@ -1,8 +1,8 @@
 /** Pure helpers for "@file" mentions in repository chats. No DOM, no network. */
 
-export const MAX_MENTIONED_FILES = 5;
-export const MAX_FILE_CHARS = 60000;
-export const MAX_TOTAL_CHARS = 150000;
+export const MAX_MENTIONED_FILES = 12;
+export const MAX_FILE_CHARS = 80000;
+export const MAX_TOTAL_CHARS = 300000;
 
 /** The @token being typed right before the caret, or null. Mentions start at the beginning of the text or after whitespace/"(". */
 export function activeMention(text, caret = String(text || '').length) {
@@ -69,7 +69,7 @@ export function truncateForContext(content, max = MAX_FILE_CHARS) {
 
 const NOISE = /(^|\/)(node_modules|\.git|\.next|dist|build|coverage|\.vercel)(\/|$)|\.(png|jpe?g|gif|webp|ico|svg|woff2?|ttf|otf|mp4|webm|zip|lock)$|(^|\/)package-lock\.json$/i;
 export const MAX_TREE_CHARS = 14000;
-export const MAX_AUTO_FILES = 3;
+export const MAX_AUTO_FILES = 8;
 
 /**
  * Plain-text outline of the repository (one line per folder, files listed under it) so the model knows which files
@@ -128,7 +128,7 @@ export function extractNamedPaths(text, knownPaths, max = MAX_MENTIONED_FILES) {
   return found;
 }
 
-export const MAX_CARRIED_FILES = 3;
+export const MAX_CARRIED_FILES = 8;
 
 /**
  * Files discussed earlier in this chat (newest first), so a follow-up such as "yes, go ahead" or "fix it" still gets
@@ -164,6 +164,28 @@ export function suggestFilesForText(text, paths, limit = MAX_AUTO_FILES) {
   return rows.slice(0, limit).map((r) => r.p);
 }
 
+/** How an agent reads any repository file that was not attached: it asks, PotHub fetches the file and sends it back. */
+export const MAX_READ_REQUEST = 10;
+export const READ_PROTOCOL = `You can read ANY file in the outline, not only the attached ones. When you need a file that is not attached, reply with a fenced block exactly like this and nothing else after it:\n\`\`\`pothub-read\nsrc/lib/firebase.js\nserver/app.js\n\`\`\`\nUse real paths from the outline, one per line, at most ${MAX_READ_REQUEST} per request. PotHub fetches them and sends their full contents back to you automatically, then you continue. Never say you cannot read a file that is in the outline; request it. Do not claim to have read files that are not attached, never describe a file you have not read, and never invent a path that is not in the outline.`;
+
+const READ_CLOSED = /```pothub-read[^\n]*\n([\s\S]*?)```/gi;
+const READ_OPEN_TAIL = /```pothub-read[^\n]*\n[\s\S]*$/i;
+/** Paths the agent asked to read (real repository files only, de-duplicated, capped). */
+export function extractReadRequests(text, knownPaths, max = MAX_READ_REQUEST) {
+  const known = knownPaths instanceof Set ? knownPaths : new Set(knownPaths || []);
+  const found = [];
+  for (const m of String(text || '').matchAll(READ_CLOSED)) {
+    for (const raw of m[1].split('\n')) {
+      const path = raw.trim().replace(/^[-*]\s+/, '').replace(/^@/, '').replace(/^\.?\//, '').replace(/[`'"]/g, '').replace(/:\d+(?::\d+)?$/, '');
+      if (path && known.has(path) && !found.includes(path)) found.push(path);
+      if (found.length >= max) return found;
+    }
+  }
+  return found;
+}
+/** Hide pothub-read blocks (finished or still streaming) from the visible reply. */
+export const stripReadBlocks = (text) => String(text || '').replace(READ_CLOSED, '').replace(READ_OPEN_TAIL, '').replace(/\n{3,}/g, '\n\n').trim();
+
 /** Instruction attachment that tells the model what this chat is, which files exist, and which of them it can actually read. */
 export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPaths = [], pin = null, carriedPaths = []) {
   const auto = new Set(autoPaths), carried = new Set(carriedPaths);
@@ -177,8 +199,8 @@ export function repoContextNote(repo, branch, attachedPaths, tree = null, autoPa
     pin?.ready
       ? `ALL FILES PINNED. The complete repository is copied into the user's Termux at ~/.pothub/workspaces/${pin.workspace} (branch ${branch || 'default'}), so you can read every file, not just the attached ones. Use a pothub-run block with "cwd: ~/.pothub/workspaces/${pin.workspace}" to explore: list files, search with rg or grep -rn, read exact line ranges with sed -n 'START,ENDp' FILE, use git ls-files or git grep. Read-only commands run automatically and their output comes back to you; anything that changes files waits for the user's approval. Work from evidence: search, read the real code, then conclude, and never describe a file you have not read. Structure your replies with these headings when you are investigating a problem: ## Understanding, ## Investigation, ## Problem, ## Plan, ## Fix.`
       : pin
-        ? `All files are pinned, but the repository could not be copied into Termux (${pin.reason || 'Termux is not available'}), so you can read only the outline and the attached files. Say so plainly and ask the user to connect Termux if you need more of the code.`
-        : 'You can read only the attached files. Use the outline to name the exact files you need and ask the user to mention them with @path. Do not claim to have read files that are not attached, never invent a path that is not in the outline, and say plainly when you are unsure.',
+        ? `All files are pinned, but the repository could not be copied into Termux (${pin.reason || 'Termux is not available'}). ${READ_PROTOCOL}`
+        : READ_PROTOCOL,
   ].filter(Boolean).join('\n');
 }
 

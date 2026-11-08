@@ -155,3 +155,23 @@ test('a follow-up with no path keeps the files the conversation was about', asyn
   const direct = await src.attachmentsFor('o/r', 'main', 'now check @src/lib/db.js', { history });
   assert.deepEqual(direct.slice(1).map((a) => a.name), ['o/r:src/lib/db.js'], 'a file named in this message wins over earlier ones');
 });
+
+test('pothub-read requests resolve to real files only and are hidden from the reply', async () => {
+  const { extractReadRequests, stripReadBlocks } = await import('../src/lib/repo-mentions.js');
+  const known = ['src/lib/firebase.js', 'server/app.js'];
+  const reply = 'I need two files.\n```pothub-read\nsrc/lib/firebase.js\n- @server/app.js\nmissing/file.js\n```';
+  assert.deepEqual(extractReadRequests(reply, known), ['src/lib/firebase.js', 'server/app.js']);
+  assert.equal(stripReadBlocks(reply), 'I need two files.');
+  assert.equal(stripReadBlocks('so far\n```pothub-read\nsrc/li'), 'so far');
+});
+
+test('readRequested returns the real contents of every requested file in one message', async () => {
+  const { createRepoFileSource } = await import('../src/lib/repo-files.js');
+  const files = { 'src/lib/firebase.js': 'export const app = 1;', 'server/app.js': 'const x = 2;' };
+  const api = async (u) => { if (u.includes('/api/github/files')) return { files: Object.keys(files).map((path) => ({ path })) }; const p = decodeURIComponent(u.match(/path=([^&]*)/)[1]); if (!(p in files)) throw new Error('not found'); return { content: files[p] }; };
+  const r = await createRepoFileSource({ api }).readRequested('o/r', 'main', ['src/lib/firebase.js', 'server/app.js', 'gone.js']);
+  assert.deepEqual(r.attached, ['src/lib/firebase.js', 'server/app.js']);
+  assert.match(r.text, /export const app = 1;/);
+  assert.match(r.text, /const x = 2;/);
+  assert.match(r.text, /gone\.js/);
+});
