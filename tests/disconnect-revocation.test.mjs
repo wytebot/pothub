@@ -36,3 +36,9 @@ test('after a disconnect the next connect asks the provider to show the account 
   assert.match(ws, /force-reauth-vercel/);
   assert.match(ws, /\$\{again\?'&reauth=1':''\}/);
 });
+
+test('Vercel authorize requests never send response_mode (Vercel only accepts web_message.opener and rejects query)', () => {
+  assert.doesNotMatch(server, /response_mode/);
+  assert.equal((server.match(/new URL\('https:\/\/vercel\.com\/oauth\/authorize'\)/g) || []).length, 2, 'sign-in and connect both build the authorize URL');
+  assert.match(server, /response_type:'code',scope:'openid email profile offline_access'/);
+});
