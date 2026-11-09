@@ -56,7 +56,9 @@ export function assignedDomain(project) {
 
 /** The server tags an error with this code only when Vercel itself asked for verification (sometimes with a code it emails). That happens on Vercel's own page. Ordinary 401/403/permission/scope errors are shown as plain errors, never as this prompt. */
 export const VERCEL_REAUTH_CODE = 'VERCEL_REAUTH_REQUIRED';
-export const needsVercelReauth = (error) => String(error?.code || '') === VERCEL_REAUTH_CODE;
+export const needsVercelReauth = (error) => String(error?.code || '') === VERCEL_REAUTH_CODE || /VERCEL_REAUTH_REQUIRED|re-?authenticate to this scope/i.test(String(error?.message || ''));
+/** The scope (team slug) Vercel refused, from the server's field or the message text; '' when unknown. */
+export const scopeFromError = (error) => String(error?.scope || (String(error?.message || '').match(/scope\s+"([^"]+)"/i) || [])[1] || '');
 
 export const BUILDING = ['QUEUED', 'INITIALIZING', 'BUILDING'];
 export const stateOf = (d) => String(d?.state || d?.readyState || '').toUpperCase();

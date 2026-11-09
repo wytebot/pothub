@@ -1,10 +1,11 @@
 import React from 'react';
-import { KeyRound, Cpu, Rocket, ScrollText, RefreshCw } from 'lucide-react';
+import { KeyRound, Cpu, Rocket, ScrollText, RefreshCw, ShieldAlert } from 'lucide-react';
 import ImportTab from './vercel/ImportTab.jsx';
 import LogsTab from './vercel/LogsTab.jsx';
 import VariablesTab from './vercel/VariablesTab.jsx';
 import AiBackendTab from './vercel/AiBackendTab.jsx';
-import { linkedRepo } from '../lib/vercel-env.js';
+import ReauthSheet from './vercel/ReauthSheet.jsx';
+import { linkedRepo, needsVercelReauth, scopeFromError } from '../lib/vercel-env.js';
 
 const TABS = [
   { id: 'import', label: 'Projects', Icon: Rocket },
@@ -23,12 +24,16 @@ export default function VercelBackendWorkspace({ api, onReconnect, onConnectGith
   const [selectedId, setSelectedId] = React.useState('');
   const [error, setError] = React.useState('');
   const [focusId, setFocusId] = React.useState('');
+  const [issues, setIssues] = React.useState([]);
+  const [reauthOpen, setReauthOpen] = React.useState(false);
+  const [reauthScope, setReauthScope] = React.useState('');
+  const openReauth = React.useCallback((scope = '') => { setReauthScope(String(scope || '')); setReauthOpen(true); }, []);
 
   React.useEffect(() => { setTabState(readTab()); }, []);
   const setTab = React.useCallback((id) => { setTabState(id); try { sessionStorage.setItem(TAB_KEY, id); } catch { /* storage can be blocked */ } }, []);
 
   const load = React.useCallback(async () => {
-    setStatus((s) => ({ ...s, loading: true })); setError('');
+    setStatus((s) => ({ ...s, loading: true })); setError(''); setIssues([]);
     try {
       const st = await apiRef.current('/api/vercel/status');
       if (!st.connected) { setStatus({ loading: false, connected: false, email: '' }); setProjects([]); return; }
@@ -36,8 +41,13 @@ export default function VercelBackendWorkspace({ api, onReconnect, onConnectGith
       setSelectedId(st.selectedProjectId || '');
       const data = await apiRef.current('/api/vercel/projects');
       setProjects(data.projects || []);
+      setIssues(Array.isArray(data.scopeIssues) ? data.scopeIssues : []);
       setSelectedId(data.selectedProjectId || st.selectedProjectId || '');
-    } catch (e) { setStatus((s) => ({ ...s, loading: false })); setError(String(e?.message || e)); }
+    } catch (e) {
+      setStatus((s) => ({ ...s, loading: false }));
+      if (needsVercelReauth(e)) { setIssues([{ slug: scopeFromError(e), teamId: '', code: 'VERCEL_REAUTH_REQUIRED', message: '' }]); setReauthScope(scopeFromError(e)); }
+      else setError(String(e?.message || e));
+    }
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
@@ -94,14 +104,26 @@ export default function VercelBackendWorkspace({ api, onReconnect, onConnectGith
           <span className="vx-tab-indicator" aria-hidden="true" />
           {TABS.map(({ id, label, Icon }) => <button key={id} type="button" role="tab" id={`vx-tab-${id}`} aria-selected={tab === id} aria-controls={`vx-panel-${id}`} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}><Icon size={16} aria-hidden="true" /><span>{label}</span></button>)}
         </nav>
+        {issues.length > 0 && (
+          <div className="vx-notice warn" role="alert">
+            <ShieldAlert size={20} aria-hidden="true" />
+            <div>
+              <strong>Vercel needs you to confirm {issues.length === 1 && issues[0].slug ? `“${issues[0].slug}”` : 'a scope'}</strong>
+              <p>{projects.length ? 'Projects from your other scopes are shown. ' : ''}Confirm access to load the rest.</p>
+              <button type="button" className="primary" onClick={() => openReauth(issues[0]?.slug || '')}>Confirm access</button>
+            </div>
+          </div>
+        )}
         {error && <p className="vx-field-error" role="alert">{error}</p>}
         <div className="vx-panel" role="tabpanel" id={`vx-panel-${tab}`} aria-labelledby={`vx-tab-${tab}`} key={tab}>
-          {tab === 'import' && <ImportTab api={api} onRefresh={load} projects={projects} selectedId={selectedId} onSelect={selectProject} onDeployed={deployed} onNotice={onNotice} />}
+          {tab === 'import' && <ImportTab api={api} onRefresh={load} projects={projects} selectedId={selectedId} onSelect={selectProject} onDeployed={deployed} onNotice={onNotice} onReauthorize={() => openReauth(selected?.teamSlug || '')} />}
           {tab === 'logs' && <LogsTab api={api} project={selected} focusId={focusId} onFix={fix} />}
-          {tab === 'variables' && <VariablesTab api={api} projects={projects} project={selected} onSelect={selectProject} onReauthorize={onReconnect} />}
-          {tab === 'ai' && <AiBackendTab api={api} project={selected} onReauthorize={onReconnect} onNotice={onNotice} onSaved={onSaved} />}
+          {tab === 'variables' && <VariablesTab api={api} projects={projects} project={selected} onSelect={selectProject} onReauthorize={() => openReauth(selected?.teamSlug || '')} />}
+          {tab === 'ai' && <AiBackendTab api={api} project={selected} onReauthorize={() => openReauth(selected?.teamSlug || '')} onNotice={onNotice} onSaved={onSaved} />}
         </div>
       </>}
+      <ReauthSheet api={api} open={reauthOpen} focus={reauthScope} onClose={() => setReauthOpen(false)} onReconnect={onReconnect} onNotice={onNotice}
+        onResolved={(list, meta) => { if (!meta?.partial) setReauthOpen(false); load(); }} />
     </section>
   );
 }

@@ -9,7 +9,7 @@ import { assignedUrl, linkedRepo, needsVercelReauth } from '../../lib/vercel-env
  * Vercel), each with its Vercel domain and a checkbox. The ticked project drives Variables, Logs and
  * AI backend. Deployed projects are read from the account, so there is no import step.
  */
-export default function ImportTab({ api, onRefresh, projects, selectedId, onSelect, onDeployed, onNotice }) {
+export default function ImportTab({ api, onRefresh, projects, selectedId, onSelect, onDeployed, onNotice, onReauthorize }) {
   const [sheet, setSheet] = React.useState(null);
   const [working, setWorking] = React.useState('');
   const [error, setError] = React.useState('');
@@ -75,9 +75,9 @@ export default function ImportTab({ api, onRefresh, projects, selectedId, onSele
         </ul>
       </section>
 
-      {reauth ? <ReauthNotice onReauthorize={() => onNotice?.('Reconnect Vercel to continue.')} /> : error && <div className="vx-notice error" role="alert"><div><p>{error}</p></div></div>}
+      {reauth ? <ReauthNotice onReauthorize={() => (onReauthorize ? onReauthorize() : onNotice?.('Reconnect Vercel to continue.'))} /> : error && <div className="vx-notice error" role="alert"><div><p>{error}</p></div></div>}
 
-      {sheet && <ProjectSheet key={sheet.id} project={sheet} api={api} onClose={() => setSheet(null)} onReauthorize={() => onNotice?.('Reconnect Vercel to continue.')} onNotice={onNotice} onDeployed={(info) => { setSheet(null); onDeployed(info); }} />}
+      {sheet && <ProjectSheet key={sheet.id} project={sheet} api={api} onClose={() => setSheet(null)} onReauthorize={() => (onReauthorize ? onReauthorize() : onNotice?.('Reconnect Vercel to continue.'))} onNotice={onNotice} onDeployed={(info) => { setSheet(null); onDeployed(info); }} />}
     </div>
   );
 }

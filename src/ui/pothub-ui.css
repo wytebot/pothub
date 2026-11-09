@@ -237,3 +237,14 @@ a.vx-url-btn:hover{border-color:var(--accent)}
 .mode-toggle.on{background:var(--accent);border-color:var(--accent)}
 .mode-toggle.on i{transform:translateX(20px)}
 @media(prefers-reduced-motion:reduce){.mode-toggle,.mode-toggle i{transition:none}}
+
+/* Vercel scope reauthentication */
+.vx-scope-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.vx-scope{padding:12px;border-radius:14px;border:1px solid var(--border);background:var(--panel2);display:grid;gap:8px}
+.vx-scope.bad{border-color:color-mix(in srgb,#d29922 45%,transparent)}
+.vx-scope.bad .vx-scope-head>svg{color:#d29922}
+.vx-scope.good .vx-scope-head>svg{color:#3fb950}
+.vx-scope-head{display:flex;align-items:center;gap:8px}
+.vx-scope-state{margin-left:auto;font-size:.75rem;color:var(--muted)}
+.vx-scope-actions{display:flex;flex-wrap:wrap;gap:8px}
+.vx-scope-actions a,.vx-scope-actions button{display:inline-flex;align-items:center;gap:6px}
