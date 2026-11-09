@@ -52,7 +52,6 @@ test('GitHub is not re-requested because of a slow or failed lookup', () => {
   assert.match(app, /linked-accounts:\$\{user\.id\}/);
   assert.match(app, /!auth\.linkedUncertain/);
   assert.doesNotMatch(app, /\.catch\(\(\)=>\(\{linkedAccounts:\{\}\}\)\)/, 'a failed request no longer counts as "GitHub not connected"');
-  assert.match(read('src/ui/vercel/ImportTab.jsx'), /githubStatusFrom/);
 });
 
 test('the new stylesheet is actually loaded and covers the sheet, tabs and motion', () => {

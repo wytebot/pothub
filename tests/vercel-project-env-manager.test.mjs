@@ -23,10 +23,11 @@ test('Vercel environment variable writes are bounded, validated, and never echo 
   assert.doesNotMatch(route,/res\.json\(\{[^}]*value:variable\.value/);
 });
 
-test('Vercel workspace offers GitHub import, a variable editor, and direct dashboard access',async()=>{
+test('Vercel workspace reads deployed projects (no import buttons), a variable editor, and direct dashboard access',async()=>{
   const shell=await read('../src/ui/VercelBackendWorkspace.jsx'),imp=await read('../src/ui/vercel/ImportTab.jsx'),env=await read('../src/ui/vercel/EnvEditor.jsx'),vars=await read('../src/ui/vercel/VariablesTab.jsx');
-  assert.match(imp,/Import from GitHub/);
-  for(const label of ['Import','Logs','Variables','AI backend'])assert.match(shell,new RegExp(`label: '${label}'`));
+  assert.match(imp,/Your Vercel projects/);
+  assert.doesNotMatch(imp,/Import on Vercel|Import new on Vercel/);
+  for(const label of ['Projects','Logs','Variables','AI backend'])assert.match(shell,new RegExp(`label: '${label}'`));
   assert.match(env,/Add variable/);
   assert.match(env,/Sensitive<\/label>/);
   assert.match(env,/Not sensitive<\/label>/);
@@ -64,8 +65,10 @@ test('streamed creator responses default to English and use the shared all-reque
   const stream=source.slice(source.indexOf("app.post('/api/agent/chat/stream'"),source.indexOf("app.post('/api/agent/chat'"));
   assert.match(stream,/Use English by default unless the user explicitly requests another language/);
   assert.match(stream,/creatorPrompt=withEngineeringProtocol\(`You are PotHub Creator/);
-  assert.match(stream,/For substantial requests of any kind, explain what you understood/);
-  assert.match(stream,/evidence-based root-cause analysis/);
+  assert.match(stream,/Choose the reply shape the request calls for instead of a fixed template/);
+  assert.match(stream,/articles, blog posts, letters, emails, proposals/);
+  assert.match(stream,/formatting request for your reply, never a capability question/);
+  assert.match(stream,/isTechnicalRequest\(/);
 });
 
 test('composer preserves and previews attachments, uses the keyboard viewport, and stops media workflows', async()=>{
