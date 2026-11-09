@@ -38,6 +38,8 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
     [files, setFiles] = useState(cached?.files || {}),
     [fileIndex, setFileIndex] = useState(cached?.fileIndex || Object.keys(cached?.files || {}).map((path) => ({ path, sha: null, size: 0 }))),
     [fileLoading, setFileLoading] = useState(false),
+    [fileError, setFileError] = useState(""),
+    [fileRetry, setFileRetry] = useState(0),
     [base, setBase] = useState(cached?.base || {}),
     [baseSha, setBaseSha] = useState(cached?.baseSha || ""),
     [selected, setSelected] = useState(cached?.selected || ""),
@@ -222,18 +224,19 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
     // Never ask GitHub for something that is not a file of this repository: a folder, a blank or stale
     // path left over from an earlier session or another page. Clear it quietly instead of showing an error.
     const cleanSelected = String(selected).replaceAll("\\", "/").replace(/^\/+/, "").trim();
-    const known = fileIndex.some((x) => x.path === cleanSelected);
-    if (!cleanSelected || (fileIndex.length > 0 && !known)) { setSelected(""); return; }
+    const isFolder = fileIndex.some((x) => x.path.startsWith(`${cleanSelected}/`));
+    if (!cleanSelected || isFolder) { setSelected(""); return; }
     let cancelled = false;
+    setFileError("");
     setFileLoading(true);
     github.file(repo.owner.login, repo.name, cleanSelected, branch).then((f) => {
       if (cancelled) return;
       const content = f.content ?? "";
       setFiles((x) => ({ ...x, [selected]: content }));
       setBase((x) => ({ ...x, [selected]: content }));
-    }).catch((e) => { if (!cancelled) { setSelected(""); if (!/INVALID_REPOSITORY_PATH/.test(String(e?.message || ""))) toastError(e.message); } }).finally(() => { if (!cancelled) setFileLoading(false); });
+    }).catch((e) => { if (!cancelled) setFileError(String(e?.message || "This file could not be opened.")); }).finally(() => { if (!cancelled) setFileLoading(false); });
     return () => { cancelled = true; };
-  }, [selected, branch, repo]);
+  }, [selected, branch, repo.id, fileRetry]);
   useEffect(() => {
     if (!splitOpen || !splitSelected || files[splitSelected] !== null && files[splitSelected] !== undefined) return;
     let cancelled=false;
@@ -1302,7 +1305,7 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
         {workspaceApplied&&<p role="status">Replacement applied locally. Review diffs before committing.</p>}
       </section>}
       {outlineOpen && selected && typeof files[selected]==="string" && <section className="workspaceToolPanel symbolOutline" aria-label="Symbol outline"><div className="workspaceToolHeader"><b>Symbol outline · {selected}</b><button onClick={()=>setOutlineOpen(false)} aria-label="Close outline"><X size={16}/></button></div>{String(files[selected]).split("\n").map((line,index)=>{const m=line.match(/^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface|type|enum|const|let|var)\s+([A-Za-z_$][\w$]*)|^\s*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/);const name=m&&(m[1]||m[2]);return name?<button key={`${index}:${name}`} onClick={()=>{try{editorView?.dispatch({selection:{anchor:editorView.state.doc.line(index+1).from},scrollIntoView:true})}catch{} }}><span>{name}</span><small>Line {index+1}</small></button>:null})}</section>}
-      <div className={`projectBody${selected && selected in files ? " hasSelection" : ""}`}>
+      <div className={`projectBody${selected ? " hasSelection" : ""}`}>
 
 
         <aside>
@@ -1314,7 +1317,7 @@ export default function Project({ repo, onBack, onWorkingState, openPath, onDele
             <FileViewer path={selected} value={files[selected]} onChange={edit} onViewReady={setEditorView} unsaved={changes.some((c) => c.path === selected)} onBack={() => setSelected("")} fontSize={editorFontSize} wordWrap={editorWordWrap} scope={repo?.full_name || ""} />
           ) : (
             <div className="empty">
-              {fileLoading ? <><h2>Loading file…</h2><p>Fetching only the selected file from GitHub.</p></> : <><h2>Select a file</h2><p>Choose a file from the repository tree.</p></>}
+              {fileError && selected ? <><h2>Could not open this file</h2><p>{fileError}</p><div className="row"><button className="primary" onClick={() => setFileRetry((n) => n + 1)}>Try again</button><button onClick={() => { setFileError(""); setSelected(""); }}>Back to files</button></div></> : (fileLoading || selected) ? <><h2>Loading file…</h2><p>Fetching only the selected file from GitHub.</p><button onClick={() => setSelected("")}>Back to files</button></> : <><h2>Select a file</h2><p>Choose a file from the repository tree.</p></>}
             </div>
           )}
           {splitOpen && <section className="workspaceSplitPane"><div className="workspaceSplitHeader"><b>Split editor</b><Select value={splitSelected} onChange={setSplitSelected} options={fileIndex.filter(f=>f.path!==selected).map(f=>({value:f.path,label:f.path}))} className="splitFileSelect"/><button onClick={()=>setSplitOpen(false)} aria-label="Close split editor"><X size={16}/></button></div>{splitSelected && typeof files[splitSelected]==="string" ? <FileViewer path={splitSelected} value={files[splitSelected]} onChange={v=>setFiles(prev=>({...prev,[splitSelected]:v}))} onViewReady={()=>{}} unsaved={changes.some(c=>c.path===splitSelected)} onBack={()=>setSplitSelected("")} fontSize={editorFontSize} wordWrap={editorWordWrap} scope={repo?.full_name || ""}/> : <p className="muted">Choose a second text file to edit side by side.</p>}</section>}
