@@ -1,0 +1,104 @@
+name: Validate and deploy Pothub to Vercel Production
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: pothub-vercel-production
+  cancel-in-progress: true
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Require committed lockfile
+        run: test -f package-lock.json || { echo "package-lock.json is missing. Run Actions → Generate and commit PotHub npm lockfile first."; exit 1; }
+
+      - name: Verify clean reproducible install
+        run: npm ci --no-audit --no-fund
+
+      - name: Run source checks and complete test suite
+        run: npm run check
+
+      - name: Verify production web build
+        run: npm run build
+
+      - name: Verify Capacitor static export
+        run: npm run build:cap
+
+      - name: Set up Java for Android build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Android project and configure native plugins
+        env:
+          NEXT_PUBLIC_API_BASE: ${{ vars.NEXT_PUBLIC_API_BASE }}
+        run: |
+          test -n "$NEXT_PUBLIC_API_BASE" || { echo "Set repository variable NEXT_PUBLIC_API_BASE to the deployed PotHub API origin before Android builds."; exit 1; }
+          npx cap add android
+          npm run android:configure
+          npx cap sync android
+
+      - name: Build Android debug APK
+        run: cd android && ./gradlew --no-daemon assembleDebug
+
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pothub-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Preserve generated lockfile for repository check-in
+        uses: actions/upload-artifact@v4
+        with:
+          name: pothub-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check required Vercel secrets
+        shell: bash
+        run: |
+          missing=0
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub Actions secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Add the three secrets in GitHub repository Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Pull Vercel production settings
+        run: npx --yes vercel@41.7.2 pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build Vercel production output
+        run: npx --yes vercel@41.7.2 build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy production build
+        run: npx --yes vercel@41.7.2 deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN"
