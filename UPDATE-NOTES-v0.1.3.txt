@@ -1,0 +1,11 @@
+PotHub v0.1.3 — targeted agent ID fix
+
+Affected file: src/lib/agent-routing.js
+
+Root cause: interleaveAgentCandidates() rebuilt fallback candidates using only provider/key/model/task fields and silently discarded agentId. The Creator chat request then sent agentIds: [], which failed the API's minimum-one-agent validation.
+
+Fix: preserve each saved candidate's agentId through fallback sequencing so the server can resolve the user's own configured BYOK agent. No platform/default agent is introduced.
+
+Also includes package.json version 0.1.3 and a regression test.
+
+Apply this ZIP at the repository root, preserving paths, then commit and push.
