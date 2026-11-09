@@ -7,7 +7,7 @@ export const github={
  createRepo:async(p)=>{const r=await pot("/api/github/create-repo",{method:"POST",body:JSON.stringify({name:p.name,description:p.description||"",visibility:p.private===false?"public":"private",license:p.license_template||"none",autoInit:true}),idempotencyKey:p.operationId||undefined});return r.repo||r.repository||r},
  deleteRepo:(o,r)=>pot("/api/github/delete-repo",{method:"POST",body:JSON.stringify({owner:o,repo:r,confirmName:r})}),
  tree:(o,r,b)=>api(`/github/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/tree?branch=${encodeURIComponent(b)}`),
- file:(o,r,p,b)=>api(`/github/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/file?path=${encodeURIComponent(p)}&branch=${encodeURIComponent(b)}`),
+ file:(o,r,p,b)=>api(`/github/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/file?filePath=${encodeURIComponent(p)}&branch=${encodeURIComponent(b)}`),
  branches:(o,r)=>api(`/github/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/branches`),
  createBranch:(o,r,p)=>api(`/github/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/branches`,{method:"POST",body:JSON.stringify(p)}),
  pulls:(o,r)=>api(`/github/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/pulls`),
