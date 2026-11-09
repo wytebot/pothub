@@ -1,0 +1,5 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import {issueScopeClaim,verifyScopeClaim,assertScopeTarget} from '../server/scope-claims.js';
+const secret='test-secret-that-is-at-least-32-characters-long';
+const base={userId:'u1',owner:'acme',repo:'app',branch:'feature/chat',threadId:'thread1',secret};
+test('scope claim verifies and stays pinned to owner/repo/branch',()=>{const token=issueScopeClaim(base);const scope=verifyScopeClaim(token,{userId:'u1',secret});assert.equal(scope.repo,'app');assert.equal(assertScopeTarget(scope,{owner:'acme',repo:'app',branch:'feature/chat'}),true);assert.throws(()=>assertScopeTarget(scope,{owner:'acme',repo:'other',branch:'feature/chat'}),/pinned repo/)});
+test('scope claim rejects tampering, other users and expiry',()=>{const token=issueScopeClaim(base);assert.throws(()=>verifyScopeClaim(token+'x',{userId:'u1',secret}));assert.throws(()=>verifyScopeClaim(token,{userId:'u2',secret}),/another account/);const expired=issueScopeClaim({...base,now:1,ttlMs:60000});assert.throws(()=>verifyScopeClaim(expired,{userId:'u1',now:70000,secret}),/expired/)});
