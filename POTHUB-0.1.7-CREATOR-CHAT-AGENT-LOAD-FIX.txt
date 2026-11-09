@@ -1,0 +1,21 @@
+PotHub v0.1.7 — Creator Chat agent-loading fix
+
+Root cause:
+Creator chat required a complete cloud workspace sync before it could use local saved agents. It then sent agent IDs and an agent-config object only in the client return structure, but the streaming request body omitted agentConfig. The server streaming endpoint required Firestore-backed saved agents and ignored the transient BYOK config, so a healthy locally configured agent could not be resolved.
+
+Changes:
+- Creator chat now sends the selected BYOK agent config with its selected stable agent IDs.
+- The stream endpoint validates the transient config and only accepts candidates whose IDs are in the authenticated request's selected agentIds.
+- The server combines valid transient BYOK candidates with account-scoped cloud candidates; no platform key/model fallback is introduced.
+- If cloud sync is unavailable but a local Chat agent exists, Creator chat can still proceed with that agent and reports the sync warning separately.
+- Error display includes the actual sync failure reason when no local agent is available.
+
+Files:
+- src/ui/App.jsx
+- server/app.js
+- package.json (0.1.7)
+- tests/creator-chat-transient-agent-config.test.mjs
+- this note
+
+Security:
+Transient keys are sent only in the authenticated HTTPS request body, validated server-side, restricted to the supplied agent IDs, used for this request only, and are not written to cloud storage by this path. Provider keys are not logged.
