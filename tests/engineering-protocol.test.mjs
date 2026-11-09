@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  HONESTY_RULES, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL, STRUCTURED_OUTPUT_NOTE, TECHNICAL_EXECUTION_BRIEF,
+  HONESTY_RULES, HONESTY_RULES_SHORT, DEEP_DIAGNOSIS_PROTOCOL, NO_BREAK_PROTOCOL, STRUCTURED_OUTPUT_NOTE, TECHNICAL_EXECUTION_BRIEF,
   ENGINEERING_MODES, engineeringProtocol, withEngineeringProtocol,
 } from '../server/engineering-protocol.js';
 import { responseStyleFragment } from '../server/response-styles.js';
@@ -10,7 +10,7 @@ import { responseStyleFragment } from '../server/response-styles.js';
 const app = fs.readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
 
 test('every mode includes the honesty rules and an unknown mode never throws', () => {
-  for (const mode of ENGINEERING_MODES) assert.ok(engineeringProtocol(mode).includes(HONESTY_RULES), mode);
+  for (const mode of ENGINEERING_MODES) assert.ok(engineeringProtocol(mode).includes(mode === 'general' ? HONESTY_RULES_SHORT : HONESTY_RULES), mode);
   assert.equal(engineeringProtocol('no-such-mode'), HONESTY_RULES);
   assert.equal(engineeringProtocol(undefined).includes(HONESTY_RULES), true);
 });
@@ -59,7 +59,7 @@ test('the chat debug style keeps its original wording and gains the deeper guida
 });
 
 test('every AI call site in the API wraps its prompt with the protocol', () => {
-  assert.match(app, /import \{withEngineeringProtocol\} from '\.\/engineering-protocol\.js'/);
+  assert.match(app, /import \{withEngineeringProtocol,isTechnicalRequest\} from '\.\/engineering-protocol\.js'/);
   const expected = [
     /chargedModelJson\(withEngineeringProtocol\(prompt,'diagnose'\)/,
     /chargedModelJson\(withEngineeringProtocol\(prompt,'patch'\),\{[^}]*reason:'Prepare repair'/,
@@ -67,7 +67,7 @@ test('every AI call site in the API wraps its prompt with the protocol', () => {
     /chargedModelJson\(withEngineeringProtocol\(plannerPrompt,'readonly'\)/,
     /chargedModelJson\(withEngineeringProtocol\(finalPrompt,'readonly'\)/,
     /chargedModelJson\(withEngineeringProtocol\(prompt,'edit'\),\{[^}]*reason:'Repository-aware Edit chat'/,
-    /chargedModelJson\(redactSecrets\(withEngineeringProtocol\(prompt,'chat'\)\),\{[^}]*reason:'Creator chat'/,
+    /chargedModelJson\(redactSecrets\(withEngineeringProtocol\(prompt,isTechnicalRequest\(.*?\)\?'chat':'general'\)\),\{[^}]*reason:'Creator chat'/,
     /const fullPrompt=withEngineeringProtocol\(`\$\{prompt\}\\n\\n\$\{CODE_COMPLETENESS_RULES\}`,'chat',\{structured:false\}\)/,
   ];
   for (const re of expected) assert.match(app, re, String(re));
