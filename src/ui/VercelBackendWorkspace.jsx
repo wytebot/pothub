@@ -7,7 +7,7 @@ import AiBackendTab from './vercel/AiBackendTab.jsx';
 import { linkedRepo } from '../lib/vercel-env.js';
 
 const TABS = [
-  { id: 'import', label: 'Import', Icon: Rocket },
+  { id: 'import', label: 'Projects', Icon: Rocket },
   { id: 'logs', label: 'Logs', Icon: ScrollText },
   { id: 'variables', label: 'Variables', Icon: KeyRound },
   { id: 'ai', label: 'AI backend', Icon: Cpu },
@@ -96,7 +96,7 @@ export default function VercelBackendWorkspace({ api, onReconnect, onConnectGith
         </nav>
         {error && <p className="vx-field-error" role="alert">{error}</p>}
         <div className="vx-panel" role="tabpanel" id={`vx-panel-${tab}`} aria-labelledby={`vx-tab-${tab}`} key={tab}>
-          {tab === 'import' && <ImportTab api={api} onRefresh={load} projects={projects} selectedId={selectedId} onSelect={selectProject} onProjectAdded={projectAdded} onConnectGithub={onConnectGithub} onSwitchGithub={onSwitchGithub || onConnectGithub} onReauthorize={onReconnect} onDeployed={deployed} onNotice={onNotice} />}
+          {tab === 'import' && <ImportTab api={api} onRefresh={load} projects={projects} selectedId={selectedId} onSelect={selectProject} onDeployed={deployed} onNotice={onNotice} />}
           {tab === 'logs' && <LogsTab api={api} project={selected} focusId={focusId} onFix={fix} />}
           {tab === 'variables' && <VariablesTab api={api} projects={projects} project={selected} onSelect={selectProject} onReauthorize={onReconnect} />}
           {tab === 'ai' && <AiBackendTab api={api} project={selected} onReauthorize={onReconnect} onNotice={onNotice} onSaved={onSaved} />}

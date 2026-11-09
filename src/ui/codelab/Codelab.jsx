@@ -51,6 +51,27 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
   const loadReposRef = useRef(null);
   const lastForegroundRefreshRef = useRef(0);
 
+  const pullStartY = useRef(null);
+  const pullRefreshBusy = useRef(false);
+  const onPullStart = (event) => {
+    const target = event.target;
+    const scroller = target?.closest?.('.content, .page, main');
+    if (scroller && scroller.scrollTop > 0) { pullStartY.current = null; return; }
+    pullStartY.current = event.touches?.[0]?.clientY ?? null;
+  };
+  const onPullEnd = async (event) => {
+    const start = pullStartY.current;
+    pullStartY.current = null;
+    const end = event.changedTouches?.[0]?.clientY;
+    if (start == null || end == null || end - start < 88 || pullRefreshBusy.current) return;
+    pullRefreshBusy.current = true;
+    try {
+      if (page === 'repos') await loadRepos();
+      else if (page === 'home') await loadRepos({ silent: true });
+      window.dispatchEvent(new CustomEvent('pothub:pull-to-refresh', { detail: { page } }));
+    } finally { pullRefreshBusy.current = false; }
+  };
+
   const loadRepos = async ({ silent = false } = {}) => {
     if (!user?.id || !user.githubConnected) {
       setReposError("Connect a GitHub account to discover repositories.");
@@ -465,7 +486,7 @@ export default function Codelab({ account, page: externalPage, onNavigate, onMen
   const openMenu = () => onMenu?.();
 
   return (
-    <div className="app wl-app">
+    <div className="app wl-app" onTouchStart={onPullStart} onTouchEnd={onPullEnd}>
       <section className="content">
         {page !== "home" && page !== "project" && (
           <button className="pageBack" type="button" onClick={goBack} aria-label="Go back">
