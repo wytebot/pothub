@@ -7,11 +7,13 @@ import { responseStyleFragment } from '../server/response-styles.js';
 const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const server = read('server/app.js'), lib = read('server/lib.js'), app = read('src/ui/App.jsx'), ws = read('src/ui/WorkspaceSection.jsx');
 
-test('every protocol mode tells the AI not to open with the conclusion, and explicit formats win', () => {
+test('every protocol mode lets the request decide the reply shape, and explicit formats win', () => {
   for (const mode of ENGINEERING_MODES) assert.ok(engineeringProtocol(mode).includes(RESPONSE_FLOW_RULES), mode);
-  assert.match(RESPONSE_FLOW_RULES, /Do not open your reply with the conclusion/);
-  assert.match(RESPONSE_FLOW_RULES, /then state the conclusion/);
-  assert.match(RESPONSE_FLOW_RULES, /the style or format instruction wins/);
+  assert.match(RESPONSE_FLOW_RULES, /never reuse one template for every reply/);
+  assert.match(RESPONSE_FLOW_RULES, /Do NOT open every reply with/);
+  assert.match(RESPONSE_FLOW_RULES, /vary the structure and wording/);
+  assert.match(RESPONSE_FLOW_RULES, /put it in the text box/);
+  assert.match(RESPONSE_FLOW_RULES, /always wins over these defaults/);
   assert.ok(engineeringProtocol('chat').indexOf(HONESTY_RULES) < engineeringProtocol('chat').indexOf(RESPONSE_FLOW_RULES));
 });
 
