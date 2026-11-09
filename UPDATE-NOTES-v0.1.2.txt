@@ -1,0 +1,33 @@
+PotHub 0.1.2 — affected-file patch
+
+Affected files in this ZIP:
+- src/ui/App.jsx
+  * Prevents repository-scoped developer chat threads from loading into Creator chat on startup or sync.
+  * Blocks opening repo:* chat IDs from the Creator chat history.
+  * Uses one-time account-link tickets for GitHub linking while preserving the existing account provider.
+- src/ui/WorkspaceSection.jsx
+  * Filters developer repository threads from the Creator chat library.
+  * Replaces the text-heavy prompt-library actions and large header actions with compact icon controls.
+  * Uses one-time Vercel link tickets for browser and Capacitor flows.
+- src/ui/styles.css
+  * Locks page/workspace scrolling and confines transcript scrolling to the chat transcript.
+  * Reduces header and library control footprint.
+- server/app.js
+  * Adds provider-neutral one-time tickets for GitHub and Vercel account linking.
+  * Validates the account/provider captured in the signed OAuth state.
+  * Removes the keyword-based canned developer-chat refusal and clarifies answer quality instructions.
+  * Allows Vercel linking from any authenticated PotHub account.
+- server/lib.js
+  * Accepts independent Vercel OAuth sessions as authenticated PotHub sessions.
+- package.json
+  * Version 0.1.2.
+- tests/*2026-11-05.test.mjs
+  * Regression checks for chat isolation, chat presentation, canned response removal, and independent OAuth linking.
+
+Apply by extracting this ZIP at the repository root and committing the changed files.
+
+Verification performed:
+- Node syntax checks passed for server/app.js and server/lib.js.
+- TypeScript JSX transpilation/parser checks passed for App.jsx and WorkspaceSection.jsx.
+- Six focused regression tests passed.
+- Full Next.js production build and live OAuth exchanges were not run in this environment; live OAuth still depends on valid provider credentials and callback URLs configured in Vercel/GitHub/Vercel OAuth settings.
