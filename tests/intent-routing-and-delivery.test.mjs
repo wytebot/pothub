@@ -83,7 +83,7 @@ test('output builders produce valid csv/json/docx and refuse to fake unsupported
 test('client routes by intent confidence and the server tells the model about routing and file format', () => {
   const ui = fs.readFileSync(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
   const server = fs.readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
-  assert.match(ui, /classifyRequest\(currentText,\{attachments:attach\}\)/);
+  assert.match(ui, /classifyRequest\((?:raw)?[cC]urrentText,\{attachments:attach\}\)/);
   // No Video agent (or an ambiguous request) never blocks: the prompt falls through to Chat.
   assert.match(ui, /if\(!configured\.length&&\(fn==='Video'\|\|intent\.confidence!=='high'\)\)return false/);
   assert.match(ui, /outputFormat:intent\.fileFormat/);
