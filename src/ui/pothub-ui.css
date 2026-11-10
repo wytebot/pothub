@@ -277,3 +277,5 @@ a.vx-url-btn:hover{border-color:var(--accent)}
 .pull-refresh-pill{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:50%;z-index:1600;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--panel,#161b22);border:1px solid var(--border,#30363d);color:var(--text,#e6edf3);box-shadow:0 8px 24px #0006;opacity:0;transform:translate(-50%,-60px);pointer-events:none;transition:opacity .15s}
 .pull-refresh-pill.ready{border-color:var(--accent,#6d5dfb);color:var(--accent,#6d5dfb)}
 .pull-refresh-pill.spin{animation:vxSpin .8s linear infinite}
+.app-loading-screen{flex-direction:column;gap:14px}
+.app-loading-text{font-size:.9rem;color:var(--muted,#9aa4b2)}

@@ -55,3 +55,11 @@ test('pull to refresh needs a long deliberate pull, is off in chat, and refreshe
   assert.match(app, /attachPullToRefresh\(\{enabled:\(\)=>sectionRef\.current!=='workspace'/);
   assert.match(app, /pothub:refresh/);
 });
+
+test('startup cannot hang on native storage: calls are timed, a watchdog opens the app, and the stuck step is named', () => {
+  const app = fs.readFileSync(new URL('../src/ui/App.jsx', import.meta.url), 'utf8');
+  assert.match(app, /withTimeout\(migrateNativeAgentKeys\(\)/);
+  assert.match(app, /withTimeout\(getNativeSession\(\)/);
+  assert.match(app, /waiting on: \$\{window\.__pothubBoot/);
+  assert.match(app, /Starting PotHub…/);
+});
