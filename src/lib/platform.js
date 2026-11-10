@@ -5,7 +5,8 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
 import { iconId, normalizeIcon } from './app-icon-data';
 export const native=()=>Capacitor.isNativePlatform();
-export async function openAuth(url){ if(native()) return Browser.open({url}); window.location.assign(url); }
+// Android: a Chrome Custom Tab that slides over the app (not a separate browser app) and returns through the ai.pothub.app deep link.
+export async function openAuth(url){ if(native()){ try{ return await Browser.open({url,presentationStyle:'popover',toolbarColor:'#0d1117'}) }catch{ return Browser.open({url}) } } window.location.assign(url); }
 export async function copyText(value){const text=String(value||'');try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return true}}catch{}const area=document.createElement('textarea');area.value=text;area.setAttribute('readonly','');area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();const ok=document.execCommand('copy');area.remove();if(!ok)throw new Error('Copy is unavailable in this browser. Select and copy the text manually.');return true}
 export async function shareText(title,text,url){ if(native()) return Share.share({title,text,url,dialogTitle:title}); if(navigator.share){try{return await navigator.share({title,text,url})}catch(e){if(e?.name==='AbortError')return {cancelled:true}}}await copyText(url||text);return {copied:true} }
 const PublicDownloads=registerPlugin('PublicDownloads');

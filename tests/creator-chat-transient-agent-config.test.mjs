@@ -11,7 +11,7 @@ test('Creator chat sends the selected locally configured BYOK agent config and s
 });
 
 test('Creator chat can continue with local configured agents when cloud sync is unavailable', () => {
-  assert.match(app, /await syncAgentWorkspaceNow\(\)\.catch\(e=>console\.warn\(.*?\)\);ags=await functionAgents\(agentFunction\)/);
+  assert.match(app, /await syncAgentWorkspaceNow\(\)\.catch\(e=>console\.warn\(.*?\)\);ags=await functionAgents\(agentFunction(?:,rawCurrentText)?\)/);
 });
 
 test('stream endpoint validates transient agent config and restricts it to selected agent IDs', () => {

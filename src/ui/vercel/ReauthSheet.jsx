@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, ExternalLink, KeyRound, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import Sheet from './Sheet.jsx';
+import TokenGuide from './TokenGuide.jsx';
 
 const dashboardFor = (scope) => (scope?.slug ? `https://vercel.com/${encodeURIComponent(scope.slug)}` : 'https://vercel.com/dashboard');
 const label = (scope) => (scope?.isDefault || (!scope?.slug && !scope?.teamId) ? (scope?.slug ? `${scope.slug} (default)` : 'Default scope') : scope.name || scope.slug || scope.teamId);
@@ -101,9 +102,10 @@ export default function ReauthSheet({ api, open, onClose, focus, onResolved, onR
                 )}
                 {bad && open_ && (
                   <form onSubmit={save} className="vx-token-form">
+                    <TokenGuide scopeName={sc.slug} />
                     <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={`Token for ${label(sc)}`} aria-label="Vercel access token" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck="false" />
                     <button type="submit" className="primary" disabled={busy || token.trim().length < 20}>{busy ? 'Testing…' : 'Verify & save'}</button>
-                    <p className="vx-hint">Create it at <a href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a> and choose <strong>{sc.slug || 'this scope'}</strong> as its scope. PotHub tests it on that scope first, stores it encrypted, and uses it only there.</p>
+                    <p className="vx-hint">PotHub tests the token on this scope first, stores it encrypted, and uses it only there.</p>
                     {formError && <p className="vx-field-error" role="alert">{formError}</p>}
                     <button type="button" className="secondary vx-small" onClick={() => { setActive(null); setToken(''); setFormError(''); }}>Cancel</button>
                   </form>

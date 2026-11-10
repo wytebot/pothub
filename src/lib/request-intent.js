@@ -1,4 +1,5 @@
 import { INTENT_LEXICON, IMAGE_EDIT_LEXICON, FILE_REQUEST_LEXICON, OUTPUT_FORMATS } from './intent-lexicon.js';
+import { parsePromptEnvelope } from './provider-mentions.js';
 
 export function requestedReplyLanguage(value) {
   const text=String(value||'').normalize('NFKC').toLocaleLowerCase();
@@ -195,6 +196,10 @@ export function classifyRequest(value, context = {}) {
   const base = (task, confidence, reason, extra = {}) => ({ task, confidence, reason, ...((fileFormat || multilingualFormat) ? { fileFormat: fileFormat || multilingualFormat } : {}), ...((extra.language||detectedLanguage)?{language:extra.language||detectedLanguage}:{}), ...extra });
 
   if (!raw) return base('chat', 'low', 'empty');
+  // Explicit directives in any wrapper ("/image …", "task: video", {"task":"image","prompt":"…"}) are commands, not guesses.
+  const envelope = parsePromptEnvelope(value);
+  if (envelope.task === 'image' || envelope.task === 'video') return base(envelope.task, 'high', `explicit ${envelope.task} directive`);
+  if (envelope.task === 'chat') return base('chat', 'low', 'explicit chat directive');
   const text = stripLead(raw);
   if (hasImage) {
     for (const [language, terms] of Object.entries(IMAGE_EDIT_LEXICON)) {
@@ -282,6 +287,8 @@ export function classifyRequest(value, context = {}) {
 export function classifyAgentFunction(value, context = {}) {
   const raw = String(value || '');
   const text = normalise(raw);
+  const directive = parsePromptEnvelope(raw).task;
+  if (directive === 'diagnosis' || directive === 'repair') return { task: directive, confidence: 'high', reason: `explicit ${directive} directive` };
   const attachments = Array.isArray(context.attachments) ? context.attachments : [];
   const hasEvidence = !!context.hasRepo || attachments.length > 0
     || /```|`[^`]+`|\b(?:function|const|let|class|import|export|return|def|async|await|stack trace|traceback|exception|error|bug|failure|failed test|build failed|npm test|compiler error|typeerror|syntaxerror|segfault)\b/i.test(raw);

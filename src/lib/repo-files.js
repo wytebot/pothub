@@ -52,7 +52,7 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
     const worker = async () => {
       while (next < paths.length) {
         const i = next++;
-        try { bodies[i] = { body: await read(repo, branch, paths[i]) }; } catch (e) { bodies[i] = { error: String(e?.message || 'could not be read').slice(0, 80) }; }
+        try { bodies[i] = { body: await read(repo, branch, paths[i]) }; } catch (e) { bodies[i] = { error: String(e?.message || 'could not be read').slice(0, 260) }; }
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, paths.length) }, worker));
@@ -73,7 +73,7 @@ export function createRepoFileSource({ api, store, now = Date.now, ttlMs = 5 * 6
   async function readRequested(repo, branch, paths) {
     const b = await readBundle(repo, branch, paths, { maxTotal: MAX_TOTAL_CHARS });
     const blocks = b.attachments.map((a, i) => `### ${b.attached[i]}\n\`\`\`\n${a.textContent}\n\`\`\``);
-    const text = [`Repository files you requested from ${repo}${branch ? ` (branch ${branch})` : ''}. These are the real, complete contents; continue your answer using them.`, ...blocks, b.failed.length ? `Could not be read: ${b.failed.join('; ')}.` : ''].filter(Boolean).join('\n\n');
+    const text = [`Repository files you requested from ${repo}${branch ? ` (branch ${branch})` : ''}. These are the real, complete contents; continue your answer using them.`, ...blocks, b.failed.length ? `Could not be read: ${b.failed.join('; ')}. A missing file means the path is wrong for this branch, not a platform or indexing fault: use a path from the outline (or one of the closest paths named above) and request it again. Do not tell the user to reset git or paste the file unless a corrected path also fails.` : ''].filter(Boolean).join('\n\n');
     return { text, attached: b.attached, failed: b.failed };
   }
 

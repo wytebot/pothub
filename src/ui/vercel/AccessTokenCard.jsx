@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExternalLink, KeyRound } from 'lucide-react';
+import TokenGuide from './TokenGuide.jsx';
 
 /**
  * "Sign in with Vercel" connections cannot create projects (Vercel keeps those API permissions in private beta), so
@@ -30,11 +31,12 @@ export default function AccessTokenCard({ api, importUrl, onSaved, onNotice }) {
       <div>
         <strong>Vercel didn’t allow PotHub to create this project</strong>
         <p>Vercel doesn’t let “Sign in with Vercel” connections create projects yet. Fix it once by adding a Vercel access token, or import this repository directly on Vercel.</p>
+        <TokenGuide />
         <form onSubmit={save} className="vx-token-form">
           <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste Vercel access token" aria-label="Vercel access token" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck="false" />
           <button type="submit" className="primary" disabled={busy || token.trim().length < 20}>{busy ? 'Checking…' : 'Save token'}</button>
         </form>
-        <p className="vx-hint">Create it at <a href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a>. Pick the scope (your account or team) that should own the project. The token is encrypted on the server and never shown again.</p>
+        <p className="vx-hint">The token is encrypted on the server and never shown again.</p>
         {error && <p className="vx-field-error">{error}</p>}
         {importUrl && <a className="secondary vx-open-link" href={importUrl} target="_blank" rel="noreferrer">Open in Vercel <ExternalLink size={14} aria-hidden="true" /></a>}
       </div>

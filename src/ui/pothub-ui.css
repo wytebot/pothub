@@ -248,3 +248,32 @@ a.vx-url-btn:hover{border-color:var(--accent)}
 .vx-scope-state{margin-left:auto;font-size:.75rem;color:var(--muted)}
 .vx-scope-actions{display:flex;flex-wrap:wrap;gap:8px}
 .vx-scope-actions a,.vx-scope-actions button{display:inline-flex;align-items:center;gap:6px}
+.vx-guide{margin:8px 0;padding-left:20px;display:grid;gap:6px;font-size:.88rem;line-height:1.45}
+.vx-guide a{display:inline-flex;align-items:center;gap:4px;font-weight:600}
+.is-native-app{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+.is-native-app body{overscroll-behavior:none}
+
+/* How it works + legal pages */
+.info-inline,.info-modal-body,.info-standalone{max-width:760px;margin:0 auto;padding:8px 16px calc(40px + env(safe-area-inset-bottom));line-height:1.6}
+.info-standalone{min-height:100dvh;background:var(--bg,#0d1117);color:var(--text,#e6edf3);padding-top:calc(20px + env(safe-area-inset-top))}
+.info-page h1{font-size:1.7rem;margin:12px 0 6px}
+.info-page h2{font-size:1.1rem;margin:22px 0 6px}
+.info-page p,.info-page li{font-size:.95rem}
+.info-page ul,.info-page ol{padding-left:22px;display:grid;gap:6px;margin:6px 0}
+.info-intro{color:var(--muted,#9aa4b2)}
+.info-tabs{display:flex;gap:8px;overflow-x:auto;padding:10px 0;margin:6px -4px;scrollbar-width:none}
+.info-tabs::-webkit-scrollbar{display:none}
+.info-tabs button,.info-tabs a{flex:none;min-height:38px;display:inline-flex;align-items:center;padding:0 14px;border-radius:999px;border:1px solid var(--border,#30363d);background:var(--panel2,#161b22);color:inherit;font-size:.85rem;text-decoration:none}
+.info-tabs .active{border-color:var(--accent,#6d5dfb);background:color-mix(in srgb,var(--accent,#6d5dfb) 22%,transparent)}
+.info-section{border-top:1px solid var(--border,#30363d)}
+.info-footer{display:flex;flex-direction:column;gap:6px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border,#30363d)}
+.info-mail{display:inline-flex;align-items:center;gap:8px;font-weight:600}
+.info-modal{position:fixed;inset:0;z-index:2000;display:flex;flex-direction:column;background:var(--bg,#0d1117)}
+.info-modal-bar{display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;border-bottom:1px solid var(--border,#30363d)}
+.info-modal-body{flex:1;overflow-y:auto;width:100%}
+.welcome-legal{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 14px;margin-top:10px;font-size:.78rem;opacity:.9}
+.welcome-legal button{background:none;border:0;color:inherit;text-decoration:underline;padding:6px 2px;min-height:32px;cursor:pointer}
+
+.pull-refresh-pill{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:50%;z-index:1600;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--panel,#161b22);border:1px solid var(--border,#30363d);color:var(--text,#e6edf3);box-shadow:0 8px 24px #0006;opacity:0;transform:translate(-50%,-60px);pointer-events:none;transition:opacity .15s}
+.pull-refresh-pill.ready{border-color:var(--accent,#6d5dfb);color:var(--accent,#6d5dfb)}
+.pull-refresh-pill.spin{animation:vxSpin .8s linear infinite}

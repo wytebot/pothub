@@ -192,6 +192,11 @@ export function extractReadRequests(text, knownPaths, max = MAX_READ_REQUEST) {
       const path = cleanPath(raw);
       if (!path) continue;
       if (known.has(path)) { if (add(path)) return found; continue; }
+      // Agents often get the case, a leading folder or the repo name slightly wrong: resolve to the one real file when it is unambiguous.
+      const lowered = path.toLowerCase(), stripped = lowered.replace(/^[^/]+\//, '');
+      let fuzzy = list.filter((p) => p.toLowerCase() === lowered);
+      if (fuzzy.length !== 1) fuzzy = list.filter((p) => p.toLowerCase().endsWith(`/${lowered}`) || p.toLowerCase() === stripped);
+      if (fuzzy.length === 1) { if (add(fuzzy[0])) return found; continue; }
       const dir = path.replace(/\/(?:\*\*?)?$/, '').replace(/\/+$/, '');
       if (!dir || dir === '*' || dir === '**') continue;
       const inside = list.filter((p) => p.startsWith(`${dir}/`) && !NOISE.test(p) && READABLE_SOURCE.test(p)).sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
@@ -199,6 +204,26 @@ export function extractReadRequests(text, knownPaths, max = MAX_READ_REQUEST) {
     }
   }
   return found;
+}
+
+/**
+ * Files the agent asked for that are not in the repository outline, each with the closest real paths, so the agent can be told
+ * exactly what to ask for instead of guessing (or blaming the platform) when a path is slightly wrong.
+ */
+export function extractUnresolvedReadRequests(text, knownPaths, max = 8) {
+  const list = knownPaths instanceof Set ? [...knownPaths] : [...(knownPaths || [])], resolved = new Set(extractReadRequests(text, list, 200));
+  const out = [];
+  for (const m of String(text || '').matchAll(READ_ONLY_CLOSED)) {
+    for (const raw of m[1].split('\n')) {
+      const path = cleanPath(raw);
+      if (!path || !/\.[A-Za-z0-9]{1,8}$/.test(path) || resolved.has(path) || list.includes(path)) continue;
+      const name = path.toLowerCase().split('/').pop().replace(/\.[^.]+$/, '');
+      const near = list.filter((p) => p.toLowerCase().includes(name)).slice(0, 5);
+      if (!out.some((x) => x.path === path)) out.push({ path, near });
+      if (out.length >= max) return out;
+    }
+  }
+  return out;
 }
 
 /** Search terms the agent asked for (literal text, one per line). */

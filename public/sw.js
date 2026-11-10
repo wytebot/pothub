@@ -94,3 +94,15 @@ self.addEventListener('fetch', event => {
 self.addEventListener('message', event => {
   if (event.data?.type === 'POTHUB_SKIP_WAITING') self.skipWaiting();
 });
+
+// Tapping a PotHub notification focuses the open app (or opens it) and tells it which chat to show.
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const chatId = String(event.notification?.data?.chatId || '');
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const target = clients.find(c => 'focus' in c);
+    if (target) { await target.focus(); target.postMessage({ type: 'POTHUB_NOTIFICATION_CLICK', chatId }); return; }
+    await self.clients.openWindow('/');
+  })());
+});

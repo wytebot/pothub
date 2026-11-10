@@ -50,6 +50,7 @@ export default function VercelBackendWorkspace({ api, onReconnect, onConnectGith
     }
   }, []);
   React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => { const again = () => load(); window.addEventListener('pothub:refresh', again); return () => window.removeEventListener('pothub:refresh', again); }, [load]);
 
   const selected = projects.find((p) => p.id === selectedId) || null;
 
