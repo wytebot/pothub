@@ -66,7 +66,10 @@
   window.addEventListener('securitypolicyviolation', function (event) { record('csp-violation', event.violatedDirective + ' ' + event.blockedURI); });
   document.addEventListener('DOMContentLoaded', function () {
     window.setTimeout(function () {
-      var root = document.getElementById('root');
+      // Next.js mounts into #__next; #root is used by Vite/CRA-style apps.
+      // This repository is Next.js, so checking only #root reports a false blank
+      // screen even after the page has rendered successfully.
+      var root = document.getElementById('__next') || document.getElementById('root');
       var hasText = !!(root && (root.innerText || root.textContent || '').trim().length > 0);
       var hasVisibleControl = false;
       if (root) Array.prototype.some.call(root.querySelectorAll('button,a,input,textarea,select,img,svg,canvas,[role=button]'), function (el) {
