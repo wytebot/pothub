@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "518294365386",
+    "project_id": "pothub-ca2a1",
+    "storage_bucket": "pothub-ca2a1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:518294365386:android:95cc6b56effc9499c5c033",
+        "android_client_info": {
+          "package_name": "app.pothubself.vercel"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "518294365386-s5pbopm90ud0dn8e5cj37lv0kposub75.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.pothubself.vercel",
+            "certificate_hash": "1cc3760d3fe88884eebfdcd4445273f7bde298d4"
+          }
+        },
+        {
+          "client_id": "518294365386-g2cvpb1d344apo1jggh72t03povugf88.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBPNA5lzOml2y37acjy0eQSO5keU_8_k88"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "518294365386-g2cvpb1d344apo1jggh72t03povugf88.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
