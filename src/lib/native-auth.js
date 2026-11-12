@@ -14,17 +14,36 @@ export const GOOGLE_WEB_CLIENT_ID = String(process.env.NEXT_PUBLIC_GOOGLE_WEB_CL
 const cancelled = () => Object.assign(new Error('Sign-in cancelled.'), { code: 'GOOGLE_CANCELLED' });
 const isCancel = (e) => /cancel|dismiss|closed|12501|12502|-5\b|no credential/i.test(`${e?.code || ''} ${e?.message || ''}`);
 
-/** Native account picker -> Firebase credential -> PotHub session. Throws GOOGLE_CANCELLED when the person closes the chooser. */
-export async function signInWithNativeGoogle(api) {
-  if (!GOOGLE_WEB_CLIENT_ID) throw Object.assign(new Error('Native Google sign-in is not configured (NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID).'), { code: 'GOOGLE_NOT_CONFIGURED' });
+/** Reads the Google ID token from the Android account picker. Resolves to a string; throws GOOGLE_CANCELLED when the person closes the picker. */
+async function pickGoogleIdToken() {
+  // APK built by WyBuild: its bridge wraps @capacitor-firebase/authentication (Credential Manager account sheet, no browser).
+  const bridgeGoogle = typeof window !== 'undefined' ? window.WyBuildNative?.auth?.google : null;
+  if (typeof bridgeGoogle === 'function') {
+    // skipNativeAuth: only return the Google credential; PotHub signs in to the web Firebase SDK and exchanges the session itself.
+    const r = await bridgeGoogle({ skipNativeAuth: true });
+    if (r?.ok === false) {
+      if (isCancel({ message: r.error })) throw cancelled();
+      throw Object.assign(new Error(r.error || 'The Google account picker could not open.'), { code: 'GOOGLE_NATIVE_FAILED' });
+    }
+    const idToken = r?.credential?.idToken;
+    if (!idToken) throw Object.assign(new Error('Google did not return an identity token. Check that the Firebase Google provider is enabled and this APK\'s SHA-1 is added to the Firebase Android app.'), { code: 'GOOGLE_NO_TOKEN' });
+    return idToken;
+  }
+  // Older Capacitor builds that still ship the Google Auth plugin.
+  if (!GOOGLE_WEB_CLIENT_ID) throw Object.assign(new Error('Native Google sign-in is not available in this APK build.'), { code: 'GOOGLE_NOT_CONFIGURED' });
   const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-  let result;
   try {
     await GoogleAuth.initialize({ clientId: GOOGLE_WEB_CLIENT_ID, scopes: ['profile', 'email'], grantOfflineAccess: false });
-    result = await GoogleAuth.signIn();
+    const result = await GoogleAuth.signIn();
+    const idToken = result?.authentication?.idToken;
+    if (!idToken) throw Object.assign(new Error('Google did not return an identity token. Check the Web client ID and the Android OAuth client SHA-1.'), { code: 'GOOGLE_NO_TOKEN' });
+    return idToken;
   } catch (e) { if (isCancel(e)) throw cancelled(); throw e; }
-  const idToken = result?.authentication?.idToken;
-  if (!idToken) throw Object.assign(new Error('Google did not return an identity token. Check the Web client ID and the Android OAuth client SHA-1.'), { code: 'GOOGLE_NO_TOKEN' });
+}
+
+/** Native account picker -> Firebase credential -> PotHub session. Throws GOOGLE_CANCELLED when the person closes the chooser. */
+export async function signInWithNativeGoogle(api) {
+  const idToken = await pickGoogleIdToken();
   const credential = await signInWithCredential(firebaseAuth, GoogleAuthProvider.credential(idToken));
   const firebaseToken = await credential.user.getIdToken();
   const d = await api('/api/auth/firebase-exchange', { method: 'POST', body: JSON.stringify({ idToken: firebaseToken }), timeoutMs: 15000, noRetry: true });
