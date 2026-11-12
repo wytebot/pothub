@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "518294365386-s5pbopm90ud0dn8e5cj37lv0kposub75.apps.googleusercontent.com",
+          "client_id": "518294365386-3g1um5hn9gl85k095h2qoelme8m06sel.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "app.pothubself.vercel",
-            "certificate_hash": "1cc3760d3fe88884eebfdcd4445273f7bde298d4"
+            "certificate_hash": "1add8ae4ac21f9ae21cef0fc6cf673b05aafc9be"
           }
         },
         {
