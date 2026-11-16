@@ -1,0 +1,14 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
+import { platform } from './platform';
+import { startAnalytics } from './firebase';
+import { startAccountSync } from './auth/sync';
+import './styles.css';
+
+platform.init();
+startAnalytics();
+startAccountSync();
+// After a bank (3-D Secure) page, send the customer back to Billing to confirm the payment.
+if (location.search && localStorage.getItem('billing.pending')) location.hash = '/billing';
+createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
