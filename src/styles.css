@@ -141,7 +141,12 @@ input[type=range] { accent-color: #ececec; width: 100%; } input[type=color] { pa
 .clip.sel { outline: 2px solid var(--focus); outline-offset: 1px; } .clip span { overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .clip .h { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; } .clip .h.l { left: 0; } .clip .h.r { right: 0; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); margin-left: 64px; pointer-events: none; }
-@media (max-width: 900px) { .ed-main { grid-template-columns: 1fr; } .ed-side { max-height: none; } .ed-center { order: -1; } }
+/* Phone layout, like CapCut: preview and controls first, the timeline right under them, then the selected clip's properties, then the media list. */
+@media (max-width: 900px) {
+  .ed-main { display: contents; } .ed-side { max-height: none; }
+  .ed-center { order: 1; } .ed-timeline { order: 2; } .ed-props { order: 3; } .ed-media { order: 4; }
+  .stage { height: min(38vh, 320px); }
+}
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin-top: 8px; } .check input { margin-top: 3px; }
 .small-break { word-break: break-all; } code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; }
 .ptr { display: grid; place-items: center; color: var(--muted); font-size: 12px; overflow: hidden; }
@@ -270,3 +275,25 @@ input[type='search'] { width: 100%; }
 .start { animation: pulse 2.8s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,.25); } 50% { box-shadow: 0 0 0 14px rgba(255,255,255,0); } }
 @media (prefers-reduced-motion: reduce) { .marquee { overflow-x: auto; } .marquee-track { animation: none; } .aurora-bg i, .float-wrap .float, .welcome-content h1, .start { animation: none; } .float-wrap .float { opacity: .5; } }
+
+/* AI Providers: default ticks */
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.row.wrap { flex-wrap: wrap; gap: 6px 14px; }
+
+/* Creative Editor additions */
+.cv { touch-action: none; cursor: move; }
+.ed-transport { display: flex; flex-direction: column; gap: 8px; }
+.ed-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ed-group .btn { padding: 6px 10px; min-height: 34px; font-size: 13px; } .ed-group .time { margin-left: 4px; font-variant-numeric: tabular-nums; }
+.btn[aria-pressed='true'] { border-color: var(--focus); background: var(--surface2); }
+.clip.has-thumb { background-size: auto 100%; background-repeat: repeat-x; background-position: left center; } .clip.has-thumb span { text-shadow: 0 1px 2px #000; }
+.clip .wave { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; } .wave path { stroke: rgba(255, 255, 255, .55); stroke-width: 1; vector-effect: non-scaling-stroke; fill: none; }
+.clip span { position: relative; }
+.guide { position: absolute; top: 0; bottom: 0; width: 1px; background: #ffd24d; margin-left: 64px; pointer-events: none; z-index: 2; }
+.tl-empty { position: absolute; left: 76px; top: 56px; margin: 0; pointer-events: none; }
+.ruler span { white-space: nowrap; }
+.row .check { margin-top: 0; }
+@media (pointer: coarse) {
+  .clip .h { width: 20px; } .trow { height: 50px; } .clip { top: 5px; height: 40px; } .tlabel { top: 17px; } .ruler { height: 28px; } .ruler span { height: 24px; padding-top: 2px; }
+  .ed-group .btn { min-height: 40px; }
+}

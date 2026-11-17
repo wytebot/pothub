@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { unlock, lock, isUnlocked } from '../vault/auth';
-import { addKey, getSecret, listKeys, removeKey, setStatus, storageKind, type KeyMeta, type ProviderId } from '../vault/vault';
+import { addKey, defaultKeys, getSecret, isDefaultFor, listKeys, removeKey, setDefault, setStatus, storageKind, updateKey, type KeyMeta, type ProviderId } from '../vault/vault';
 import { testKey } from '../models/providers';
-import { PROVIDERS, PROVIDER_IDS } from '../models/providerInfo';
+import { FNS, FN_LABEL, PROVIDERS, PROVIDER_IDS, fieldsOf, fnsOf, joinSecret, splitSecret } from '../models/providerInfo';
 import { IMAGE_MODELS, VIDEO_MODELS } from '../models/registry';
 import { dropCatalogCache } from '../agent/detect';
 import { Select } from '../ui/Select';
@@ -12,31 +12,49 @@ const badge: Record<KeyMeta['status'], string> = { untested: 'Not tested', ok: '
 const caps = (p: ProviderId) => [PROVIDERS[p].image && 'Images', PROVIDERS[p].video && 'Video'].filter(Boolean).join(' · ');
 const modelNames = (p: ProviderId) => [...IMAGE_MODELS, ...VIDEO_MODELS].filter((m) => m.provider === p).map((m) => m.name);
 
+/** One dialog for both adding a key and editing a saved one. */
+interface Editor { provider: ProviderId; label: string; edit?: KeyMeta; /** edit only: the saved secret has every box, so an empty box keeps its saved value */ complete?: boolean; }
+
 export function Providers() {
   const [open, setOpen] = useState(isUnlocked());
   const [note, setNote] = useState('');
   const [err, setErr] = useState('');
   const [keys, setKeys] = useState<KeyMeta[]>(listKeys());
-  const [adding, setAdding] = useState<{ provider: ProviderId; label: string; replace?: KeyMeta } | null>(null);
-  const [secret, setSecret] = useState('');
+  const [dlg, setDlg] = useState<Editor | null>(null);
+  const [vals, setVals] = useState<Record<string, string>>({});
   const [removing, setRemoving] = useState<KeyMeta | null>(null);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState<{ id: string; text: string; error?: boolean } | null>(null);
   const [q, setQ] = useState('');
   const refresh = () => { dropCatalogCache(); setKeys(listKeys()); };
+  const close = () => { setVals({}); setDlg(null); setErr(''); };
 
-  useEffect(() => () => { setSecret(''); }, []);
+  useEffect(() => () => { setVals({}); }, []);
 
   const doUnlock = async () => {
     setErr(''); const r = await unlock();
     if (r.ok) { setOpen(true); setNote(r.note ?? ''); } else setErr(r.reason);
   };
+  const startAdd = (provider: ProviderId) => { setErr(''); setVals({}); setDlg({ provider, label: '' }); };
+  const startEdit = async (k: KeyMeta) => {
+    setErr(''); setVals({}); let complete = false;
+    try { complete = splitSecret(k.provider, await getSecret(k.id)).length === fieldsOf(k.provider).length; } catch { /* nothing readable: ask for every box */ }
+    setDlg({ provider: k.provider, label: k.label, edit: k, complete });
+  };
   const save = async () => {
-    if (!adding) return; setErr('');
+    if (!dlg) return; setErr('');
+    const entered = fieldsOf(dlg.provider).map((f) => (vals[f.id] ?? '').trim());
     try {
-      await addKey(adding.provider, adding.label, secret);
-      if (adding.replace) await removeKey(adding.replace.id);
-      setSecret(''); setAdding(null); refresh();
+      if (!dlg.edit) await addKey(dlg.provider, dlg.label, joinSecret(dlg.provider, entered));
+      else {
+        let secret: string | undefined;
+        if (entered.some(Boolean)) {
+          const old = dlg.complete ? splitSecret(dlg.provider, await getSecret(dlg.edit.id)) : [];
+          secret = joinSecret(dlg.provider, entered.map((v, i) => v || old[i] || ''));
+        }
+        await updateKey(dlg.edit.id, { label: dlg.label, secret });
+      }
+      close(); refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : 'The key could not be saved.'); }
   };
   const test = async (k: KeyMeta) => {
@@ -60,7 +78,8 @@ export function Providers() {
 
   const connected = PROVIDER_IDS.filter((p) => keys.some((k) => k.provider === p));
   const rest = PROVIDER_IDS.filter((p) => !connected.includes(p) && PROVIDERS[p].name.toLowerCase().includes(q.trim().toLowerCase()));
-  const startAdd = (provider: ProviderId) => { setErr(''); setSecret(''); setAdding({ provider, label: '' }); };
+  const fields = dlg ? fieldsOf(dlg.provider) : [];
+  const canSave = !!dlg && (dlg.edit ? dlg.label.trim() !== dlg.edit.label || fields.some((f) => (vals[f.id] ?? '').trim()) : fields.every((f) => (vals[f.id] ?? '').trim()));
 
   return (
     <section className="page">
@@ -77,6 +96,16 @@ export function Providers() {
         You pay each provider directly for what you generate. Your keys are kept in {storageKind()} and are never shown again after saving. Anyone with full access to your unlocked device could still reach them, so use keys with spending limits.
       </div>
 
+      {keys.length > 0 && (
+        <div className="panel stack">
+          <h2>Default routing</h2>
+          {FNS.map((f) => { const chain = defaultKeys(f); return (
+            <p className="small" key={f}><strong>{FN_LABEL[f]}:</strong> {chain.length ? chain.map((k) => `${PROVIDERS[k.provider].name} (${k.label})`).join(' → ') : <span className="error-text">no default key, so this is switched off</span>}</p>
+          ); })}
+          <p className="muted small">Pothub only uses keys ticked as a default, for the functions you ticked. If one fails (rejected key, no credit, rate limit), it moves to the next default for that function, in the order shown.</p>
+        </div>
+      )}
+
       {connected.map((p) => {
         const mine = keys.filter((k) => k.provider === p);
         return (
@@ -90,8 +119,14 @@ export function Providers() {
                   <div className="grow"><div className="title">{k.label}</div><div className="muted small">•••• {k.last4}</div></div>
                   <span className={`chip ${k.status}`}>{badge[k.status]}</span>
                   <button className="btn" disabled={busy === k.id} onClick={() => test(k)}>{busy === k.id ? 'Testing…' : 'Test'}</button>
-                  <button className="btn" onClick={() => { setErr(''); setSecret(''); setAdding({ provider: k.provider, label: k.label, replace: k }); }}>Replace</button>
+                  <button className="btn" onClick={() => startEdit(k)}>Edit</button>
                   <button className="btn" onClick={() => setRemoving(k)}>Remove</button>
+                  <div className="full row wrap small">
+                    <span className="muted">Default for:</span>
+                    {fnsOf(k.provider).map((f) => (
+                      <label className="check" key={f}><input type="checkbox" checked={isDefaultFor(k, f)} onChange={(e) => { setDefault(k.id, f, e.target.checked); refresh(); }} /> {FN_LABEL[f]}</label>
+                    ))}
+                  </div>
                   {msg?.id === k.id && <div className={`full small ${msg.error ? 'error-text' : 'muted'}`} role="status">{msg.text}</div>}
                 </li>
               ))}
@@ -118,15 +153,19 @@ export function Providers() {
         <p className="muted small">Beta providers were added recently. If one fails, press Test on its key and check the message.</p>
       </div>
 
-      {adding && (
-        <Dialog title={adding.replace ? 'Replace key' : 'Add key'} onClose={() => { setSecret(''); setAdding(null); }} actions={<>
-          <button className="btn" onClick={() => { setSecret(''); setAdding(null); }}>Cancel</button>
-          <button className="btn primary" disabled={!secret.trim()} onClick={save}>Save key</button>
+      {dlg && (
+        <Dialog title={dlg.edit ? `Edit ${PROVIDERS[dlg.provider].name} key` : 'Add key'} onClose={close} actions={<>
+          <button className="btn" onClick={close}>Cancel</button>
+          <button className="btn primary" disabled={!canSave} onClick={save}>{dlg.edit ? 'Save changes' : 'Save key'}</button>
         </>}>
-          {!adding.replace && <Select<ProviderId> label="Provider" value={adding.provider} onChange={(v) => setAdding({ ...adding, provider: v })} options={PROVIDER_IDS.map((v) => ({ value: v, label: PROVIDERS[v].name }))} />}
-          <label className="field">Name<input value={adding.label} maxLength={40} placeholder="Personal key" onChange={(e) => setAdding({ ...adding, label: e.target.value })} /></label>
-          <label className="field">API key<input type="password" autoComplete="off" spellCheck={false} value={secret} onChange={(e) => setSecret(e.target.value)} /></label>
-          <p className="muted small">{PROVIDERS[adding.provider].keyHint ?? `Get a key from ${PROVIDERS[adding.provider].keyFrom}.`}</p>
+          {!dlg.edit && <Select<ProviderId> label="Provider" value={dlg.provider} onChange={(v) => { setVals({}); setDlg({ ...dlg, provider: v }); }} options={PROVIDER_IDS.map((v) => ({ value: v, label: PROVIDERS[v].name }))} />}
+          <label className="field">Name<input value={dlg.label} maxLength={40} placeholder="Personal key" onChange={(e) => setDlg({ ...dlg, label: e.target.value })} /></label>
+          {fields.map((f) => (
+            <label className="field" key={f.id}>{f.label}<input type="password" autoComplete="off" spellCheck={false} value={vals[f.id] ?? ''} placeholder={dlg.edit && dlg.complete ? 'Leave empty to keep the saved value' : ''} onChange={(e) => setVals({ ...vals, [f.id]: e.target.value })} /></label>
+          ))}
+          {dlg.edit && !dlg.complete && fields.length > 1 && <p className="small error-text">This key was saved without all of its values. Enter every box below.</p>}
+          {dlg.edit && (dlg.complete || fields.length === 1) && <p className="muted small">Saved secrets are never shown. Fill a box only to replace it. Your default ticks stay as they are.</p>}
+          <p className="muted small">{PROVIDERS[dlg.provider].keyHint ?? `Get a key from ${PROVIDERS[dlg.provider].keyFrom}.`}</p>
           {err && <p className="error-text" role="alert">{err}</p>}
         </Dialog>
       )}
