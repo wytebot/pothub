@@ -12,7 +12,9 @@ const MESSAGES: Record<string, string> = {
   'auth/popup-closed-by-user': '',
   'auth/cancelled-popup-request': '',
   'auth/network-request-failed': 'No connection. Check your internet and try again.',
-  'auth/unauthorized-domain': 'Google sign-in is not enabled for this site yet. Please contact support.',
+  'auth/unauthorized-domain': 'Google sign-in is not enabled for this site yet. Add pothub-self.vercel.app to Firebase Authorized domains and add its /__/auth/handler URL to the Google OAuth client.',
+  'auth/invalid-api-key': 'Firebase rejected this app configuration. Check the Firebase web app API key.',
+  'auth/operation-not-supported-in-this-environment': 'This browser could not start Google sign-in. Open Pothub in Chrome and try again.',
   'auth/operation-not-allowed': 'Google sign-in is temporarily unavailable. Please contact support.',
   'auth/account-exists-with-different-credential': 'This email is already registered with a different sign-in method.',
   'auth/too-many-requests': 'Too many attempts. Wait a moment and try again.',
@@ -26,10 +28,10 @@ const codeOf = (e: unknown): string => {
 export type SignInResult = { ok: true } | { ok: false; message: string };
 
 /**
- * Browser: Google's account list opens in a pop-up the moment the button is pressed (always asking which account),
- * and falls back to a full-page redirect only if the browser cannot open pop-ups.
- * Android: the native Google account list, whose token is handed to Firebase.
- * A dismissed account list returns a quiet cancellation.
+ * PWA/browser: use a full-page Firebase redirect so the Google account chooser
+ * opens in the current standalone window. The Vercel /__/auth proxy keeps the
+ * helper on the app's origin, avoiding Chrome's third-party storage partitioning.
+ * Android: keep the native Google account picker and exchange its token with Firebase.
  */
 export async function signInWithGoogle(): Promise<SignInResult> {
   try {
@@ -44,12 +46,14 @@ export async function signInWithGoogle(): Promise<SignInResult> {
       // mobile browsers/PWAs where popup windows may be silently suppressed.
       const p = new GoogleAuthProvider();
       p.setCustomParameters({ prompt: 'select_account' });
+      sessionStorage.setItem('auth.redirectPending', '1');
       await signInWithRedirect(auth, p);
       // The browser leaves this page; Firebase completes the session on return.
       return { ok: true };
     }
     return { ok: true };
   } catch (e) {
+    if (!Capacitor.isNativePlatform()) sessionStorage.removeItem('auth.redirectPending');
     const c = codeOf(e);
     if (c in MESSAGES) return { ok: false, message: MESSAGES[c] };
     if (c === 'cancelled') return { ok: false, message: '' };
@@ -68,17 +72,59 @@ export async function signOut() {
 export async function idToken(): Promise<string | null> { try { return (await auth.currentUser?.getIdToken()) ?? null; } catch { return null; } }
 export const currentMe = (): Me | null => toMe(auth.currentUser);
 
-/** undefined = still restoring the saved session (render nothing that flickers), null = signed out. */
+let redirectResultTask: Promise<void> | null = null;
+
+function publishRedirectError(message: string) {
+  sessionStorage.removeItem('auth.redirectPending');
+  sessionStorage.setItem('auth.redirectError', message);
+  window.dispatchEvent(new Event('auth:redirect-error'));
+}
+
+function resolveBrowserRedirectOnce() {
+  if (redirectResultTask) return redirectResultTask;
+  redirectResultTask = getRedirectResult(auth).then((result) => {
+    const wasPending = sessionStorage.getItem('auth.redirectPending') === '1';
+    sessionStorage.removeItem('auth.redirectPending');
+    if (wasPending && !result?.user && !auth.currentUser) {
+      publishRedirectError('Google returned without completing sign-in. Please try again.');
+    }
+  }).catch((error: unknown) => {
+    const code = codeOf(error);
+    const message = code in MESSAGES ? MESSAGES[code] : 'Google sign-in could not be completed. Please try again.';
+    publishRedirectError(message || 'Google sign-in was cancelled.');
+  });
+  return redirectResultTask;
+}
+
+/** undefined = briefly restoring the saved session; null = signed out. */
 export function useMe(): Me | null | undefined {
   const [me, setMe] = useState<Me | null | undefined>(() => (auth.currentUser ? toMe(auth.currentUser) : undefined));
   useEffect(() => {
-    // Only the browser can return from a redirect; the Android app has no redirect step.
-    if (!Capacitor.isNativePlatform()) void getRedirectResult(auth).catch((error: unknown) => {
-      const code = codeOf(error);
-      const message = code in MESSAGES ? MESSAGES[code] : 'Google sign-in could not be completed. Please try again.';
-      if (message) { sessionStorage.setItem('auth.redirectError', message); window.dispatchEvent(new Event('auth:redirect-error')); }
+    let active = true;
+    let resolved = false;
+    // Never leave the installed PWA on an indefinite black spinner if redirect
+    // state cannot be restored (for example, stale browser storage or no network).
+    const fallback = window.setTimeout(() => {
+      if (active && !resolved) {
+        resolved = true;
+        setMe(null);
+      }
+      if (sessionStorage.getItem('auth.redirectPending') === '1') {
+        publishRedirectError('Google sign-in is taking too long to return. Check your connection and try again.');
+      }
+    }, 5000);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      resolved = true;
+      window.clearTimeout(fallback);
+      setMe(toMe(u));
     });
-    return onAuthStateChanged(auth, (u) => setMe(toMe(u)));
+    // Only browsers return from Firebase's redirect handler; Android uses native credentials.
+    if (!Capacitor.isNativePlatform()) void resolveBrowserRedirectOnce();
+    return () => {
+      active = false;
+      window.clearTimeout(fallback);
+      unsubscribe();
+    };
   }, []);
   return me;
 }

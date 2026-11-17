@@ -242,7 +242,8 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--accent); }
 .send-button.stop { font-size: 13px; }
 .send-button:disabled { opacity: .3; cursor: default; }
 .send-button span { transform: translateY(-1px); }
-.auth-loading { min-height: 100dvh; display: grid; place-items: center; background: #0d0d0d; }
+.auth-loading { min-height: 100dvh; display: grid; align-content: center; justify-items: center; gap: 12px; background: #0d0d0d; color: #a8a8a8; }
+.auth-loading p { margin: 0; font-size: 13px; }
 .chip.beta { margin-left: 8px; font-size: 10px; padding: 1px 7px; vertical-align: middle; color: var(--warn); border-color: #5a4a1e; }
 .popover { max-height: min(60vh, 360px); overflow-y: auto; }
 input[type='search'] { width: 100%; }

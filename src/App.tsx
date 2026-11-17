@@ -65,7 +65,7 @@ export function App() {
   useEffect(() => { getStorageInfo().then((i) => setLow(i.supported && i.quota > 0 && i.usage / i.quota > 0.85)).catch(() => {}); }, [path]);
   useEffect(() => { if (!drawer) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [drawer]);
 
-  if (me === undefined) return <div className="auth-loading" aria-label="Loading"><span className="spin" /></div>;
+  if (me === undefined) return <div className="auth-loading" role="status" aria-label="Checking sign-in"><span className="spin" /><p>Checking your sign-in…</p></div>;
   if (!me) return <Welcome />;
 
   const link = (r: Route) => (

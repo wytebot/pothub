@@ -1,7 +1,9 @@
 # Pothub (formerly AI Creative Studio)
 
 ## Build 6: Google sign-in and live workflow
-**Sign-in (Firebase project `pothub-ca2a1`)** - Browser: Google account popup (`signInWithPopup`, no redirect). Android APK: native Google account sheet via `@capacitor-firebase/authentication` with `skipNativeAuth`, then the idToken signs the Firebase JS SDK in, so both share one user. Optional: signed-in users get their premium licence saved to their account and restored on a new device (`/api/account/link`, `/api/account/license`, verified with the Firebase Admin SDK).
+**Sign-in (Firebase project `pothub-ca2a1`)** - Browser/PWA: full-page Google account chooser via Firebase `signInWithRedirect`; Vercel proxies `/__/auth/*` to the Firebase auth helper on the same origin to avoid Chrome third-party storage partitioning. Android APK: native Google account sheet via `@capacitor-firebase/authentication` with `skipNativeAuth`, then the idToken signs the Firebase JS SDK in, so both share one user. Optional: signed-in users get their premium licence saved to their account and restored on a new device (`/api/account/link`, `/api/account/license`, verified with the Firebase Admin SDK).
+
+**Google OAuth setup for the Vercel PWA** - In Firebase Authentication, add `pothub-self.vercel.app` under Authorized domains. In the Google OAuth client used by Firebase Authentication, add the exact authorized redirect URI `https://pothub-self.vercel.app/__/auth/handler` (keep the existing `https://pothub-ca2a1.firebaseapp.com/__/auth/handler` too). The app config automatically uses `pothub-self.vercel.app` as `authDomain` on that host, and `vercel.json` proxies the `/__/auth/*` helper endpoints. Do not set `VITE_FIREBASE_AUTH_DOMAIN` back to `pothub-ca2a1.firebaseapp.com` for this production PWA. After deploying, close the installed PWA completely and reopen it so the updated service worker is activated.
 
 One-time Firebase console setup:
 1. Authentication > Sign-in method: enable **Google**.
@@ -15,7 +17,7 @@ Server: `EXTRA_ORIGINS` for extra web origins; `https://localhost` (the APK orig
 **Live workflow terminal** - every image/video run streams steps as they happen: parse commands, detect models, route, init, generate/submit, poll, download, save. It is a real pipeline rendered as terminal lines (no shell). Before each run the app asks your connected providers which models exist now (6 s cap, cached 15 min), hides retired models, adds newer Gemini image / Veo and OpenAI gpt-image models it finds, and falls back to the next model or provider if one fails (never after part of a batch was already paid for, never on safety blocks or cancel).
 Prompt commands: `/fast /quality /9:16 /n 3 /model <id> /image /video /enhance /plain /models`. `/models` lists what is available and generates nothing. Optional prompt sharpening with the cheapest current Gemini text model (Settings, off by default).
 
-Not verified here (no network in the authoring sandbox): `npm install`, `tsc`, `vitest`, a real Google sign-in, real provider calls. Syntax of every file was checked and the command parser/router were run. Model ids were checked against Google docs on 16 Nov 2026; Veo 3.1 aspect/duration options beyond 16:9 and 8 s are assumptions.
+Auth-patch verification: the ZIP structure and JSON configuration files were validated. Dependency installation, TypeScript/Vitest execution, and a live Google OAuth sign-in could not be run in this environment. Test the deployed PWA after completing the Firebase and Google OAuth console steps below.
 
 ## Run (repository root)
     npm install
