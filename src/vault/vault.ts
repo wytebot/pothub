@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { uid } from '../storage/db';
 
-export type ProviderId = 'openai' | 'gemini';
+export type ProviderId = 'openai' | 'gemini' | 'xai' | 'stability' | 'bfl' | 'ideogram' | 'recraft' | 'together' | 'leonardo' | 'luma' | 'minimax' | 'zhipu' | 'byteplus' | 'kling' | 'huggingface' | 'fal' | 'replicate';
 export type KeyStatus = 'untested' | 'ok' | 'invalid' | 'error';
 export interface KeyMeta { id: string; provider: ProviderId; label: string; last4: string; createdAt: number; status: KeyStatus; testedAt?: number; }
 
@@ -52,7 +52,7 @@ const native = {
 const backend = () => (Capacitor.isNativePlatform() ? native : web);
 
 export const listKeys = (): KeyMeta[] => readMeta().sort((a, b) => b.createdAt - a.createdAt);
-export const storageKind = () => (Capacitor.isNativePlatform() ? 'Android Keystore secure storage' : 'browser Web Crypto (AES-GCM)');
+export const storageKind = () => (Capacitor.isNativePlatform() ? 'your phone\'s secure storage' : 'your browser\'s encrypted storage');
 
 export async function addKey(provider: ProviderId, label: string, secret: string): Promise<KeyMeta> {
   const s = secret.trim();
