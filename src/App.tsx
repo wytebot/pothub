@@ -14,12 +14,12 @@ import { Settings } from './pages/Settings';
 import { AppearancePage } from './pages/Appearance';
 import { ImageStudio } from './pages/ImageStudio';
 import { getStorageInfo } from './storage/quota';
-import { SidebarAccount } from './ui/Account';
+import { useMe } from './auth/session';
+import { startJobPoller } from './agent/jobs';
 
 type IconName = Parameters<typeof Icon>[0]['name'];
 interface Route { path: string; label: string; icon?: IconName; el: ReactNode; }
 
-const LATER = 'a later build';
 const primary: Route[] = [
   { path: '/', label: 'Home', icon: 'home', el: <Home /> },
   { path: '/image', label: 'Image Studio', icon: 'image', el: <ImageStudio /> },
@@ -49,7 +49,7 @@ function useRoute() {
 
 export function App() {
   const path = useRoute();
-  const [seen, setSeen] = useState(() => localStorage.getItem('welcome.seen') === '1');
+  const me = useMe();
   const [drawer, setDrawer] = useState(false);
   const [more, setMore] = useState(() => localStorage.getItem('ui.more') === '1');
   const [low, setLow] = useState(false);
@@ -60,11 +60,13 @@ export function App() {
   const route: Route = all.find((r) => r.path === path) ?? (path.startsWith('/editor/') ? { path: '/editor', label: 'Creative Editor', icon: 'editor' as IconName, el: <Editor projectId={path.slice(8)} /> } : path.startsWith('/legal/') ? { path: '/legal', label: 'Legal documents', el: <Legal id={path.slice(7)} /> } : primary[0]);
 
   useEffect(() => setDrawer(false), [path]);
+  useEffect(() => (me ? startJobPoller(8000) : undefined), [me]);
   useEffect(() => { document.title = `${route.label} · Pothub`; }, [route]);
   useEffect(() => { getStorageInfo().then((i) => setLow(i.supported && i.quota > 0 && i.usage / i.quota > 0.85)).catch(() => {}); }, [path]);
   useEffect(() => { if (!drawer) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [drawer]);
 
-  if (!seen) return <Welcome onStart={() => { localStorage.setItem('welcome.seen', '1'); setSeen(true); if (!location.hash) location.hash = '/'; }} />;
+  if (me === undefined) return <div className="auth-loading" aria-label="Loading"><span className="spin" /></div>;
+  if (!me) return <Welcome />;
 
   const link = (r: Route) => (
     <a key={r.path} href={`#${r.path}`} className={`nav-link${r.path === route.path ? ' current' : ''}`} aria-current={r.path === route.path ? 'page' : undefined}>
@@ -83,15 +85,14 @@ export function App() {
         <div className="brand desk">Pothub</div>
         <div className="nav-group">{primary.map(link)}</div>
         <div className="nav-group bottom">
-          <SidebarAccount />
           <button className="nav-link more-toggle" aria-expanded={more} aria-controls="more-nav" onClick={() => setMore((m) => { localStorage.setItem('ui.more', m ? '0' : '1'); return !m; })}>
             <span className={`chev${more ? ' up' : ''}`}><Icon name="chevron" size={16} /></span>More
           </button>
           {more && <div id="more-nav">{secondary.map(link)}</div>}
         </div>
       </nav>
-      <main className="main" id="main"
-        onTouchStart={(e) => { touch.current = { y: e.touches[0].clientY, on: e.currentTarget.scrollTop === 0 && !path.startsWith('/editor') }; }}
+      <main className={`main${route.path === '/' ? ' chat-mode' : ''}`} id="main"
+        onTouchStart={(e) => { touch.current = { y: e.touches[0].clientY, on: e.currentTarget.scrollTop === 0 && !path.startsWith('/editor') && route.path !== '/' }; }}
         onTouchMove={(e) => { const t = touch.current; if (t?.on) setPull(Math.max(0, Math.min(100, e.touches[0].clientY - t.y))); }}
         onTouchEnd={() => { if (pull >= 80) setRefresh((n) => n + 1); setPull(0); touch.current = null; }}>
         {pull > 10 && <div className="ptr" style={{ height: pull / 2 }}>{pull >= 80 ? 'Release to refresh' : 'Pull to refresh'}</div>}
