@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { FREE_LIMITS, isPremium, record, remaining, usage } from '../quota/daily';
-import { listKeys } from '../vault/vault';
+import { defaultKeys } from '../vault/vault';
+import { FNS } from '../models/providerInfo';
 import { listLibrary, putMedia, uid, type MediaRecord } from '../storage/db';
 import { RunLog, logFor, useRunLog } from '../agent/log';
 import { Terminal } from '../ui/Terminal';
@@ -76,7 +77,7 @@ export function Home() {
   const thread = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
   const prompts = useMemo(() => [...PROMPTS].sort(() => Math.random() - 0.5), []);
-  const providerCount = new Set(listKeys().filter((k) => k.status !== 'invalid').map((k) => k.provider)).size;
+  const providerCount = new Set(FNS.flatMap((f) => defaultKeys(f).map((k) => k.provider))).size;
   const premium = isPremium(); const u = usage();
   const imagesLeft = Math.max(0, FREE_LIMITS.image - u.image); const videosLeft = Math.max(0, FREE_LIMITS.video - u.video);
 
@@ -136,7 +137,7 @@ export function Home() {
       if (task === 'video') {
         const st = await runVideoStart({ prompt, modelId: 'auto', signal, log, left: remaining('video'), limit: FREE_LIMITS.video, premium: isPremium() });
         const jobId = uid();
-        addJob({ id: jobId, provider: st.model.provider, model: st.model.id, op: st.op, prompt: st.prompt, aspect: st.aspect, createdAt: Date.now(), status: 'running' });
+        addJob({ id: jobId, provider: st.model.provider, keyId: st.keyId, model: st.model.id, op: st.op, prompt: st.prompt, aspect: st.aspect, createdAt: Date.now(), status: 'running' });
         logFor(jobId).say('info', `job started with ${st.model.name}`);
         patch(id, { jobId, state: 'working', text: `Rendering with ${st.model.name}. Videos usually take a few minutes. You can keep chatting or leave this page.` });
         return;

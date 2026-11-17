@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteMedia, listLibrary, putMedia, uid, type MediaRecord } from '../storage/db';
-import { listKeys, type KeyMeta } from '../vault/vault';
+import { defaultKeys, listKeys, type KeyMeta } from '../vault/vault';
 import { ratio } from '../models/registry';
 import { cachedCatalog, refreshCatalog } from '../agent/detect';
 import { RunLog } from '../agent/log';
@@ -38,7 +38,7 @@ export function ImageStudio() {
   }, []);
   useEffect(() => { sessionStorage.removeItem('studio.prompt'); setKeys(listKeys()); load().catch(() => setMsg({ text: 'Your image library could not be read.', error: true })); return () => urls.current.forEach(URL.revokeObjectURL); }, [load]);
 
-  const connected = new Set(keys.filter((k) => k.status !== 'invalid').map((k) => k.provider));
+  const connected = new Set(defaultKeys('image').map((k) => k.provider));
   const left = remaining('image');
   // Live list of models the connected keys can really use right now (quiet refresh, never blocks the page).
   useEffect(() => { setCatalog(cachedCatalog()); if (connected.size) void refreshCatalog().then(setCatalog); }, [keys]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -73,7 +73,7 @@ export function ImageStudio() {
         <h1>Image Studio</h1>
         <span className="muted small">{isPremium() ? 'Unlimited' : `${Math.max(0, FREE_LIMITS.image - used)} of ${FREE_LIMITS.image} free images left today`}</span>
       </header>
-      {connected.size === 0 && <div className="notice">No AI provider connected. <a href="#/providers">Add an API key</a> to generate images.</div>}
+      {connected.size === 0 && <div className="notice">No default image key. <a href="#/providers">Add an API key</a> and tick it as default for Images.</div>}
       <div className="panel stack">
         <label className="field">Describe the image
           <textarea rows={3} value={prompt} maxLength={2000} placeholder="A realistic photo of a luxury apartment at golden hour" onChange={(e) => setPrompt(e.target.value)} />
@@ -109,4 +109,3 @@ export function ImageStudio() {
     </section>
   );
 }
-type GenImageLike = { blob: Blob; mime: string };

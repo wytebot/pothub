@@ -20,7 +20,7 @@ export function planImage(o: { prompt: string; formatOverride?: string; prefer: 
   if (it.task === 'video') return { kind: 'blocked', message: 'This sounds like a video, so nothing was generated here. Open Video Studio to make it, or add /image to your prompt to get a still picture instead.' };
   if (it.task === 'edit') return { kind: 'blocked', message: 'This sounds like an edit to an existing image. Editing, enhancing and background removal are not available yet. Describe the image you want and it will be generated from scratch.' };
   const pool = (o.models ?? IMAGE_MODELS).filter((m) => o.connected.has(m.provider) && !o.exclude?.has(m.id) && (!o.modelOverride || m.id === o.modelOverride));
-  if (!pool.length) return { kind: 'blocked', message: o.modelOverride ? 'The selected model needs a connected key. Add one in AI Providers.' : 'Add an API key in AI Providers to start generating.' };
+  if (!pool.length) return { kind: 'blocked', message: o.modelOverride ? 'The selected model needs a key ticked as default for Images. Set one in AI Providers.' : 'Add an API key in AI Providers and tick it as a default for Images to start generating.' };
   const score = (m: ImageModel) => (o.prefer === 'speed' ? m.speed * 10 + m.quality : m.quality * 10 + m.speed);
   const best = (ms: ImageModel[]) => ms.find((m) => m.id === o.preferredModel) ?? [...ms].sort((a, b) => score(b) - score(a))[0];
   const wanted = o.formatOverride ?? it.aspect;

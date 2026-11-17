@@ -1,5 +1,6 @@
 import type { ProviderId } from '../vault/vault';
 import type { ImageModel, VideoModel } from './registry';
+import { splitSecret } from './providerInfo';
 import { blobFromB64, call, dims, failure, imageFromBlob, perr, sleep, type ProviderErr } from './http';
 
 export interface GenImg { blob: Blob; mime: string; }
@@ -52,14 +53,15 @@ async function probe(url: string, init: RequestInit, secret: string, o: { okStat
 // ---------------------------------------------------------------- Kling (signed token from two keys)
 const b64u = (b: ArrayBuffer | string) => { const bytes = typeof b === 'string' ? new TextEncoder().encode(b) : new Uint8Array(b); let s = ''; bytes.forEach((c) => { s += String.fromCharCode(c); }); return btoa(s).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_'); };
 async function klingToken(secret: string): Promise<string> {
-  const [ak, sk] = secret.split(':');
-  if (!ak || !sk) throw bad('Kling needs both keys, written as AccessKey:SecretKey.');
+  const parts = splitSecret('kling', secret); const [ak, sk] = parts;
+  if (!ak || !sk || parts.length !== 2) throw bad('Kling needs both an Access Key and a Secret Key. Open Edit on this key and fill in both boxes.');
   const now = Math.floor(Date.now() / 1000);
   const head = `${b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))}.${b64u(JSON.stringify({ iss: ak, exp: now + 1800, nbf: now - 5 }))}`;
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(sk), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return `${head}.${b64u(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(head)))}`;
 }
-const KLING = 'https://api.klingai.com';
+// Kling moved its international API from api.klingai.com to this host (kling.ai/document-api, Authentication > Domain).
+const KLING = 'https://api-singapore.klingai.com';
 const klingHeaders = async (s: string) => ({ ...J, Authorization: `Bearer ${await klingToken(s)}` });
 async function klingJson<T extends { code?: number; message?: string }>(r: Response, secret: string): Promise<T> {
   const j = await json<T>(r, secret);
