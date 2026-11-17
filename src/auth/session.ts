@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as fbSignOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithRedirect, getRedirectResult, signOut as fbSignOut, type User } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { auth } from '../firebase';
 
@@ -40,13 +40,13 @@ export async function signInWithGoogle(): Promise<SignInResult> {
       if (!idToken) throw Object.assign(new Error('no id token'), { code: 'auth/missing-token' });
       await signInWithCredential(auth, GoogleAuthProvider.credential(idToken, r.credential?.accessToken));
     } else {
-      const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
-      try { await signInWithPopup(auth, p); }
-      catch (e) {
-        const c = codeOf(e);
-        if (c === 'auth/popup-blocked' || c === 'auth/operation-not-supported-in-this-environment') { await signInWithRedirect(auth, p); return { ok: true }; }
-        throw e;
-      }
+      // Use a top-level browser navigation instead of a popup. This is reliable in
+      // mobile browsers/PWAs where popup windows may be silently suppressed.
+      const p = new GoogleAuthProvider();
+      p.setCustomParameters({ prompt: 'select_account' });
+      await signInWithRedirect(auth, p);
+      // The browser leaves this page; Firebase completes the session on return.
+      return { ok: true };
     }
     return { ok: true };
   } catch (e) {
