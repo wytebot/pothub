@@ -41,9 +41,8 @@ export function AppearancePage() {
       <div className="row"><button className="btn" onClick={downloadIcon}>Export icon</button><button className="btn" onClick={() => update(DEFAULT_APPEARANCE)}>Reset appearance</button></div>
     </div>
     <div className="panel stack">
-      <h2>Device icon notes</h2>
-      <p className="muted small">The browser tab icon changes immediately. The install manifest is refreshed for browsers that read it before installation. An already-installed PWA may keep its previous launcher icon until the browser refreshes its app metadata or it is reinstalled.</p>
-      <p className="muted small">For the standalone Android APK, the launcher icon is packaged into the APK. Changing it requires generating and installing a new APK; this page cannot change a native Android launcher icon at runtime.</p>
+      <h2>About the app icon</h2>
+      <p className="muted small">Your choice changes the icon in the browser tab straight away. The icon on your home screen or app drawer does not change on its own: it updates when the app is reinstalled.</p>
     </div>
   </section>;
 }

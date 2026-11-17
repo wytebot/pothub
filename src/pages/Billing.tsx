@@ -3,6 +3,7 @@ import { apiConfigured, clearLicense, getConfig, getRates, hasPendingPayment, hi
 import { isPremium } from '../quota/daily';
 import { Dialog } from '../ui/Dialog';
 import { AccountPanel } from '../ui/Account';
+import { ngnFor, usdToNgn, type Fx } from '../billing/fx';
 
 const naira = (n: number) => `₦${n.toLocaleString('en-NG')}`;
 type Phase = 'form' | 'pin' | 'otp' | 'redirect' | 'wait' | 'done' | 'error';
@@ -70,6 +71,8 @@ export function Billing() {
   const [license, setLicense] = useState(storedLicense());
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false); const [, tick] = useState(0);
+  const [fx, setFx] = useState<Fx | null>(null);
+  useEffect(() => { void usdToNgn().then(setFx); }, []);
 
   const loadAccount = async (l: string) => { setStatus(await verifyLicense(l)); setPays((await history(l)).payments); tick((n) => n + 1); };
   useEffect(() => {
@@ -92,11 +95,12 @@ export function Billing() {
         <p>{isPremium() ? `Premium is active${ends ? ` until ${ends.toLocaleDateString()}` : ''}.` : status?.status === 'expired' ? `Premium ended on ${ends?.toLocaleDateString()}. Renew below to continue.` : 'Free plan: 30 image and 10 video generations per day in the App.'}</p>
         <p className="muted small">Premium is prepaid and never renews automatically. Paying again before it ends adds time on top.</p></div>
       {msg && <div className={`notice${msg.error ? ' error' : ''}`} role={msg.error ? 'alert' : 'status'}>{msg.text}</div>}
-      {cfg && !cfg.checkoutEnabled && <div className="notice warn" role="note">Payments are not fully configured on this server yet.</div>}
-      {cfg?.checkoutEnabled && !cfg.live && <div className="notice warn" role="note">This server is using Flutterwave's test environment. Payments here are not real.</div>}
+      {cfg && !cfg.checkoutEnabled && <div className="notice warn" role="note">Payments are unavailable right now. Please try again later.</div>}
       <div className="stats">{plans.map((p) => (
-        <div className="panel stack" key={p.id}><h2>{p.name}</h2><div className="stat">${p.usd}<span className="muted small"> / {p.per}</span></div>
-          <p className="muted small">{price(p.id) ? `${naira(price(p.id)!)} once, converted at ₦${rates!.usdNgn.toFixed(2)} per US$1 on ${new Date(rates!.asOf).toLocaleDateString()}, rounded up to the nearest ₦${rates!.roundedUpToNearest ?? 10}.` : apiConfigured ? 'Loading naira price…' : 'Naira price appears when a billing server is connected.'}</p>
+        <div className="panel stack" key={p.id}><h2>{p.name}</h2>
+          <div className="stat">${p.usd}<span className="muted small"> / {p.per}</span></div>
+          {price(p.id) || fx ? <div className="stat naira">{price(p.id) ? naira(price(p.id)!) : `≈ ${naira(ngnFor(p.usd, fx!.rate))}`}<span className="muted small"> {price(p.id) ? 'once' : 'estimate'}</span></div> : <p className="muted small">Loading the naira price…</p>}
+          <p className="muted small">{price(p.id) ? `Charged once in naira at ₦${rates!.usdNgn.toFixed(2)} per US$1 (${new Date(rates!.asOf).toLocaleDateString()}), rounded up to the nearest ₦${rates!.roundedUpToNearest ?? 10}.` : fx ? `About ₦${fx.rate.toFixed(2)} per US$1${fx.live ? '' : ' (last known rate)'}. The exact naira amount is shown before you pay.` : 'The naira amount is shown before you pay.'}</p>
           <button className="btn primary" disabled={!cfg?.checkoutEnabled || !price(p.id)} onClick={() => setPay(p.id)}>{isPremium() ? 'Add time' : 'Buy'} {p.name.toLowerCase()}</button></div>))}</div>
       <div className="panel"><h2>Premium includes</h2><p>Unlimited image and video generation requests in the App. You still pay your AI providers directly, and their limits still apply.</p>
         <p className="muted small">Read the <a href="#/legal/billing">Subscription and Billing Policy</a>, <a href="#/legal/refunds">Cancellation and Refund Policy</a> and <a href="#/legal/terms">Terms</a> first.</p></div>

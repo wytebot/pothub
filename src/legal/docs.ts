@@ -25,7 +25,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
     ['Enforcement', 'You are solely responsible for what you generate. We may refuse service, suspend a subscription or end access where use breaches this policy or the law.'],
   ]},
   { id: 'byok', title: 'BYOK and Third-Party AI Provider Disclosure', sections: [
-    ['Bring your own key', 'The App works with API keys that you obtain from AI providers such as OpenAI and Google. You pay those providers directly. We do not resell AI usage and a subscription to the App does not include provider credits.'],
+    ['Bring your own key', 'The App works with API keys that you obtain from AI providers such as OpenAI, Google, Stability AI, Black Forest Labs, Luma, Kling, fal.ai and Replicate. You pay those providers directly. We do not resell AI usage and a subscription to the App does not include provider credits.'],
     ['Your keys', 'Keys are stored on your device, are masked after saving, and are sent only to the provider they belong to. A fingerprint or device-lock prompt controls access to the key page but is not itself encryption. Create keys with spending limits and revoke them with the provider if your device is lost.'],
     ['Third-party terms', 'Each provider has separate terms, privacy policy, pricing, content rules, regional availability and rate limits. You must comply with them. Providers can change or withdraw models at any time, which may affect features in the App.'],
   ]},
@@ -33,7 +33,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
     ['Plans and price', 'Premium is sold as prepaid access: US$3 for one month or US$36 for one year. The amount charged is shown in Nigerian naira, converted at an exchange rate displayed before you pay, rounded up to the nearest ten naira. The final payable amount and billing currency are shown before you confirm.'],
     ['No automatic renewal', 'Premium does not renew automatically and we do not store your card for future charges. When your paid period ends, premium access ends unless you choose to pay again. Paying before the end date adds the new period on top of the time you have left.'],
     ['Payment processing', 'Payments are made by card and processed by Flutterwave. Your card details are sent from the App to our server only to be encrypted and forwarded to Flutterwave in the same request; we do not store or log them. Your bank may ask for a PIN, a one-time code or a verification page. Premium access is granted only after our server confirms the payment with Flutterwave, never from what the App displays.'],
-    ['Records', 'Your premium end date and payment history can be viewed in the App. Keep your license safe: because there are no accounts, we cannot restore it for you. Contact support if a charge looks wrong.'],
+    ['Records', 'Your premium end date and payment history can be viewed in the App. Your license is also saved to the Google account you signed in with, so signing in on a new device restores it. Keep a copy somewhere safe. Contact support if a charge looks wrong.'],
   ]},
   { id: 'refunds', title: 'Cancellation and Refund Policy', sections: [
     ['Nothing to cancel', 'Because premium is prepaid and never renews automatically, there is no subscription to cancel. You simply do not pay again when the period ends.'],

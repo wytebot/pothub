@@ -2,6 +2,7 @@ import { call, failure, generateImages, type GenImage, type ProviderErr } from '
 import type { ImageModel, VideoModel } from '../models/registry';
 import { interpret, planImage } from '../models/router';
 import { startVideo } from '../models/video';
+import { PROVIDERS } from '../models/providerInfo';
 import { getSecret, listKeys, usableKey, type ProviderId } from '../vault/vault';
 import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
@@ -31,10 +32,10 @@ async function prepare(rawPrompt: string, log: RunLog, signal: AbortSignal): Pro
   const d = log.start('cmd', 'providers detect --models');
   const parts: string[] = [];
   const catalog = await refreshCatalog({ signal, onProvider: (p, r) => {
-    parts.push(r.source === 'unavailable' ? `${p} ✕ (${r.reason ?? 'unreachable'})` : `${p} ✓ ${r.count} models${r.source === 'cache' ? ' (cached)' : ''}`);
+    parts.push(r.source === 'unavailable' ? `${PROVIDERS[p].name} ✕ (${r.reason ?? 'unreachable'})` : r.source === 'builtin' ? `${PROVIDERS[p].name} ✓ ${r.count} models` : `${PROVIDERS[p].name} ✓ ${r.count} models${r.source === 'cache' ? ' (cached)' : ''}`);
     log.update(d, { detail: parts.join('  ·  ') });
   } });
-  log.done(d, `${catalog.image.length} image · ${catalog.video.length} video available${catalog.unverified.length ? ` · ${catalog.unverified.join(', ')} unverified` : ''}`);
+  log.done(d, `${catalog.image.length} image · ${catalog.video.length} video available${catalog.unverified.length ? ` · ${catalog.unverified.map((x) => PROVIDERS[x].name).join(', ')} unverified` : ''}`);
   return { text, flags, catalog };
 }
 
@@ -127,16 +128,16 @@ export async function runVideoStart(o: { prompt: string; modelId: string; signal
     const order = [...pool].sort((a, b) => (pref === 'speed' ? b.speed * 10 + b.quality - (a.speed * 10 + a.quality) : b.quality * 10 + b.speed - (a.quality * 10 + a.speed)));
     const exact = wanted ? order.filter((m) => m.aspects.includes(wanted)) : order;
     const model = (forced && pool.find((m) => m.id === forced)) || (getSettings().videoModel !== 'auto' && (exact.length ? exact : order).find((m) => m.id === getSettings().videoModel)) || (exact.length ? exact : order)[0];
-    if (!model) { log.fail(r, 'no model'); throw attempt === 0 ? new Error('No video model is available on your connected keys. Add a Google Gemini key in AI Providers.') : (lastErr instanceof Error ? lastErr : new Error('No video model is available.')); }
+    if (!model) { log.fail(r, 'no model'); throw attempt === 0 ? new Error('No video model is available on your connected keys. Add a key from a video provider (Google Gemini, OpenAI, Luma, Kling, fal.ai and others) in AI Providers.') : (lastErr instanceof Error ? lastErr : new Error('No video model is available.')); }
     const aspect = wanted && model.aspects.includes(wanted) ? wanted : model.aspects[0];
     log.done(r, `→ ${model.name}  (${model.id}) @ ${aspect}${wanted && wanted !== aspect ? `  (${wanted} not supported)` : ''}`);
 
     const i = log.start('cmd', `init video --model ${model.id} --seconds ${model.durations[0]}`);
-    const key = usableKey(model.provider); if (!key) { log.fail(i, 'no key'); throw new Error('Add a Google Gemini key in AI Providers first.'); }
+    const key = usableKey(model.provider); if (!key) { log.fail(i, 'no key'); throw new Error(`Add a ${PROVIDERS[model.provider].name} key in AI Providers first.`); }
     let secret: string; try { secret = await getSecret(key.id); log.done(i, 'key ready'); } catch (e) { log.fail(i, msg(e)); throw e; }
 
     const s = log.start('cmd', 'operations.submit'); const t0 = Date.now();
-    try { const op = await startVideo(secret, { model: model.id, prompt, aspect }); log.done(s, `accepted in ${secs(Date.now() - t0)} · job ${op.split('/').pop()?.slice(0, 12) ?? ''}`); return { op, model, aspect, prompt }; }
+    try { const op = await startVideo(model.provider, secret, { model, prompt, aspect }); log.done(s, `accepted in ${secs(Date.now() - t0)} · job ${op.split('/').pop()?.slice(0, 12) ?? ''}`); return { op, model, aspect, prompt }; }
     catch (e) { lastErr = e; log.fail(s, msg(e)); if (fallbackScope(e) === 'none' || (e as ProviderErr).status === 401 || (e as ProviderErr).status === 403 || (e as ProviderErr).status === 429) throw e; tried.add(model.id); log.say('warn', `falling back after ${model.id} failed`); }
   }
   throw lastErr instanceof Error ? lastErr : new Error('Could not start the video.');

@@ -1,4 +1,5 @@
 import { call, failure } from '../models/providers';
+import { PROVIDERS } from '../models/providerInfo';
 import { IMAGE_MODELS, VIDEO_MODELS, type ImageModel, type VideoModel } from '../models/registry';
 import { getSecret, listKeys, usableKey, type ProviderId } from '../vault/vault';
 
@@ -39,11 +40,11 @@ const GEMINI_ASPECTS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16',
 
 /** Pure: turns provider model lists + the seed registry into what is really usable right now. */
 export function buildCatalog(lists: Partial<Record<ProviderId, ListedModel[]>>, connected: ProviderId[], now = Date.now()): Catalog {
-  const verified = connected.filter((p) => lists[p]); const unverified = connected.filter((p) => !lists[p]);
+  const verified = connected.filter((p) => lists[p]); const unverified = connected.filter((p) => !lists[p] && PROVIDERS[p].lists);
   const has = (p: ProviderId, id: string) => lists[p]!.some((m) => m.id === id);
   const image: ImageModel[] = []; const video: VideoModel[] = [];
-  for (const m of IMAGE_MODELS) if (connected.includes(m.provider) && (!lists[m.provider] || has(m.provider, m.id))) image.push(m);
-  for (const m of VIDEO_MODELS) if (connected.includes(m.provider) && (!lists[m.provider] || has(m.provider, m.id))) video.push(m);
+  for (const m of IMAGE_MODELS) if (connected.includes(m.provider) && (!lists[m.provider] || m.unlisted || has(m.provider, m.id))) image.push(m);
+  for (const m of VIDEO_MODELS) if (connected.includes(m.provider) && (!lists[m.provider] || m.unlisted || has(m.provider, m.id))) video.push(m);
   const seen = new Set([...image, ...video].map((m) => m.id));
   const g = lists.gemini;
   if (g) for (const m of g) {
@@ -80,12 +81,13 @@ export const dropCatalogCache = () => { mem.clear(); last = null; try { localSto
  * Never throws: a provider that cannot be checked falls back to the last known list, then to the seed registry.
  * onProvider lets the terminal show each provider the moment it answers.
  */
-export async function refreshCatalog(o: { force?: boolean; signal?: AbortSignal; onProvider?: (p: ProviderId, r: { count: number; source: 'live' | 'cache' | 'unavailable'; reason?: string }) => void } = {}): Promise<Catalog> {
+export async function refreshCatalog(o: { force?: boolean; signal?: AbortSignal; onProvider?: (p: ProviderId, r: { count: number; source: 'live' | 'cache' | 'builtin' | 'unavailable'; reason?: string }) => void } = {}): Promise<Catalog> {
   if (inflight && !o.force) return inflight;
   const run = (async () => {
     const connected = connectedProviders(); const lists: Partial<Record<ProviderId, ListedModel[]>> = {};
     await Promise.all(connected.map(async (p) => {
       const key = usableKey(p); if (!key) return;
+      if (!PROVIDERS[p].lists) { o.onProvider?.(p, { count: IMAGE_MODELS.filter((m) => m.provider === p).length + VIDEO_MODELS.filter((m) => m.provider === p).length, source: 'builtin' }); return; }
       const hit = mem.get(key.id);
       if (hit && !o.force && Date.now() - hit.at < TTL) { lists[p] = hit.models; o.onProvider?.(p, { count: hit.models.length, source: 'cache' }); return; }
       try {

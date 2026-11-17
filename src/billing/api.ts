@@ -4,13 +4,13 @@ export const apiConfigured = !!API;
 const LIC = 'billing.license'; const UNTIL = 'billing.entitledUntil'; const PEND = 'billing.pending';
 
 async function call<T>(path: string, o: { method?: string; body?: unknown; license?: string; token?: string } = {}): Promise<T> {
-  if (!API) throw new Error('No billing server is configured for this build (VITE_API_URL).');
+  if (!API) throw new Error('Payments are unavailable right now. Please try again later.');
   let r: Response;
   try { r = await fetch(`${API}${path}`, { method: o.method ?? 'GET', headers: { ...(o.body ? { 'Content-Type': 'application/json' } : {}), ...(o.token || o.license ? { Authorization: `Bearer ${o.token ?? o.license}` } : {}) }, body: o.body ? JSON.stringify(o.body) : undefined, signal: AbortSignal.timeout(45_000) }); }
-  catch { throw new Error('Could not reach the billing server. Check your connection and try again.'); }
+  catch { throw new Error('Could not reach the payment service. Check your connection and try again.'); }
   const j = await r.json().catch(() => ({})) as T & { error?: string };
   if (r.status === 409) throw Object.assign(new Error(j.error ?? 'Price changed.'), { priceChanged: (j as { amountNgn?: number }).amountNgn });
-  if (!r.ok) throw new Error(j.error ?? (r.status === 401 ? 'That license was not recognised.' : 'The billing server returned an error. Try again shortly.'));
+  if (!r.ok) throw new Error(j.error ?? (r.status === 401 ? 'That license was not recognised.' : 'The payment service returned an error. Try again shortly.'));
   return j;
 }
 export interface Rates { usdNgn: number; monthlyNgn: number; annualNgn: number; asOf: string; roundedUpToNearest?: number; }
