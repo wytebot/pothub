@@ -30,7 +30,21 @@ export function Welcome() {
     const m = (e: PointerEvent) => move(e.clientX, e.clientY);
     addEventListener('pointermove', m); return () => removeEventListener('pointermove', m);
   }, []);
-  const start = async () => { if (busy) return; setBusy(true); setError(''); const r = await signInWithGoogle(); if (!r.ok) setError(r.message); setBusy(false); };
+  const start = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const r = await signInWithGoogle();
+      if (!r.ok) setError(r.message);
+    } catch {
+      setError('Google sign-in could not be started. Check your connection and try again.');
+    } finally {
+      // A successful browser redirect unloads this page. This only runs when
+      // navigation did not happen (for example, Firebase rejected the request).
+      setBusy(false);
+    }
+  };
   return (
     <div className="welcome" ref={stage}>
       <div className="aurora-bg" aria-hidden="true"><i /><i /><i /></div>
