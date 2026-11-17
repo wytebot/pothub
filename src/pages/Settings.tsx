@@ -19,8 +19,7 @@ export function Settings() {
       </div>
       <div className="panel stack"><h2>Workflow</h2>
         <label className="check"><input type="checkbox" checked={s.terminal} onChange={(e) => set({ terminal: e.target.checked })} /> Show the live step-by-step terminal while generating</label>
-        <label className="check"><input type="checkbox" checked={s.enhance} onChange={(e) => set({ enhance: e.target.checked })} /> Sharpen my prompts first with a fast Gemini text model (uses a few tokens on your Gemini key; needs one)</label>
-        <p className="muted small">Type <code>/enhance</code> or <code>/plain</code> in a prompt to override this for one run.</p>
+        <label className="check"><input type="checkbox" checked={s.enhance} onChange={(e) => set({ enhance: e.target.checked })} /> Sharpen my prompts first before generating (uses your Google Gemini key)</label>
       </div>
       <div className="panel"><h2>More</h2><p className="muted small">Keys: <a href="#/providers">AI Providers</a>. Space and backups: <a href="#/storage">Storage</a>. Policies: <a href="#/legal">Legal documents</a>.</p></div>
     </section>

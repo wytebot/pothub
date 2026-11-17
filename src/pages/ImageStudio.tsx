@@ -5,7 +5,6 @@ import { ratio } from '../models/registry';
 import { cachedCatalog, refreshCatalog } from '../agent/detect';
 import { RunLog } from '../agent/log';
 import { runImage, runInfo } from '../agent/workflow';
-import { COMMAND_HELP } from '../agent/commands';
 import { Terminal } from '../ui/Terminal';
 import { FREE_LIMITS, isPremium, record, remaining, usage } from '../quota/daily';
 import { platform } from '../platform';
@@ -79,7 +78,6 @@ export function ImageStudio() {
         <label className="field">Describe the image
           <textarea rows={3} value={prompt} maxLength={2000} placeholder="A realistic photo of a luxury apartment at golden hour" onChange={(e) => setPrompt(e.target.value)} />
         </label>
-        <p className="cmd-hint">Commands inside the prompt: <code>{COMMAND_HELP}</code></p>
         <div className="row">
           <Select label="Format" value={format} onChange={setFormat} options={aspectOptions} />
           <Select<'quality' | 'speed'> label="Priority" value={prefer} onChange={setPrefer} options={[{ value: 'quality', label: 'Best quality' }, { value: 'speed', label: 'Fastest' }]} />

@@ -5,7 +5,7 @@ export function Legal({ id }: { id?: string }) {
   if (!doc) return (
     <section className="page">
       <h1>Legal documents</h1>
-      <p className="muted small">Version {LEGAL_VERSION}, effective {LEGAL_EFFECTIVE}. These documents should be reviewed by a lawyer for the places you operate in before public launch.</p>
+      <p className="muted small">Version {LEGAL_VERSION}, effective {LEGAL_EFFECTIVE}.</p>
       <ul className="list">{LEGAL_DOCS.map((d) => <li key={d.id} className="item"><a className="title grow" href={`#/legal/${d.id}`}>{d.title}</a></li>)}</ul>
     </section>
   );
