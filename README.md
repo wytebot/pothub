@@ -94,3 +94,7 @@ Checkout and renewals, image editing/inpainting/upscaling, image-to-video, other
 - Installable web app metadata with 192/512 PNG icons, maskable icon assets, Apple touch icon, and registered app-shell service worker.
 - App appearance page (`More → App appearance`) lets users select six pot silhouettes and eight accent colours. Selection is persisted locally and updates the tab icon, focus accent and install-manifest metadata.
 - PWA launcher icon refresh is browser-dependent, especially after installation. Native Capacitor Android launcher icons are build-time resources and require a rebuilt APK; the in-app appearance setting does not change an installed APK icon.
+
+
+## Creative Editor (CapCut-style)
+Same layout as before (media list | preview | properties, timeline underneath; on phones the preview and controls come first, then the timeline, then properties and media). Added: snapping to cuts, the playhead and the frame centre; clip speed 0.25x-4x; tap and drag a layer on the preview; drag clips between layers; trim-to-playhead, ripple delete, previous/next cut, frame stepping, Fit zoom; video/image thumbnails and audio waveforms on clips; Fill frame and Reset position; save indicator. Shortcuts: Space, S, D, T, [ ], arrows (Shift = 1 s), Home/End, +/-, Delete (Shift+Delete = ripple), Ctrl+Z / Ctrl+Shift+Z.
