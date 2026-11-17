@@ -1,7 +1,8 @@
 import { call, failure } from '../models/providers';
 import { PROVIDERS } from '../models/providerInfo';
 import { IMAGE_MODELS, VIDEO_MODELS, type ImageModel, type VideoModel } from '../models/registry';
-import { getSecret, listKeys, usableKey, type ProviderId } from '../vault/vault';
+import { defaultKeys, getSecret, usableKey, type ProviderId } from '../vault/vault';
+import { FNS } from '../models/providerInfo';
 
 export interface ListedModel { id: string; methods: string[]; }
 export interface Catalog {
@@ -69,8 +70,15 @@ export function buildCatalog(lists: Partial<Record<ProviderId, ListedModel[]>>, 
 export const seedCatalog = (connected: ProviderId[]): Catalog => buildCatalog({}, connected);
 
 let last: Catalog | null = null; let inflight: Promise<Catalog> | null = null;
-const connectedProviders = (): ProviderId[] => [...new Set(listKeys().filter((k) => k.status !== 'invalid').map((k) => k.provider))];
-export const cachedCatalog = (): Catalog => last ?? seedCatalog(connectedProviders());
+/** Providers with at least one default key, for any function. */
+const connectedProviders = (): ProviderId[] => [...new Set(FNS.flatMap((f) => defaultKeys(f).map((k) => k.provider)))];
+/** Only offer models whose provider has a default key for that exact function (images, video, text). */
+function restrict(c: Catalog): Catalog {
+  const img = new Set(defaultKeys('image').map((k) => k.provider)); const vid = new Set(defaultKeys('video').map((k) => k.provider));
+  const txt = defaultKeys('text').some((k) => k.provider === 'gemini');
+  return { ...c, image: c.image.filter((m) => img.has(m.provider)), video: c.video.filter((m) => vid.has(m.provider)), text: txt ? c.text : undefined };
+}
+export const cachedCatalog = (): Catalog => last ?? restrict(seedCatalog(connectedProviders()));
 
 function persisted(): Record<string, { at: number; models: ListedModel[] }> { try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; } }
 function persist(id: string, v: { at: number; models: ListedModel[] }) { try { const p = persisted(); p[id] = v; localStorage.setItem(LS, JSON.stringify(p)); } catch { /* storage full or blocked */ } }
@@ -99,7 +107,7 @@ export async function refreshCatalog(o: { force?: boolean; signal?: AbortSignal;
         else o.onProvider?.(p, { count: 0, source: 'unavailable', reason: e instanceof Error ? e.message : 'unreachable' });
       }
     }));
-    last = buildCatalog(lists, connected); return last;
+    last = restrict(buildCatalog(lists, connected)); return last;
   })();
   inflight = run; try { return await run; } finally { if (inflight === run) inflight = null; }
 }

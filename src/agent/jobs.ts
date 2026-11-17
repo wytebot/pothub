@@ -1,10 +1,10 @@
 import { putMedia, uid } from '../storage/db';
 import { record } from '../quota/daily';
-import { getSecret, usableKey, type ProviderId } from '../vault/vault';
+import { getSecret, listKeys, usableKey, type ProviderId } from '../vault/vault';
 import { downloadVideo, pollVideo } from '../models/video';
 import { logFor } from './log';
 
-export interface Job { id: string; provider?: ProviderId; model: string; op: string; prompt: string; aspect: string; createdAt: number; status: 'running' | 'done' | 'failed' | 'cancelled'; error?: string; mediaId?: string; }
+export interface Job { id: string; provider?: ProviderId; /** the key that started the job, so polling keeps using it even if its default tick changes */ keyId?: string; model: string; op: string; prompt: string; aspect: string; createdAt: number; status: 'running' | 'done' | 'failed' | 'cancelled'; error?: string; mediaId?: string; }
 const JOBS = 'video.jobs'; const TIMEOUT = 15 * 60_000;
 export const readJobs = (): Job[] => { try { return JSON.parse(localStorage.getItem(JOBS) ?? '[]'); } catch { return []; } };
 export const saveJobs = (next: Job[]) => { localStorage.setItem(JOBS, JSON.stringify(next)); window.dispatchEvent(new Event('jobs:changed')); };
@@ -23,7 +23,7 @@ export async function pollJobs(): Promise<boolean> {
     polling.add(j.id);
     const provider: ProviderId = j.provider ?? 'gemini';
     try {
-      const key = usableKey(provider); if (!key) throw new Error('The key used for this job was removed.');
+      const key = (j.keyId ? listKeys().find((k) => k.id === j.keyId) : undefined) ?? usableKey(provider, 'video'); if (!key) throw new Error('The key used for this job was removed.');
       const secret = await getSecret(key.id);
       const lg = logFor(j.id); const ps = polls.get(j.id) ?? { line: lg.start('cmd', `operations.get ${j.op.split('/').pop()?.slice(0, 12) ?? ''}`), n: 0 }; polls.set(j.id, ps);
       const r = await pollVideo(provider, secret, j.op); ps.n++;

@@ -41,6 +41,7 @@ describe('fallback rules', () => {
   it('tries another model on server errors, another provider on auth/quota, nothing on cancel or safety', () => {
     expect(fallbackScope(Object.assign(new Error('x'), { status: 503 }))).toBe('model');
     expect(fallbackScope(Object.assign(new Error('x'), { status: 429 }))).toBe('provider');
+    expect(fallbackScope(Object.assign(new Error('x'), { status: 402 }))).toBe('provider');
     expect(fallbackScope(new Error('Cancelled.'))).toBe('none');
     expect(fallbackScope(new Error('blocked by safety filters'))).toBe('none');
   });

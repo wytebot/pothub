@@ -3,10 +3,11 @@ import type { ImageModel, VideoModel } from '../models/registry';
 import { interpret, planImage } from '../models/router';
 import { startVideo } from '../models/video';
 import { PROVIDERS } from '../models/providerInfo';
-import { getSecret, listKeys, usableKey, type ProviderId } from '../vault/vault';
+import { defaultKeys, getSecret, setStatus, usableKey, type ProviderId } from '../vault/vault';
+import type { Fn } from '../models/providerInfo';
 import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
-import { cachedCatalog, refreshCatalog, type Catalog } from './detect';
+import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
 
 const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
@@ -18,10 +19,11 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wr
 export function fallbackScope(e: unknown): 'none' | 'model' | 'provider' {
   if (isCancel(e) || /safety|blocked/i.test(msg(e))) return 'none';
   const s = (e as ProviderErr).status;
-  return s === 401 || s === 403 || s === 429 ? 'provider' : 'model';
+  return s === 401 || s === 402 || s === 403 || s === 429 ? 'provider' : 'model';
 }
 
-function connected(): Set<ProviderId> { return new Set(listKeys().filter((k) => k.status !== 'invalid').map((k) => k.provider)); }
+/** Providers that still have an untried default key for this function. Keys that are not ticked as a default are never used. */
+const connected = (fn: Fn, skip?: ReadonlySet<string>): Set<ProviderId> => new Set(defaultKeys(fn, skip).map((k) => k.provider));
 
 /** Step 1 of every run: slash commands, plain-language intent, and a live model check that never blocks for more than a few seconds. */
 async function prepare(rawPrompt: string, log: RunLog, signal: AbortSignal): Promise<{ text: string; flags: Flags; catalog: Catalog }> {
@@ -41,8 +43,8 @@ async function prepare(rawPrompt: string, log: RunLog, signal: AbortSignal): Pro
 
 /** Optional: asks the cheapest current Gemini text model to sharpen the prompt. 8 s cap; any failure keeps the original prompt. */
 async function enhance(text: string, catalog: Catalog, log: RunLog, signal: AbortSignal, task: 'image' | 'video'): Promise<string> {
-  const model = catalog.text; const key = usableKey('gemini');
-  if (!model || !key) { log.say('warn', 'enhance skipped', 'needs a Google Gemini key'); return text; }
+  const model = catalog.text; const key = usableKey('gemini', 'text');
+  if (!model || !key) { log.say('warn', 'enhance skipped', 'needs a Google Gemini key ticked as default for Text'); return text; }
   const id = log.start('cmd', `${model.id} enhance-prompt`);
   try {
     const secret = await getSecret(key.id);
@@ -79,10 +81,11 @@ export async function runImage(o: { prompt: string; count: number; format: strin
   const count = flags.count ?? o.count;
   if (!o.premium) { if (o.left < count) throw new Error(`You have ${o.left} free image(s) left today (limit ${o.limit}, resets at 00:00 UTC). Lower the count or come back tomorrow.`); log.say('info', 'quota', `${o.left} of ${o.limit} free images left today`); }
   const prompt = wantEnhance(flags) ? await enhance(text, catalog, log, signal, 'image') : text;
-  const tried = new Set<string>(); const skipProviders = new Set<ProviderId>(); const notes: string[] = []; let lastErr: unknown;
+  const tried = new Set<string>(); const skipKeys = new Set<string>(); const notes: string[] = []; let lastErr: unknown;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const conn = new Set([...connected()].filter((p) => !skipProviders.has(p)));
+  // Every default key for Images can be tried once, plus a few model fallbacks.
+  for (let attempt = 0, max = Math.min(10, 3 + defaultKeys('image').length); attempt < max; attempt++) {
+    const conn = connected('image', skipKeys);
     const r = log.start('cmd', `pothub route --task image${(flags.aspect ?? (o.format !== 'auto' ? o.format : '')) ? ` --aspect ${flags.aspect ?? o.format}` : ''} --prefer ${flags.prefer ?? o.prefer}`);
     const plan = planImage({ prompt, formatOverride: flags.aspect ?? (o.format === 'auto' ? undefined : o.format), prefer: flags.prefer ?? o.prefer, modelOverride: flags.model ?? (o.model === 'auto' ? undefined : o.model), preferredModel: getSettings().imageModel === 'auto' ? undefined : getSettings().imageModel, connected: conn, models: catalog.image, exclude: tried, taskOverride: flags.task === 'image' ? 'image' : undefined });
     if (plan.kind === 'blocked') { log.fail(r, 'no model'); throw attempt === 0 ? new Error(plan.message) : (lastErr instanceof Error ? lastErr : new Error(plan.message)); }
@@ -90,8 +93,8 @@ export async function runImage(o: { prompt: string; count: number; format: strin
     for (const n of plan.notes) { notes.push(n); log.say('warn', n); }
 
     const i = log.start('cmd', `init image --model ${plan.model.id} --n ${count}`);
-    const key = usableKey(plan.model.provider); if (!key) { log.fail(i, 'no key'); throw new Error('Add an API key in AI Providers first.'); }
-    let secret: string; try { secret = await getSecret(key.id); log.done(i, `${plan.model.provider} key ready (••••${key.last4})`); } catch (e) { log.fail(i, msg(e)); throw e; }
+    const key = usableKey(plan.model.provider, 'image', skipKeys); if (!key) { log.fail(i, 'no default key'); throw new Error(`Tick a ${PROVIDERS[plan.model.provider].name} key as default for Images in AI Providers first.`); }
+    let secret: string; try { secret = await getSecret(key.id); log.done(i, `default key "${key.label}" ready (${plan.model.provider} ••••${key.last4})`); } catch (e) { log.fail(i, msg(e)); skipKeys.add(key.id); lastErr = e; log.say('warn', `skipping "${key.label}"`, 'its secret could not be opened'); continue; }
 
     const g = log.start('cmd', `generate ${q(prompt, 48)}`); const t0 = Date.now(); const made: GenImage[] = [];
     try {
@@ -103,42 +106,47 @@ export async function runImage(o: { prompt: string; count: number; format: strin
     } catch (e) {
       lastErr = e; log.fail(g, msg(e));
       const scope = fallbackScope(e); if (scope === 'none') throw e;
-      tried.add(plan.model.id); if (scope === 'provider') skipProviders.add(plan.model.provider);
       if (made.length) throw e; // part of the batch already cost money: do not silently start over
-      log.say('warn', `falling back after ${plan.model.id} failed`);
+      if (scope === 'provider') { skipKeys.add(key.id); if ((e as ProviderErr).status === 401) setStatus(key.id, 'invalid'); log.say('warn', `default key "${key.label}" failed`, 'trying the next default for Images'); }
+      else { tried.add(plan.model.id); log.say('warn', `falling back after ${plan.model.id} failed`); }
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('Generation failed. Try again.');
 }
 
-export interface VideoStart { op: string; model: VideoModel; aspect: string; prompt: string; }
+export interface VideoStart { op: string; model: VideoModel; aspect: string; prompt: string; keyId: string; }
 export async function runVideoStart(o: { prompt: string; modelId: string; signal: AbortSignal; log: RunLog; left: number; limit: number; premium: boolean }): Promise<VideoStart> {
   const { log, signal } = o;
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text) throw new Error('Describe the video first (commands alone are not a prompt).');
   if (!o.premium) { if (o.left < 1) throw new Error(`Daily free limit of ${o.limit} videos reached. It resets at 00:00 UTC.`); log.say('info', 'quota', `${o.left} of ${o.limit} free videos left today`); }
   const prompt = wantEnhance(flags) ? await enhance(text, catalog, log, signal, 'video') : text;
-  const wanted = flags.aspect ?? interpret(text).aspect; const tried = new Set<string>(); let lastErr: unknown;
+  const wanted = flags.aspect ?? interpret(text).aspect; const tried = new Set<string>(); const skipKeys = new Set<string>(); let lastErr: unknown;
   const pref = flags.prefer ?? getSettings().priority;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const pool = catalog.video.filter((m) => !tried.has(m.id));
+  for (let attempt = 0, max = Math.min(10, 3 + defaultKeys('video').length); attempt < max; attempt++) {
+    const live = connected('video', skipKeys);
+    const pool = catalog.video.filter((m) => !tried.has(m.id) && live.has(m.provider));
     const forced = flags.model ?? (o.modelId !== 'auto' ? o.modelId : undefined);
     const r = log.start('cmd', `pothub route --task video${wanted ? ` --aspect ${wanted}` : ''} --prefer ${pref}`);
     const order = [...pool].sort((a, b) => (pref === 'speed' ? b.speed * 10 + b.quality - (a.speed * 10 + a.quality) : b.quality * 10 + b.speed - (a.quality * 10 + a.speed)));
     const exact = wanted ? order.filter((m) => m.aspects.includes(wanted)) : order;
     const model = (forced && pool.find((m) => m.id === forced)) || (getSettings().videoModel !== 'auto' && (exact.length ? exact : order).find((m) => m.id === getSettings().videoModel)) || (exact.length ? exact : order)[0];
-    if (!model) { log.fail(r, 'no model'); throw attempt === 0 ? new Error('No video model is available on your connected keys. Add a key from a video provider (Google Gemini, OpenAI, Luma, Kling, fal.ai and others) in AI Providers.') : (lastErr instanceof Error ? lastErr : new Error('No video model is available.')); }
+    if (!model) { log.fail(r, 'no model'); throw attempt === 0 ? new Error('No video model is available on your connected keys. Add a key from a video provider (Google Gemini, OpenAI, Luma, Kling, fal.ai and others) in AI Providers and tick it as default for Video.') : (lastErr instanceof Error ? lastErr : new Error('No video model is available.')); }
     const aspect = wanted && model.aspects.includes(wanted) ? wanted : model.aspects[0];
     log.done(r, `→ ${model.name}  (${model.id}) @ ${aspect}${wanted && wanted !== aspect ? `  (${wanted} not supported)` : ''}`);
 
     const i = log.start('cmd', `init video --model ${model.id} --seconds ${model.durations[0]}`);
-    const key = usableKey(model.provider); if (!key) { log.fail(i, 'no key'); throw new Error(`Add a ${PROVIDERS[model.provider].name} key in AI Providers first.`); }
-    let secret: string; try { secret = await getSecret(key.id); log.done(i, 'key ready'); } catch (e) { log.fail(i, msg(e)); throw e; }
+    const key = usableKey(model.provider, 'video', skipKeys); if (!key) { log.fail(i, 'no default key'); throw new Error(`Tick a ${PROVIDERS[model.provider].name} key as default for Video in AI Providers first.`); }
+    let secret: string; try { secret = await getSecret(key.id); log.done(i, `default key "${key.label}" ready`); } catch (e) { log.fail(i, msg(e)); skipKeys.add(key.id); lastErr = e; log.say('warn', `skipping "${key.label}"`, 'its secret could not be opened'); continue; }
 
     const s = log.start('cmd', 'operations.submit'); const t0 = Date.now();
-    try { const op = await startVideo(model.provider, secret, { model, prompt, aspect }); log.done(s, `accepted in ${secs(Date.now() - t0)} · job ${op.split('/').pop()?.slice(0, 12) ?? ''}`); return { op, model, aspect, prompt }; }
-    catch (e) { lastErr = e; log.fail(s, msg(e)); if (fallbackScope(e) === 'none' || (e as ProviderErr).status === 401 || (e as ProviderErr).status === 403 || (e as ProviderErr).status === 429) throw e; tried.add(model.id); log.say('warn', `falling back after ${model.id} failed`); }
+    try { const op = await startVideo(model.provider, secret, { model, prompt, aspect }); log.done(s, `accepted in ${secs(Date.now() - t0)} · job ${op.split('/').pop()?.slice(0, 12) ?? ''}`); return { op, model, aspect, prompt, keyId: key.id }; }
+    catch (e) {
+      lastErr = e; log.fail(s, msg(e)); const scope = fallbackScope(e); if (scope === 'none') throw e;
+      if (scope === 'provider') { skipKeys.add(key.id); if ((e as ProviderErr).status === 401) setStatus(key.id, 'invalid'); log.say('warn', `default key "${key.label}" failed`, 'trying the next default for Video'); }
+      else { tried.add(model.id); log.say('warn', `falling back after ${model.id} failed`); }
+    }
   }
   throw lastErr instanceof Error ? lastErr : new Error('Could not start the video.');
 }
