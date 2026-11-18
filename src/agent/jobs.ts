@@ -26,15 +26,16 @@ export async function pollJobs(): Promise<boolean> {
       const key = (j.keyId ? listKeys().find((k) => k.id === j.keyId) : undefined) ?? usableKey(provider, 'video'); if (!key) throw new Error('The key used for this job was removed.');
       const secret = await getSecret(key.id);
       const lg = logFor(j.id); const ps = polls.get(j.id) ?? { line: lg.start('cmd', `operations.get ${j.op.split('/').pop()?.slice(0, 12) ?? ''}`), n: 0 }; polls.set(j.id, ps);
+      lg.step('Your video is rendering. This can take a few minutes…');
       const r = await pollVideo(provider, secret, j.op); ps.n++;
       if (r.state === 'running') lg.update(ps.line, { detail: `poll #${ps.n} · provider is still rendering` });
       if (r.state === 'failed') { lg.fail(ps.line, r.message); patchJob(j.id, { status: 'failed', error: r.message }); }
       else if (r.state === 'done') {
-        lg.done(ps.line, `ready after ${ps.n} poll${ps.n > 1 ? 's' : ''}`); const dl = lg.start('cmd', 'download --retry 3');
+        lg.done(ps.line, `ready after ${ps.n} poll${ps.n > 1 ? 's' : ''}`); lg.step('Almost there, downloading your video…'); const dl = lg.start('cmd', 'download --retry 3');
         const blob = await downloadVideo(provider, secret, r.uri); lg.done(dl, `${(blob.size / 1_048_576).toFixed(1)} MB`);
         const mediaId = uid();
         await putMedia({ id: mediaId, projectId: null, kind: 'video', name: `${slug(j.prompt)}.mp4`, mime: blob.type || 'video/mp4', size: blob.size, createdAt: Date.now(), blob });
-        const sv = lg.start('cmd', 'library.save'); lg.done(sv, 'saved on this device'); lg.say('ok', 'done');
+        lg.step('Saving it to your library…'); const sv = lg.start('cmd', 'library.save'); lg.done(sv, 'saved on this device'); lg.say('ok', 'done');
         record('video', 1); patchJob(j.id, { status: 'done', mediaId }); saved = true; window.dispatchEvent(new Event('library:changed'));
       }
     } catch (e) { /* transient errors: keep polling until timeout */ if (e instanceof Error && /removed|no longer stored/.test(e.message)) patchJob(j.id, { status: 'failed', error: e.message }); }

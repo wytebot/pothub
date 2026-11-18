@@ -9,6 +9,9 @@ const BROWSER_OK = new Set(['api.openai.com', 'generativelanguage.googleapis.com
 const hostOf = (url: string) => { try { return new URL(url).hostname; } catch { return ''; } };
 const useNative = (url: string) => Capacitor.isNativePlatform() && !BROWSER_OK.has(hostOf(url));
 
+/** True when a response can be read as it arrives. The phone's own network stack (used for non-browser hosts on Android) returns everything at once. */
+export const canStream = (url: string) => !useNative(url);
+
 const bytesOf = (b64: string) => { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
 
 async function nativeFetch(url: string, init: RequestInit): Promise<Response> {

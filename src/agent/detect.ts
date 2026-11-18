@@ -3,10 +3,13 @@ import { PROVIDERS } from '../models/providerInfo';
 import { IMAGE_MODELS, VIDEO_MODELS, type ImageModel, type VideoModel } from '../models/registry';
 import { defaultKeys, getSecret, usableKey, type ProviderId } from '../vault/vault';
 import { FNS } from '../models/providerInfo';
+import { textModelsFrom, type TextModel } from '../models/text';
 
 export interface ListedModel { id: string; methods: string[]; }
 export interface Catalog {
   image: ImageModel[]; video: VideoModel[];
+  /** chat and document models from each provider's own live list, in no particular order across providers */
+  texts: TextModel[];
   /** cheapest current text model on the Gemini key, used only for optional prompt enhancement */
   text?: { provider: 'gemini'; id: string };
   verified: ProviderId[];   // provider answered with its live model list
@@ -35,12 +38,21 @@ export async function listProviderModels(provider: ProviderId, secret: string, s
   return out;
 }
 
+/** Providers whose model list is only used for text (their image models are not checked against it). */
+async function listTextOnly(provider: ProviderId, secret: string, signal?: AbortSignal): Promise<ListedModel[]> {
+  const sig = signal ? ('any' in AbortSignal ? (AbortSignal as unknown as { any(s: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(6000)]) : signal) : AbortSignal.timeout(6000);
+  if (provider !== 'xai') return [];
+  const r = await call('https://api.x.ai/v1/models', { headers: { Authorization: `Bearer ${secret}` }, signal: sig }, secret);
+  if (!r.ok) throw await failure(r, secret);
+  return ((await r.json()) as { data?: { id: string }[] }).data?.map((m) => ({ id: m.id, methods: [] })) ?? [];
+}
+
 const pretty = (id: string, brand: string) => `${brand} ${id.replace(/^gemini-/, 'Gemini ').replace(/^gpt-image-/, 'GPT Image ').replace(/^veo-/, 'Veo ').replace(/-preview.*$/, ' (preview)').replace(/-(generate|001)\b/g, '').replace(/-/g, ' ').replace(/\s+/g, ' ').trim()}`;
 const versionOf = (id: string) => Number(id.match(/(\d+(?:\.\d+)?)/)?.[1] ?? 0);
 const GEMINI_ASPECTS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
 
 /** Pure: turns provider model lists + the seed registry into what is really usable right now. */
-export function buildCatalog(lists: Partial<Record<ProviderId, ListedModel[]>>, connected: ProviderId[], now = Date.now()): Catalog {
+export function buildCatalog(lists: Partial<Record<ProviderId, ListedModel[]>>, connected: ProviderId[], now = Date.now(), textLists: Partial<Record<ProviderId, ListedModel[]>> = {}): Catalog {
   const verified = connected.filter((p) => lists[p]); const unverified = connected.filter((p) => !lists[p] && PROVIDERS[p].lists);
   const has = (p: ProviderId, id: string) => lists[p]!.some((m) => m.id === id);
   const image: ImageModel[] = []; const video: VideoModel[] = [];
@@ -63,7 +75,9 @@ export function buildCatalog(lists: Partial<Record<ProviderId, ListedModel[]>>, 
     const flash = g.filter((m) => m.methods.includes('generateContent') && /^gemini-\d+(\.\d+)?-flash(-lite)?$/.test(m.id)).sort((a, b) => versionOf(b.id) - versionOf(a.id) || Number(/lite/.test(b.id)) - Number(/lite/.test(a.id)));
     if (flash[0]) text = { provider: 'gemini', id: flash[0].id };
   }
-  return { image, video, text, verified, unverified, at: now };
+  const texts: TextModel[] = [];
+  for (const p of connected) { const l = lists[p] ?? textLists[p]; if (l) texts.push(...textModelsFrom(p, l)); }
+  return { image, video, texts, text, verified, unverified, at: now };
 }
 
 /** Instant, no network: what the seed registry offers for these providers (used until a live check finishes). */
@@ -76,7 +90,8 @@ const connectedProviders = (): ProviderId[] => [...new Set(FNS.flatMap((f) => de
 function restrict(c: Catalog): Catalog {
   const img = new Set(defaultKeys('image').map((k) => k.provider)); const vid = new Set(defaultKeys('video').map((k) => k.provider));
   const txt = defaultKeys('text').some((k) => k.provider === 'gemini');
-  return { ...c, image: c.image.filter((m) => img.has(m.provider)), video: c.video.filter((m) => vid.has(m.provider)), text: txt ? c.text : undefined };
+  const txtProviders = new Set(defaultKeys('text').map((k) => k.provider));
+  return { ...c, image: c.image.filter((m) => img.has(m.provider)), video: c.video.filter((m) => vid.has(m.provider)), texts: c.texts.filter((m) => txtProviders.has(m.provider)), text: txt ? c.text : undefined };
 }
 export const cachedCatalog = (): Catalog => last ?? restrict(seedCatalog(connectedProviders()));
 
@@ -92,9 +107,15 @@ export const dropCatalogCache = () => { mem.clear(); last = null; try { localSto
 export async function refreshCatalog(o: { force?: boolean; signal?: AbortSignal; onProvider?: (p: ProviderId, r: { count: number; source: 'live' | 'cache' | 'builtin' | 'unavailable'; reason?: string }) => void } = {}): Promise<Catalog> {
   if (inflight && !o.force) return inflight;
   const run = (async () => {
-    const connected = connectedProviders(); const lists: Partial<Record<ProviderId, ListedModel[]>> = {};
+    const connected = connectedProviders(); const lists: Partial<Record<ProviderId, ListedModel[]>> = {}; const textLists: Partial<Record<ProviderId, ListedModel[]>> = {};
     await Promise.all(connected.map(async (p) => {
       const key = usableKey(p); if (!key) return;
+      if (p === 'xai' && usableKey('xai', 'text')) {
+        const tk = usableKey('xai', 'text')!; const hit = mem.get(`${tk.id}:text`);
+        if (hit && !o.force && Date.now() - hit.at < TTL) textLists[p] = hit.models;
+        else try { const models = await listTextOnly(p, await getSecret(tk.id), o.signal); const v = { at: Date.now(), models }; mem.set(`${tk.id}:text`, v); persist(`${tk.id}:text`, v); textLists[p] = models; }
+        catch { const old = persisted()[`${tk.id}:text`]; if (old) textLists[p] = old.models; }
+      }
       if (!PROVIDERS[p].lists) { o.onProvider?.(p, { count: IMAGE_MODELS.filter((m) => m.provider === p).length + VIDEO_MODELS.filter((m) => m.provider === p).length, source: 'builtin' }); return; }
       const hit = mem.get(key.id);
       if (hit && !o.force && Date.now() - hit.at < TTL) { lists[p] = hit.models; o.onProvider?.(p, { count: hit.models.length, source: 'cache' }); return; }
@@ -107,7 +128,7 @@ export async function refreshCatalog(o: { force?: boolean; signal?: AbortSignal;
         else o.onProvider?.(p, { count: 0, source: 'unavailable', reason: e instanceof Error ? e.message : 'unreachable' });
       }
     }));
-    last = restrict(buildCatalog(lists, connected)); return last;
+    last = restrict(buildCatalog(lists, connected, Date.now(), textLists)); return last;
   })();
   inflight = run; try { return await run; } finally { if (inflight === run) inflight = null; }
 }

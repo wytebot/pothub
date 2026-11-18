@@ -9,7 +9,7 @@ import { Select } from '../ui/Select';
 import { Dialog } from '../ui/Dialog';
 
 const badge: Record<KeyMeta['status'], string> = { untested: 'Not tested', ok: 'Connected', invalid: 'Rejected', error: 'Check failed' };
-const caps = (p: ProviderId) => [PROVIDERS[p].image && 'Images', PROVIDERS[p].video && 'Video'].filter(Boolean).join(' · ');
+const caps = (p: ProviderId) => [PROVIDERS[p].image && 'Images', PROVIDERS[p].video && 'Video', PROVIDERS[p].text && 'Text'].filter(Boolean).join(' · ');
 const modelNames = (p: ProviderId) => [...IMAGE_MODELS, ...VIDEO_MODELS].filter((m) => m.provider === p).map((m) => m.name);
 
 /** One dialog for both adding a key and editing a saved one. */

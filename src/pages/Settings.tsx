@@ -18,7 +18,7 @@ export function Settings() {
         <div className="row"><span className="muted small" style={{ width: 130 }}>Default priority</span><Select<'quality' | 'speed'> label="Default priority" value={s.priority} onChange={(v) => set({ priority: v })} options={[{ value: 'quality', label: 'Best quality' }, { value: 'speed', label: 'Fastest' }]} /></div>
       </div>
       <div className="panel stack"><h2>Workflow</h2>
-        <label className="check"><input type="checkbox" checked={s.terminal} onChange={(e) => set({ terminal: e.target.checked })} /> Show the live step-by-step terminal while generating</label>
+        <label className="check"><input type="checkbox" checked={s.terminal} onChange={(e) => set({ terminal: e.target.checked })} /> Show the live step-by-step terminal in the Image and Video studios</label>
         <label className="check"><input type="checkbox" checked={s.enhance} onChange={(e) => set({ enhance: e.target.checked })} /> Sharpen my prompts first before generating (uses your Google Gemini key)</label>
       </div>
       <div className="panel"><h2>More</h2><p className="muted small">Keys: <a href="#/providers">AI Providers</a>. Space and backups: <a href="#/storage">Storage</a>. Policies: <a href="#/legal">Legal documents</a>.</p></div>

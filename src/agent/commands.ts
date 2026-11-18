@@ -1,6 +1,6 @@
 /** Slash commands typed inside the prompt, e.g. "/fast /9:16 /n 3 a neon fox". They are removed from the text sent to the model. */
-export interface Flags { prefer?: 'speed' | 'quality'; aspect?: string; count?: number; model?: string; task?: 'image' | 'video'; models?: boolean; enhance?: boolean; plain?: boolean; used: string[]; }
-export const COMMAND_HELP = '/fast  /quality  /9:16 (any ratio)  /n 3  /model <id>  /image  /video  /enhance  /plain  /models';
+export interface Flags { prefer?: 'speed' | 'quality'; aspect?: string; count?: number; model?: string; task?: 'text' | 'image' | 'video'; models?: boolean; enhance?: boolean; plain?: boolean; used: string[]; }
+export const COMMAND_HELP = '/fast  /quality  /9:16 (any ratio)  /n 3  /model <id>  /text  /image  /video  /enhance  /plain  /models';
 
 export function parseCommands(input: string): { text: string; flags: Flags } {
   const flags: Flags = { used: [] }; const words = input.trim().split(/\s+/); const keep: string[] = [];
@@ -14,6 +14,7 @@ export function parseCommands(input: string): { text: string; flags: Flags } {
     else if (lw === '/n' && /^\d$/.test(words[i + 1] ?? '')) { flags.count = Math.min(4, Math.max(1, Number(words[++i]))); use(`--n ${flags.count}`); }
     else if (/^\/n\d$/.test(lw)) { flags.count = Math.min(4, Math.max(1, Number(lw.slice(2)))); use(`--n ${flags.count}`); }
     else if (lw === '/model' && words[i + 1]) { flags.model = words[++i]; use(`--model ${flags.model}`); }
+    else if (lw === '/text' || lw === '/chat' || lw === '/write') { flags.task = 'text'; use('--task text'); }
     else if (lw === '/image') { flags.task = 'image'; use('--task image'); }
     else if (lw === '/video') { flags.task = 'video'; use('--task video'); }
     else if (lw === '/models') { flags.models = true; use('models'); }

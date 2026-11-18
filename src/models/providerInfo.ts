@@ -3,7 +3,7 @@ import type { ProviderId } from '../vault/vault';
 /** What a saved key is used for. Each key is ticked as a default per function, and the app only routes through ticked keys. */
 export type Fn = 'image' | 'video' | 'text';
 export const FNS: Fn[] = ['image', 'video', 'text'];
-export const FN_LABEL: Record<Fn, string> = { image: 'Images', video: 'Video', text: 'Text (prompt enhance)' };
+export const FN_LABEL: Record<Fn, string> = { image: 'Images', video: 'Video', text: 'Text & documents' };
 /** One input box in the Add/Edit key dialog. A provider with more than one box stores them joined with ":". */
 export interface CredField { id: string; label: string; minLength: number; }
 
@@ -14,6 +14,8 @@ export interface ProviderInfo {
   /** Where the person gets a key. */
   keyFrom: string;
   image: boolean; video: boolean;
+  /** true: the app can chat, write and read documents with this provider's text models. */
+  text?: boolean;
   /** true: the app can ask this provider which models exist right now. */
   lists: boolean;
   /** Added recently; shown with a Beta label until it has been proven with real keys. */
@@ -23,9 +25,9 @@ export interface ProviderInfo {
   fields?: CredField[];
 }
 export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
-  openai: { name: 'OpenAI', billing: 'Charged to your OpenAI account per image or video. Some models need organization verification on OpenAI.', keyFrom: 'platform.openai.com', image: true, video: true, lists: true },
-  gemini: { name: 'Google Gemini', billing: 'Charged to your Google AI Studio or Cloud billing account. Free-tier limits and regional availability are set by Google.', keyFrom: 'aistudio.google.com', image: true, video: true, lists: true },
-  xai: { name: 'xAI (Grok)', billing: 'Charged to your xAI account per image.', keyFrom: 'console.x.ai', image: true, video: false, lists: false, beta: true },
+  openai: { name: 'OpenAI', billing: 'Charged to your OpenAI account per image or video. Some models need organization verification on OpenAI.', keyFrom: 'platform.openai.com', image: true, video: true, text: true, lists: true },
+  gemini: { name: 'Google Gemini', billing: 'Charged to your Google AI Studio or Cloud billing account. Free-tier limits and regional availability are set by Google.', keyFrom: 'aistudio.google.com', image: true, video: true, text: true, lists: true },
+  xai: { name: 'xAI (Grok)', billing: 'Charged to your xAI account per image.', keyFrom: 'console.x.ai', image: true, video: false, text: true, lists: false, beta: true },
   stability: { name: 'Stability AI', billing: 'Uses credits on your Stability AI account.', keyFrom: 'platform.stability.ai', image: true, video: false, lists: false, beta: true },
   bfl: { name: 'Black Forest Labs (FLUX)', billing: 'Uses credits on your Black Forest Labs account.', keyFrom: 'dashboard.bfl.ai', image: true, video: false, lists: false, beta: true },
   ideogram: { name: 'Ideogram', billing: 'Uses credits on your Ideogram API account.', keyFrom: 'ideogram.ai (API settings)', image: true, video: false, lists: false, beta: true },
@@ -45,8 +47,8 @@ export const PROVIDER_IDS = Object.keys(PROVIDERS) as ProviderId[];
 
 const SINGLE: CredField[] = [{ id: 'key', label: 'API key', minLength: 16 }];
 export const fieldsOf = (p: ProviderId): CredField[] => PROVIDERS[p].fields ?? SINGLE;
-/** Functions this provider can serve. Only Gemini is used for text (optional prompt enhancement). */
-export const fnsOf = (p: ProviderId): Fn[] => [PROVIDERS[p].image && 'image', PROVIDERS[p].video && 'video', p === 'gemini' && 'text'].filter(Boolean) as Fn[];
+/** Functions this provider can serve. Text covers chat, writing, analysis and documents. */
+export const fnsOf = (p: ProviderId): Fn[] => [PROVIDERS[p].image && 'image', PROVIDERS[p].video && 'video', PROVIDERS[p].text && 'text'].filter(Boolean) as Fn[];
 
 /** Parts <-> the one string the vault stores. Splitting is forgiving (colon, comma, bar, space or new line) so older saved pairs still open. */
 export const joinSecret = (p: ProviderId, parts: string[]): string => (fieldsOf(p).length > 1 ? parts.map((x) => x.trim()).join(':') : (parts[0] ?? '').trim());

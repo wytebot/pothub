@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useRunLog, type Line, type RunLog } from '../agent/log';
 
 const fmt = (ms: number) => (ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : ms < 60_000 ? `${Math.round(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m ${String(Math.round((ms % 60_000) / 1000)).padStart(2, '0')}s`);
-const GLYPH: Record<Line['kind'], string> = { cmd: '$', info: '›', ok: '✓', warn: '!', err: '✕' };
+const GLYPH: Record<Line['kind'], string> = { cmd: '$', info: '›', ok: '✓', warn: '!', err: '✕', step: '·' };
 
 function useNow(active: boolean) { const [, set] = useState(0); useEffect(() => { if (!active) return; const t = setInterval(() => set((n) => n + 1), 250); return () => clearInterval(t); }, [active]); return Date.now(); }
 
 /** Live, terminal-style feed of what the app is doing. Lines appear as soon as a step starts; running steps show a spinner and a live timer. */
 export function Terminal({ log, title = 'Workflow', defaultOpen = true }: { log: RunLog; title?: string; defaultOpen?: boolean }) {
-  const lines = useRunLog(log);
+  const lines = useRunLog(log).filter((l) => l.kind !== 'step');
   const [open, setOpen] = useState(() => (localStorage.getItem('ui.terminal') ?? (defaultOpen ? '1' : '0')) === '1');
   const box = useRef<HTMLDivElement>(null);
   const running = lines.some((l) => l.state === 'running');

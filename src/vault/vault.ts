@@ -12,12 +12,22 @@ export interface KeyMeta { id: string; provider: ProviderId; label: string; last
 const META = 'vault.meta';
 const writeMeta = (m: KeyMeta[]) => localStorage.setItem(META, JSON.stringify(m));
 const MIGRATED = 'vault.defaults.v1';
+const MIGRATED_TEXT = 'vault.defaults.text.v1';
 const readMeta = (): KeyMeta[] => {
   let rows: KeyMeta[]; try { rows = JSON.parse(localStorage.getItem(META) ?? '[]'); } catch { return []; }
-  if (localStorage.getItem(MIGRATED)) return rows;
+  if (localStorage.getItem(MIGRATED) && localStorage.getItem(MIGRATED_TEXT)) return rows;
   // One time: keys saved before defaults existed stay in use. Untick them on the AI Providers page if you want fewer.
-  for (const k of rows) if (!k.defaults) { k.defaults = {}; for (const f of fnsOf(k.provider)) k.defaults[f] = k.createdAt; }
-  try { writeMeta(rows); localStorage.setItem(MIGRATED, '1'); } catch { /* storage blocked: try again next time */ }
+  if (!localStorage.getItem(MIGRATED)) for (const k of rows) if (!k.defaults) { k.defaults = {}; for (const f of fnsOf(k.provider)) k.defaults[f] = k.createdAt; }
+  // One time: Text now covers chat and documents for more providers. The first saved key of each such provider is ticked for Text, once.
+  if (!localStorage.getItem(MIGRATED_TEXT)) {
+    const done = new Set<ProviderId>();
+    for (const k of [...rows].sort((a, b) => a.createdAt - b.createdAt)) {
+      if (!fnsOf(k.provider).includes('text') || done.has(k.provider)) continue;
+      done.add(k.provider); k.defaults = k.defaults ?? {};
+      if (!rows.some((r) => r.provider === k.provider && r.defaults?.text !== undefined)) k.defaults.text = k.createdAt;
+    }
+  }
+  try { writeMeta(rows); localStorage.setItem(MIGRATED, '1'); localStorage.setItem(MIGRATED_TEXT, '1'); } catch { /* storage blocked: try again next time */ }
   return rows;
 };
 

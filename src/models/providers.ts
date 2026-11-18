@@ -25,7 +25,7 @@ export async function testKey(p: ProviderId, secret: string): Promise<TestResult
   } catch (e) { return { status: 'error', message: e instanceof Error ? e.message : 'Test failed.' }; }
 }
 
-export interface GenInput { model: string; prompt: string; aspect: string; count: number; signal?: AbortSignal; }
+export interface GenInput { model: string; prompt: string; /** empty keeps the shape of a reference photo */ aspect: string; count: number; signal?: AbortSignal; /** photos to edit or use as a reference (Google Gemini image models only) */ refs?: { mime: string; data: string }[]; }
 export interface GenImage { blob: Blob; mime: string; }
 const OPENAI_SIZE: Record<string, string> = { '1:1': '1024x1024', '3:2': '1536x1024', '2:3': '1024x1536' };
 
@@ -39,7 +39,7 @@ export async function generateImages(p: ProviderId, secret: string, i: GenInput)
     return out;
   }
   if (p === 'gemini') {
-    const r = await call(`https://generativelanguage.googleapis.com/v1beta/models/${i.model}:generateContent`, { method: 'POST', signal: i.signal, headers: { 'x-goog-api-key': secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: i.prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio: i.aspect } } }) }, secret);
+    const r = await call(`https://generativelanguage.googleapis.com/v1beta/models/${i.model}:generateContent`, { method: 'POST', signal: i.signal, headers: { 'x-goog-api-key': secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [...(i.refs ?? []).map((r) => ({ inlineData: { mimeType: r.mime, data: r.data } })), { text: i.prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'], ...(i.aspect ? { imageConfig: { aspectRatio: i.aspect } } : {}) } }) }, secret);
     if (!r.ok) throw await failure(r, secret);
     const j = await r.json() as { candidates?: { content?: { parts?: { inlineData?: { mimeType: string; data: string } }[] } }[] };
     const part = j.candidates?.[0]?.content?.parts?.find((x) => x.inlineData);
