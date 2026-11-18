@@ -163,6 +163,13 @@ export async function runVideoStart(o: { prompt: string; modelId: string; signal
 }
 
 export interface TextOutcome { text: string; model: TextModel; file: OutFile | null; notes: string[]; }
+/** Text models that answered last time, and ones that hit a quota recently, so the next request starts with what works. */
+const GOOD = 'agent.text.good.v1'; const BLOCKED = 'agent.text.blocked.v1'; const BLOCK_MS = 45 * 60_000;
+const readJson = <T,>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? '') as T; } catch { return d; } };
+const goodModel = (): string | undefined => readJson<{ id?: string }>(GOOD, {}).id;
+const saveGood = (id: string) => { try { localStorage.setItem(GOOD, JSON.stringify({ id })); } catch { /* storage blocked */ } };
+const blockedNow = (): Set<string> => { const all = readJson<Record<string, number>>(BLOCKED, {}); const now = Date.now(); return new Set(Object.entries(all).filter(([, t]) => t > now).map(([id]) => id)); };
+const block = (ids: string[]) => { try { const all = readJson<Record<string, number>>(BLOCKED, {}); const now = Date.now(); for (const k of Object.keys(all)) if (all[k] <= now) delete all[k]; for (const id of ids) all[id] = now + BLOCK_MS; localStorage.setItem(BLOCKED, JSON.stringify(all)); } catch { /* storage blocked */ } };
 const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
 /**
@@ -179,14 +186,16 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   const pref = flags.prefer ?? o.prefer;
   const skipKeys = new Set<string>(); const tried = new Set<string>(); let lastErr: unknown; let partial = '';
 
-  for (let attempt = 0, max = Math.min(8, 3 + defaultKeys('text').length); attempt < max; attempt++) {
+  for (let attempt = 0, max = Math.min(10, 6 + defaultKeys('text').length); attempt < max; attempt++) {
     log.step(attempt === 0 ? 'Choosing the best text model…' : 'Trying another model…');
     const live = new Set(defaultKeys('text', skipKeys).map((k) => k.provider));
-    const pool = catalog.texts.filter((m) => live.has(m.provider) && !tried.has(m.id));
+    const usable = catalog.texts.filter((m) => live.has(m.provider) && !tried.has(m.id)); const cool = blockedNow();
+    const pool = usable.filter((m) => !cool.has(m.id)).length ? usable.filter((m) => !cool.has(m.id)) : usable;
     const r = log.start('cmd', `pothub route --task text --prefer ${pref}${o.files.length ? ` --files ${o.files.length}` : ''}`);
     const ranked = rankText(pool, pref, { kinds: o.files.map((f) => f.kind) });
-    const forced = flags.model ? ranked.find((m) => m.id === flags.model) : undefined;
-    const model = forced ?? ranked[0];
+    const want = flags.model ?? (getSettings().textModel !== 'auto' ? getSettings().textModel : undefined);
+    const forced = want ? ranked.find((m) => m.id === want) : undefined;
+    const model = forced ?? ranked.find((m) => m.id === goodModel()) ?? ranked[0];
     if (!model) {
       log.fail(r, 'no model');
       if (lastErr instanceof Error) throw lastErr;
@@ -206,14 +215,21 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
       let file: OutFile | null = null;
       if (wanted.file) { log.step('Preparing your file…'); try { file = await buildFile(out.text, wanted, prompt); } catch { notes.push('The answer is above, but I could not build the file this time. You can copy it from the chat.'); } }
+      saveGood(model.id);
       return { text: out.text, model, file, notes };
     } catch (e) {
       lastErr = e; log.fail(g, msg(e));
       const scope = fallbackScope(e); if (scope === 'none') throw e;
       // Most of the answer already arrived and then the connection dropped: keep what we have instead of starting over.
       if (partial.length > 400) { log.say('warn', 'kept the partial answer'); return { text: partial, model, file: null, notes: [...notes, 'The connection dropped near the end, so this answer may be cut short. Ask me to continue and I will pick up from here.'] }; }
-      if (scope === 'provider') { skipKeys.add(key.id); if ((e as ProviderErr).status === 401) setStatus(key.id, 'invalid'); log.say('warn', `default key "${key.label}" failed`, 'trying the next default for Text'); log.step('That key did not work. Trying your next one…'); }
-      else { tried.add(model.id); log.say('warn', `falling back after ${model.id} failed`); log.step('That model did not respond. Trying another…'); }
+      const status = (e as ProviderErr).status;
+      if (status === 401 || status === 402 || status === 403) { skipKeys.add(key.id); if (status === 401) setStatus(key.id, 'invalid'); log.say('warn', `default key "${key.label}" failed`, 'trying the next default for Text'); log.step('That key did not work. Trying your next one…'); }
+      else {
+        // A quota or rate limit on one model (free keys often have none for the biggest models) says nothing about the key's smaller models: step down to them.
+        tried.add(model.id);
+        if (status === 429) { const same = catalog.texts.filter((m) => m.provider === model.provider && m.quality >= model.quality).map((m) => m.id); same.forEach((id) => tried.add(id)); block(same); }
+        log.say('warn', `falling back after ${model.id} failed`); log.step('That model did not respond. Trying a lighter one…');
+      }
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('I could not finish this one. Try again.');

@@ -13,6 +13,7 @@ export function Settings() {
       <h1>Settings</h1>
       <div className="panel stack"><h2>Generation</h2>
         <p className="muted small">Preferred models are used when Auto picks a model and the preferred one can do the job (it is connected and supports the requested shape).</p>
+        <div className="row"><span className="muted small" style={{ width: 130 }}>Text model</span><Select label="Preferred text model" value={s.textModel} onChange={(v) => set({ textModel: v })} options={[{ value: 'auto', label: 'Auto' }, ...cat.texts.map((m) => ({ value: m.id, label: m.name }))]} /></div>
         <div className="row"><span className="muted small" style={{ width: 130 }}>Image model</span><Select label="Preferred image model" value={s.imageModel} onChange={(v) => set({ imageModel: v })} options={[{ value: 'auto', label: 'Auto' }, ...cat.image.map((m) => ({ value: m.id, label: m.name }))]} /></div>
         <div className="row"><span className="muted small" style={{ width: 130 }}>Video model</span><Select label="Preferred video model" value={s.videoModel} onChange={(v) => set({ videoModel: v })} options={[{ value: 'auto', label: 'Auto' }, ...cat.video.map((m) => ({ value: m.id, label: m.name }))]} /></div>
         <div className="row"><span className="muted small" style={{ width: 130 }}>Default priority</span><Select<'quality' | 'speed'> label="Default priority" value={s.priority} onChange={(v) => set({ priority: v })} options={[{ value: 'quality', label: 'Best quality' }, { value: 'speed', label: 'Fastest' }]} /></div>
