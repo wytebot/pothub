@@ -75,7 +75,7 @@ export function App() {
   );
 
   return (
-    <div className="shell">
+    <div className={`shell${path.startsWith('/editor/') ? ' editor-open' : ''}`}>
       <header className="topbar">
         <button className="icon-btn" aria-label="Open navigation" aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" size={20} /></button>
         <span className="brand">Pothub</span>
@@ -91,7 +91,7 @@ export function App() {
           {more && <div id="more-nav">{secondary.map(link)}</div>}
         </div>
       </nav>
-      <main className={`main${route.path === '/' ? ' chat-mode' : ''}`} id="main"
+      <main className={`main${route.path === '/' ? ' chat-mode' : ''}${path.startsWith('/editor/') ? ' editor-mode' : ''}`} id="main"
         onTouchStart={(e) => { touch.current = { y: e.touches[0].clientY, on: e.currentTarget.scrollTop === 0 && !path.startsWith('/editor') && route.path !== '/' }; }}
         onTouchMove={(e) => { const t = touch.current; if (t?.on) setPull(Math.max(0, Math.min(100, e.touches[0].clientY - t.y))); }}
         onTouchEnd={() => { if (pull >= 80) setRefresh((n) => n + 1); setPull(0); touch.current = null; }}>

@@ -1,18 +1,16 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getProject, listLibrary, listMedia, putBundle, putMedia, uid, type MediaRecord, type ProjectRecord, listProjects } from '../storage/db';
-import { activeAt, AUDIO_TRACK, canvasSize, end, fadeFactor, fillScale, makeClip, maxDuration, neighborCut, rippleDelete, snapPoints, snapTo, speedOf, splitClip, srcAt, totalDuration, trimEndTo, trimStartTo, withSpeed, type Aspect, type Clip, type TimelineData } from '../editor/model';
+import { activeAt, AUDIO_TRACK, canvasSize, clock, end, fadeFactor, filterOf, fillScale, FX, makeClip, maxDuration, neighborCut, parseSrt, rippleDelete, snapPoints, snapTo, speedOf, splitClip, srcAt, totalDuration, trimEndTo, trimStartTo, withSpeed, type Aspect, type Clip, type TimelineData } from '../editor/model';
+import { Icon, type IconName } from '../ui/Icon';
 import { platform } from '../platform';
 import { Select } from '../ui/Select';
 
-const ROWS = [{ track: 2, label: 'Layer 3' }, { track: 1, label: 'Layer 2' }, { track: 0, label: 'Layer 1' }, { track: AUDIO_TRACK, label: 'Audio' }];
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 type El = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
-const FRAME = 1 / 30; const LABEL_W = 64;
+const FRAME = 1 / 30;
 /** Where a clip was drawn on the preview, as fractions of the canvas, so the preview can be tapped and dragged. */
 interface Box { id: string; cx: number; cy: number; w: number; h: number; rot: number; }
 const natural = (e: El | null) => (e instanceof HTMLVideoElement ? { iw: e.videoWidth, ih: e.videoHeight } : e instanceof HTMLImageElement ? { iw: e.naturalWidth, ih: e.naturalHeight } : { iw: 0, ih: 0 });
-const tickLabel = (t: number) => (t >= 60 ? `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}` : `${Number.isInteger(t) ? t : t.toFixed(1)}s`);
 
 /** Audio waveform drawn behind an audio clip. Memoised so it is not rebuilt on every playback frame. */
 const Wave = memo(function Wave({ peaks, a, b }: { peaks: number[]; a: number; b: number }) {
@@ -38,13 +36,50 @@ export function Editor({ projectId }: { projectId?: string }) {
   return <Workspace key={project.id} project={project} />;
 }
 
+type Panel = '' | 'speed' | 'volume' | 'fade' | 'adjust' | 'fx' | 'transform' | 'length' | 'text' | 'captions' | 'ratio' | 'export';
+type MediaMode = '' | 'visual' | 'overlay' | 'audio';
+interface Tool { id: string; icon: IconName; label: string; run: () => void; off?: boolean; danger?: boolean; on?: boolean; }
+const TITLES: Record<Panel, string> = { '': '', speed: 'Speed', volume: 'Volume', fade: 'Fade', adjust: 'Adjust', fx: 'Effects', transform: 'Position and size', length: 'Timing', text: 'Text', captions: 'Captions', ratio: 'Ratio', export: 'Export' };
+const H_MAIN = 60; const H_ROW = 34; const H_RULER = 26;
+
+function Slider({ label, value, min, max, step = 0.01, show, onChange }: { label: string; value: number; min: number; max: number; step?: number; show?: (v: number) => string; onChange: (v: number) => void }) {
+  return (
+    <label className="cc-slider"><span>{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} /><b>{show ? show(value) : value.toFixed(2)}</b></label>
+  );
+}
+
+/** The "add media" sheet: project files and generated media as a grid, plus Import from the device. */
+function MediaSheet({ mode, items, onPick, onImport, onClose }: { mode: Exclude<MediaMode, ''>; items: MediaRecord[]; onPick: (r: MediaRecord) => void; onImport: (f: FileList) => void; onClose: () => void }) {
+  const shown = useMemo(() => { const seen = new Set<string>(); return items.filter((m) => (mode === 'audio' ? m.kind === 'audio' : m.kind !== 'audio') && !seen.has(m.id) && seen.add(m.id)); }, [items, mode]);
+  const urls = useMemo(() => new Map(shown.filter((m) => m.kind !== 'audio').map((m) => [m.id, URL.createObjectURL(m.blob)])), [shown]);
+  useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
+  return (
+    <div className="cc-sheet cc-media" role="dialog" aria-label={mode === 'audio' ? 'Add audio' : mode === 'overlay' ? 'Add overlay' : 'Add media'}>
+      <div className="cc-sheet-head"><strong>{mode === 'audio' ? 'Add audio' : mode === 'overlay' ? 'Add overlay' : 'Add media'}</strong>
+        <label className="cc-icon" title="Import from this device" aria-label="Import from this device"><Icon name="plus" size={22} /><input type="file" hidden multiple accept={mode === 'audio' ? 'audio/*' : 'image/*,video/*'} onChange={(e) => { if (e.target.files?.length) onImport(e.target.files); e.target.value = ''; }} /></label>
+        <button className="cc-icon" aria-label="Close" onClick={onClose}><Icon name="close" size={22} /></button></div>
+      <div className="cc-grid">
+        {shown.length === 0 && <p className="muted small cc-empty">Nothing here yet. Tap + to bring in {mode === 'audio' ? 'audio' : 'photos and videos'} from this device, or generate some in the studios.</p>}
+        {shown.map((m) => (
+          <button key={m.id} className="cc-tile" onClick={() => onPick(m)} title={m.name} aria-label={`Add ${m.name}`}>
+            {m.kind === 'image' ? <img src={urls.get(m.id)} alt="" /> : m.kind === 'video' ? <video src={`${urls.get(m.id)}#t=0.1`} muted playsInline preload="metadata" /> : <span className="cc-note"><Icon name="music" size={26} /></span>}
+            <span className="cc-tile-name">{m.name}</span>
+          </button>))}
+      </div>
+    </div>
+  );
+}
+
 function Workspace({ project }: { project: ProjectRecord }) {
-  const init = project.data as Partial<TimelineData>;
+  const init = project.data as Partial<TimelineData> & { cover?: string };
   const [data, setDataRaw] = useState<TimelineData>({ aspect: init.aspect ?? '16:9', clips: init.clips ?? [] });
+  const [cover, setCover] = useState<string | undefined>(init.cover);
   const [sel, setSel] = useState<string | null>(null);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(60);
+  const [pad, setPad] = useState(180);
   const [snap, setSnap] = useState(true);
   const [guide, setGuide] = useState<number | null>(null);
   const [saved, setSaved] = useState<'saved' | 'saving'>('saved');
@@ -52,21 +87,25 @@ function Workspace({ project }: { project: ProjectRecord }) {
   const [peaks, setPeaks] = useState<Record<string, { p: number[]; d: number }>>({});
   const [assets, setAssets] = useState<MediaRecord[]>([]);
   const [lib, setLib] = useState<MediaRecord[]>([]);
+  const [panel, setPanel] = useState<Panel>('');
+  const [media, setMedia] = useState<MediaMode>('');
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
   const [exp, setExp] = useState<{ fmt: 'webm' | 'png' | 'jpeg'; res: '720' | '1080'; fps: '24' | '30'; busy: boolean; pct: number }>({ fmt: 'webm', res: '720', fps: '30', busy: false, pct: 0 });
 
   const dataRef = useRef(data); dataRef.current = data;
   const selRef = useRef<string | null>(null); selRef.current = sel;
+  const playingRef = useRef(false); playingRef.current = playing;
   const timeRef = useRef(0); const past = useRef<Clip[][]>([]); const future = useRef<Clip[][]>([]); const lastKey = useRef({ k: '', t: 0 });
-  const canvas = useRef<HTMLCanvasElement>(null); const els = useRef(new Map<string, El>()); const urls = useRef(new Map<string, string>());
+  const canvas = useRef<HTMLCanvasElement>(null); const stage = useRef<HTMLDivElement>(null); const els = useRef(new Map<string, El>()); const urls = useRef(new Map<string, string>());
   const mediaMap = useRef(new Map<string, MediaRecord>()); const raf = useRef(0); const cancelExport = useRef(false);
   const boxes = useRef<Box[]>([]); const tlScroll = useRef<HTMLDivElement>(null); const rowEls = useRef(new Map<number, HTMLElement>());
   const busyMedia = useRef(new Set<string>()); const peakCtx = useRef<AudioContext | null>(null);
   const audio = useRef<{ ac: AudioContext; dest: MediaStreamAudioDestinationNode; mon: GainNode; srcs: Map<El, MediaElementAudioSourceNode> } | null>(null);
   const dur = totalDuration(data.clips);
 
-  const refreshAssets = useCallback(async () => { const a = await listMedia(project.id); mediaMap.current = new Map(a.map((m) => [m.id, m])); setAssets(a); setLib((await listLibrary())); }, [project.id]);
+  const refreshAssets = useCallback(async () => { const a = await listMedia(project.id); mediaMap.current = new Map(a.map((m) => [m.id, m])); setAssets(a); setLib(await listLibrary()); }, [project.id]);
   useEffect(() => { void refreshAssets(); return () => { cancelAnimationFrame(raf.current); els.current.forEach((e) => { if (e instanceof HTMLMediaElement) e.pause(); }); urls.current.forEach(URL.revokeObjectURL); void audio.current?.ac.close(); void peakCtx.current?.close(); }; }, [refreshAssets]);
+  useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), msg.error ? 7000 : 3500); return () => clearTimeout(t); }, [msg]);
 
   // history ------------------------------------------------------------
   const commit = (clips: Clip[], key?: string) => {
@@ -81,9 +120,9 @@ function Workspace({ project }: { project: ProjectRecord }) {
   // autosave -------------------------------------------------------------
   useEffect(() => {
     setSaved('saving');
-    const t = setTimeout(() => { void putBundle({ ...project, data: { ...project.data, aspect: data.aspect, clips: data.clips }, updatedAt: Date.now() }, []).then(() => setSaved('saved')).catch((e) => setMsg({ text: e instanceof Error ? e.message : 'Autosave failed.', error: true })); }, 600);
+    const t = setTimeout(() => { void putBundle({ ...project, data: { ...project.data, aspect: data.aspect, clips: data.clips, ...(cover ? { cover } : {}) }, updatedAt: Date.now() }, []).then(() => setSaved('saved')).catch((e) => setMsg({ text: e instanceof Error ? e.message : 'Autosave failed.', error: true })); }, 600);
     return () => clearTimeout(t);
-  }, [data, project]);
+  }, [data, project, cover]);
 
   // media elements ---------------------------------------------------------
   const getEl = (c: Clip): El | null => {
@@ -106,7 +145,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
     try {
       const v = document.createElement('video'); v.muted = true; v.preload = 'auto'; v.playsInline = true; v.src = u;
       await new Promise<void>((res, rej) => { const to = setTimeout(() => rej(new Error('timeout')), 8000); v.onloadeddata = () => { v.currentTime = Math.min(0.1, (v.duration || 1) / 2); }; v.onseeked = () => { clearTimeout(to); res(); }; v.onerror = () => { clearTimeout(to); rej(new Error('video')); }; });
-      const cv = document.createElement('canvas'); cv.height = 64; cv.width = Math.max(1, Math.round((64 * v.videoWidth) / (v.videoHeight || 1)));
+      const cv = document.createElement('canvas'); cv.height = 96; cv.width = Math.max(1, Math.round((96 * v.videoWidth) / (v.videoHeight || 1)));
       cv.getContext('2d')!.drawImage(v, 0, 0, cv.width, cv.height);
       const url = cv.toDataURL('image/jpeg', 0.6); setThumbs((o) => ({ ...o, [id]: url }));
     } catch { /* no thumbnail: the clip keeps its plain colour */ } finally { URL.revokeObjectURL(u); }
@@ -131,10 +170,10 @@ function Workspace({ project }: { project: ProjectRecord }) {
       ctx.save(); ctx.globalAlpha = c.opacity * fadeFactor(c, t);
       ctx.translate(w / 2 + c.x * w, h / 2 + c.y * h); ctx.rotate((c.rotate * Math.PI) / 180); ctx.scale(c.flipX ? -1 : 1, 1);
       let bw = 0; let bh = 0;
-      if (c.kind === 'text') { const fs = ((c.fontSize ?? 48) * h) / 720; ctx.font = `600 ${fs}px system-ui, sans-serif`; ctx.fillStyle = c.color ?? '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; bw = ctx.measureText(c.text ?? '').width * c.scale; bh = fs * 1.25 * c.scale; ctx.scale(c.scale, c.scale); ctx.fillText(c.text ?? '', 0, 0); }
+      if (c.kind === 'text') { const fs = ((c.fontSize ?? 48) * h) / 720; ctx.font = `600 ${fs}px system-ui, sans-serif`; ctx.fillStyle = c.color ?? '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = fs * 0.12; bw = ctx.measureText(c.text ?? '').width * c.scale; bh = fs * 1.25 * c.scale; ctx.scale(c.scale, c.scale); ctx.fillText(c.text ?? '', 0, 0); }
       else {
         const e = getEl(c); const { iw, ih } = natural(e);
-        if (e && iw && ih) { const s = Math.min(w / iw, h / ih) * c.scale; bw = iw * s; bh = ih * s; ctx.filter = `brightness(${c.brightness}) contrast(${c.contrast}) saturate(${c.saturation})`; ctx.drawImage(e as CanvasImageSource, (-iw * s) / 2, (-ih * s) / 2, iw * s, ih * s); }
+        if (e && iw && ih) { const s = Math.min(w / iw, h / ih) * c.scale; bw = iw * s; bh = ih * s; ctx.filter = filterOf(c, h); ctx.drawImage(e as CanvasImageSource, (-iw * s) / 2, (-ih * s) / 2, iw * s, ih * s); }
       }
       ctx.restore();
       if (record && bw > 0) boxes.current.push({ id: c.id, cx: 0.5 + c.x, cy: 0.5 + c.y, w: bw / w, h: bh / h, rot: c.rotate });
@@ -144,7 +183,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
     const cv = canvas.current; if (!cv) return; const { w, h } = canvasSize(dataRef.current.aspect, 720); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
     const ctx = cv.getContext('2d')!; render(ctx, w, h, timeRef.current, true);
     const b = boxes.current.find((x) => x.id === selRef.current);
-    if (b) { ctx.save(); ctx.translate(b.cx * w, b.cy * h); ctx.rotate((b.rot * Math.PI) / 180); ctx.strokeStyle = '#4da3ff'; ctx.lineWidth = Math.max(2, h / 360); ctx.setLineDash([h / 90, h / 150]); ctx.strokeRect((-b.w * w) / 2, (-b.h * h) / 2, b.w * w, b.h * h); ctx.restore(); }
+    if (b) { ctx.save(); ctx.translate(b.cx * w, b.cy * h); ctx.rotate((b.rot * Math.PI) / 180); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, h / 360); ctx.setLineDash([h / 90, h / 150]); ctx.strokeRect((-b.w * w) / 2, (-b.h * h) / 2, b.w * w, b.h * h); ctx.restore(); }
   };
 
   const syncMedia = (t: number, playingNow: boolean) => {
@@ -162,8 +201,10 @@ function Workspace({ project }: { project: ProjectRecord }) {
   };
   useEffect(() => { if (!playing) { timeRef.current = time; syncMedia(time, false); draw(); } }); // eslint-disable-line
 
-  // keep the playhead in view while it moves
-  useEffect(() => { const el = tlScroll.current; if (!el) return; const x = time * zoom + LABEL_W; if (x > el.scrollLeft + el.clientWidth - 24) el.scrollLeft = x - el.clientWidth + 120; else if (x < el.scrollLeft + LABEL_W) el.scrollLeft = Math.max(0, x - LABEL_W); }, [time]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the timeline scrolls under a fixed playhead (like CapCut): scroll position <-> time -------------
+  useEffect(() => { const el = tlScroll.current; if (!el) return; const f = () => setPad(Math.round(el.clientWidth / 2)); f(); const ro = new ResizeObserver(f); ro.observe(el); return () => ro.disconnect(); }, []);
+  useEffect(() => { const el = tlScroll.current; if (!el) return; const x = time * zoom; if (Math.abs(el.scrollLeft - x) > 1) el.scrollLeft = x; }, [time, zoom, pad, data.clips.length]);
+  const onTlScroll = () => { const el = tlScroll.current; if (!el || playingRef.current) return; if (Math.abs(el.scrollLeft - timeRef.current * zoom) < 1.5) return; seek(el.scrollLeft / zoom); };
 
   // playback + export ----------------------------------------------------------
   const run = (from: number, onFrame: (t: number) => void, onEnd: () => void) => {
@@ -173,9 +214,10 @@ function Workspace({ project }: { project: ProjectRecord }) {
   };
   const pause = () => { cancelAnimationFrame(raf.current); setPlaying(false); syncMedia(timeRef.current, false); };
   const play = () => { if (playing) { pause(); return; } const from = timeRef.current >= dur - 0.05 ? 0 : timeRef.current; setPlaying(true); cancelExport.current = false; run(from, () => {}, () => { setTime(Math.min(timeRef.current, dur)); pause(); }); };
-  const seek = (t: number) => { if (playing) pause(); const v = clamp(t, 0, dur); timeRef.current = v; setTime(v); };
+  const seek = (t: number) => { if (playingRef.current) pause(); const v = clamp(t, 0, dur); timeRef.current = v; setTime(v); };
   const step = (d: number) => seek(timeRef.current + d);
   const cut = (dir: -1 | 1) => seek(neighborCut(dataRef.current.clips, timeRef.current, dir) ?? (dir < 0 ? 0 : dur));
+  const fullscreen = () => { const el = stage.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null; if (!el) return; try { if (document.fullscreenElement) void document.exitFullscreen(); else if (el.requestFullscreen) void el.requestFullscreen(); else el.webkitRequestFullscreen?.(); } catch { /* not supported here */ } };
 
   const exportNow = async () => {
     setMsg(null); const res = Number(exp.res) as 720 | 1080; const { w, h } = canvasSize(data.aspect, res);
@@ -200,31 +242,52 @@ function Workspace({ project }: { project: ProjectRecord }) {
 
   // editing actions ----------------------------------------------------------------
   const selected = () => dataRef.current.clips.find((x) => x.id === selRef.current);
-  const addAsset = async (rec: MediaRecord) => {
+  /** The chosen clip, or else the picture or video under the playhead (main track first), so Edit and Effects always have something to work on. */
+  const target = (): Clip | undefined => selected() ?? activeAt(dataRef.current.clips, timeRef.current).filter((x) => x.kind !== 'audio' && x.kind !== 'text').sort((a, b) => a.track - b.track)[0];
+  const mainEnd = () => Math.max(0, ...dataRef.current.clips.filter((c) => c.track === 0).map(end));
+  const addAsset = async (rec: MediaRecord, mode: MediaMode) => {
     let r = rec;
     if (rec.projectId !== project.id) { r = { ...rec, id: uid(), projectId: project.id }; await putMedia(r); await refreshAssets(); mediaMap.current.set(r.id, r); }
     const d = r.kind === 'image' ? 5 : await probe(r.blob, r.kind as 'video' | 'audio');
-    const c = makeClip({ id: uid(), kind: r.kind, name: r.name, mediaId: r.id, start: timeRef.current, duration: d, srcDuration: r.kind === 'image' ? undefined : d });
-    commit([...dataRef.current.clips, c]); setSel(c.id);
+    const onMain = mode === 'visual'; const first = !dataRef.current.clips.some((c) => c.kind === 'video' || c.kind === 'image');
+    const c = makeClip({ id: uid(), kind: r.kind, name: r.name, mediaId: r.id, start: onMain ? mainEnd() : timeRef.current, duration: d, srcDuration: r.kind === 'image' ? undefined : d, ...(mode === 'overlay' ? { track: 2, scale: 0.5 } : onMain ? { track: 0 } : {}) });
+    commit([...dataRef.current.clips, c]); setSel(c.id); if (onMain && first) seek(0);
   };
-  const importFiles = async (files: FileList | null) => {
-    if (!files) return;
-    try { for (const f of Array.from(files)) { const kind = f.type.startsWith('video') ? 'video' : f.type.startsWith('audio') ? 'audio' : f.type.startsWith('image') ? 'image' : null; if (!kind) continue; await putMedia({ id: uid(), projectId: project.id, kind, name: f.name, mime: f.type, size: f.size, createdAt: Date.now(), blob: f }); } await refreshAssets(); }
-    catch (e) { setMsg({ text: e instanceof Error ? e.message : 'Import failed.', error: true }); }
+  const importAndAdd = async (files: FileList, mode: Exclude<MediaMode, ''>) => {
+    const made: MediaRecord[] = [];
+    try {
+      for (const f of Array.from(files)) { const kind = f.type.startsWith('video') ? 'video' : f.type.startsWith('audio') ? 'audio' : f.type.startsWith('image') ? 'image' : null; if (!kind || (mode === 'audio') !== (kind === 'audio')) continue; const rec: MediaRecord = { id: uid(), projectId: project.id, kind, name: f.name, mime: f.type, size: f.size, createdAt: Date.now(), blob: f }; await putMedia(rec); made.push(rec); }
+      await refreshAssets(); setMedia('');
+      for (const r of made) await addAsset(r, mode);
+      if (!made.length) setMsg({ text: mode === 'audio' ? 'Choose an audio file.' : 'Choose a photo or video.', error: true });
+    } catch (e) { setMsg({ text: e instanceof Error ? e.message : 'Import failed.', error: true }); }
   };
-  const addText = () => { const c = makeClip({ id: uid(), kind: 'text', name: 'Text', start: timeRef.current, duration: 3, track: 1, text: 'Your text', fontSize: 64, color: '#ffffff' }); commit([...dataRef.current.clips, c]); setSel(c.id); };
-  const split = () => { const c = selected(); if (!c) return; const r = splitClip(c, timeRef.current, uid()); if (r) { commit(dataRef.current.clips.flatMap((x) => (x.id === c.id ? r : [x]))); setSel(r[1].id); } };
-  const trim = (side: 'start' | 'end') => { const c = selected(); if (!c) return; const r = side === 'start' ? trimStartTo(c, timeRef.current) : trimEndTo(c, timeRef.current); if (r) commit(dataRef.current.clips.map((x) => (x.id === c.id ? r : x))); };
-  const del = () => { const id = selRef.current; if (id) { commit(dataRef.current.clips.filter((c) => c.id !== id)); setSel(null); } };
-  const ripple = () => { const id = selRef.current; if (id) { commit(rippleDelete(dataRef.current.clips, id)); setSel(null); } };
+  const addText = (text = 'Your text') => { const c = makeClip({ id: uid(), kind: 'text', name: 'Text', start: timeRef.current, duration: 3, track: 1, text, fontSize: 64, color: '#ffffff' }); commit([...dataRef.current.clips, c]); setSel(c.id); setPanel('text'); };
+  const addCaption = () => { const c = makeClip({ id: uid(), kind: 'text', name: 'Caption', start: timeRef.current, duration: 2, track: 1, text: 'Caption', fontSize: 44, color: '#ffffff', y: 0.36 }); commit([...dataRef.current.clips, c]); setSel(c.id); setPanel('text'); };
+  const importCaptions = async (f: File | undefined) => {
+    if (!f) return; const cues = parseSrt(await f.text());
+    if (!cues.length) { setMsg({ text: 'No subtitles were found in that file. Use an .srt or .vtt file.', error: true }); return; }
+    commit([...dataRef.current.clips, ...cues.slice(0, 500).map((q) => makeClip({ id: uid(), kind: 'text', name: 'Caption', start: q.start, duration: q.end - q.start, track: 1, text: q.text.replace(/\n/g, ' '), fontSize: 44, color: '#ffffff', y: 0.36 }))]);
+    setPanel(''); setMsg({ text: `${Math.min(cues.length, 500)} captions added.` });
+  };
+  const split = () => { const c = target(); if (!c) return; const r = splitClip(c, timeRef.current, uid()); if (r) { commit(dataRef.current.clips.flatMap((x) => (x.id === c.id ? r : [x]))); setSel(r[1].id); } else setMsg({ text: 'Move the playhead inside the clip to split it.' }); };
+  const trim = (side: 'start' | 'end') => { const c = target(); if (!c) return; const r = side === 'start' ? trimStartTo(c, timeRef.current) : trimEndTo(c, timeRef.current); if (r) commit(dataRef.current.clips.map((x) => (x.id === c.id ? r : x))); else setMsg({ text: 'Move the playhead inside the clip first.' }); };
+  const del = () => { const id = selRef.current; if (id) { commit(dataRef.current.clips.filter((c) => c.id !== id)); setSel(null); setPanel(''); } };
+  const ripple = () => { const id = selRef.current; if (id) { commit(rippleDelete(dataRef.current.clips, id)); setSel(null); setPanel(''); } };
   const dup = () => { const c = selected(); if (c) { const n = { ...c, id: uid(), start: end(c) }; commit([...dataRef.current.clips, n]); setSel(n.id); } };
   const fillFrame = () => { const c = selected(); if (!c) return; const { iw, ih } = natural(getEl(c)); if (!iw || !ih) return; const { w, h } = canvasSize(dataRef.current.aspect, 720); update(c.id, { scale: fillScale(iw, ih, w, h), x: 0, y: 0 }); };
   const resetLook = () => { const c = selected(); if (c) update(c.id, { x: 0, y: 0, scale: 1, rotate: 0, flipX: false }); };
-  const fitZoom = () => setZoom(clamp(((tlScroll.current?.clientWidth ?? 600) - LABEL_W - 40) / dur, 10, 300));
+  const mutable = (): Clip | undefined => selected() ?? activeAt(dataRef.current.clips, timeRef.current).filter((x) => x.kind === 'video' || x.kind === 'audio').sort((a, b) => a.track - b.track)[0];
+  const toggleMute = () => { const c = mutable(); if (!c) { setMsg({ text: 'There is no video or audio here to mute.' }); return; } if (c.kind === 'image' || c.kind === 'text') return; update(c.id, { volume: c.volume > 0 ? 0 : 1 }); };
+  const setCoverNow = () => {
+    const cv = document.createElement('canvas'); const { w, h } = canvasSize(dataRef.current.aspect, 720); const k = 360 / Math.max(w, h); cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+    syncMedia(timeRef.current, false); const big = document.createElement('canvas'); big.width = w; big.height = h; render(big.getContext('2d')!, w, h, timeRef.current); cv.getContext('2d')!.drawImage(big, 0, 0, cv.width, cv.height);
+    setCover(cv.toDataURL('image/jpeg', 0.72)); setMsg({ text: 'Cover set to this frame.' });
+  };
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName; if (['INPUT', 'TEXTAREA'].includes(tag)) return;
+      const tag = (e.target as HTMLElement).tagName; if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
       const mod = e.ctrlKey || e.metaKey; const key = e.key.toLowerCase();
       if (e.code === 'Space' && tag !== 'BUTTON') { e.preventDefault(); play(); }
       else if (mod && key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
@@ -242,7 +305,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
       else if (e.key === 'End') { e.preventDefault(); seek(dur); }
       else if (e.key === '=' || e.key === '+') setZoom((z) => clamp(z * 1.25, 10, 300));
       else if (e.key === '-') setZoom((z) => clamp(z / 1.25, 10, 300));
-      else if (e.key === 'Escape') setSel(null);
+      else if (e.key === 'Escape') { if (panel || media) { setPanel(''); setMedia(''); } else setSel(null); }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && e.shiftKey) ripple();
       else if (e.key === 'Delete' || e.key === 'Backspace') del();
     };
@@ -281,7 +344,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
     const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); setGuide(null); if (moved) { past.current.push(base); future.current = []; } };
     el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up);
   };
-  const rulerSeek = (e: React.PointerEvent<HTMLDivElement>) => { const r = e.currentTarget.getBoundingClientRect(); const go = (x: number) => seek((x - r.left) / zoom); go(e.clientX); const el = e.currentTarget; el.setPointerCapture(e.pointerId); const mv = (ev: PointerEvent) => go(ev.clientX); const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); }; el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); };
+  const rulerTap = (e: React.MouseEvent<HTMLDivElement>) => { const r = e.currentTarget.getBoundingClientRect(); seek((e.clientX - r.left - pad) / zoom); };
 
   // tap and drag directly on the preview -----------------------------------------------------
   const hitTest = (px: number, py: number, rect: DOMRect): string | null => {
@@ -292,7 +355,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
   };
   const onCanvasDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const el = e.currentTarget; const rect = el.getBoundingClientRect();
-    const id = hitTest((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height, rect); setSel(id); if (!id) return;
+    const id = hitTest((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height, rect); setSel(id); if (!id) { setPanel(''); return; }
     const base = dataRef.current.clips.find((x) => x.id === id); if (!base) return; el.setPointerCapture(e.pointerId); const x0 = e.clientX; const y0 = e.clientY;
     const mv = (ev: PointerEvent) => { let nx = base.x + (ev.clientX - x0) / rect.width; let ny = base.y + (ev.clientY - y0) / rect.height; if (snap) { if (Math.abs(nx) < 0.02) nx = 0; if (Math.abs(ny) < 0.02) ny = 0; } update(id, { x: nx, y: ny }, 'pos'); };
     const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); };
@@ -300,122 +363,153 @@ function Workspace({ project }: { project: ProjectRecord }) {
   };
 
   const pts = useRef(new Map<number, { x: number; y: number }>()); const pinch = useRef(0);
-  const onTlDown = (ev: React.PointerEvent) => { pts.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); pinch.current = 0; };
+  const onTlDown = (ev: React.PointerEvent) => { if (playingRef.current) pause(); pts.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); pinch.current = 0; };
   const onTlMove = (ev: React.PointerEvent) => {
     if (!pts.current.has(ev.pointerId)) return; pts.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (pts.current.size !== 2) return; const [a, b] = [...pts.current.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
     if (pinch.current > 0) setZoom((z) => clamp((z * d) / pinch.current, 10, 300)); pinch.current = d;
   };
   const onTlUp = (ev: React.PointerEvent) => { pts.current.delete(ev.pointerId); pinch.current = 0; };
+
   const c = useMemo(() => data.clips.find((x) => x.id === sel), [data.clips, sel]);
   const isMedia = c?.kind === 'video' || c?.kind === 'audio';
-  const slider = (label: string, key: keyof Clip, min: number, max: number, step = 0.01) => c && (
-    <label className="field">{label} <span className="muted">{Number(c[key]).toFixed(2)}</span>
-      <input type="range" min={min} max={max} step={step} value={Number(c[key])} onChange={(e) => update(c.id, { [key]: Number(e.target.value) } as Partial<Clip>, String(key))} /></label>);
+  const sl = (label: string, key: keyof Clip, min: number, max: number, step = 0.01, show?: (v: number) => string) => c && <Slider label={label} value={Number(c[key] ?? (key === 'fadeIn' || key === 'fadeOut' ? 0 : 1))} min={min} max={max} step={step} show={show} onChange={(v) => update(c.id, { [key]: v } as Partial<Clip>, String(key))} />;
   const num = (label: string, key: 'start' | 'duration' | 'trimIn') => c && (
-    <label className="field">{label} (s)<input type="number" step="0.1" min={0} value={Number(c[key].toFixed(2))} onChange={(e) => { const v = Math.max(key === 'duration' ? 0.2 : 0, Number(e.target.value)); update(c.id, { [key]: key === 'duration' ? Math.min(v, maxDuration(c)) : v } as Partial<Clip>, key); }} /></label>);
+    <label className="cc-num">{label}<input type="number" step="0.1" min={0} value={Number(c[key].toFixed(2))} onChange={(e) => { const v = Math.max(key === 'duration' ? 0.2 : 0, Number(e.target.value)); update(c.id, { [key]: key === 'duration' ? Math.min(v, maxDuration(c)) : v } as Partial<Clip>, key); }} /><i>s</i></label>);
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
 
+  // toolbars -----------------------------------------------------------------------------------
+  const pick = (id: Panel) => () => setPanel(id);
+  const mainTools: Tool[] = [
+    { id: 'edit', icon: 'scissors', label: 'Edit', run: () => { const t = target(); if (t) setSel(t.id); else setMsg({ text: 'Add a photo or video first, then tap Edit.' }); } },
+    { id: 'audio', icon: 'music', label: 'Audio', run: () => setMedia('audio') },
+    { id: 'text', icon: 'text', label: 'Text', run: () => addText() },
+    { id: 'fx', icon: 'star', label: 'Effects', run: () => { const t = target(); if (t) { setSel(t.id); setPanel('fx'); } else setMsg({ text: 'Add a photo or video first, then pick an effect.' }); } },
+    { id: 'overlay', icon: 'overlay', label: 'Overlay', run: () => setMedia('overlay') },
+    { id: 'captions', icon: 'captions', label: 'Captions', run: pick('captions') },
+    { id: 'ratio', icon: 'ratio', label: 'Ratio', run: pick('ratio') },
+  ];
+  const clipTools = (): Tool[] => {
+    if (!c) return [];
+    const back: Tool = { id: 'back', icon: 'chevronLeft', label: 'Back', run: () => { setSel(null); setPanel(''); } };
+    const common: Tool[] = [{ id: 'dup', icon: 'duplicate', label: 'Duplicate', run: dup }, { id: 'del', icon: 'trash', label: 'Delete', run: del, danger: true }, { id: 'ripple', icon: 'ripple', label: 'Ripple', run: ripple, off: c.kind === 'audio' }];
+    const split_: Tool = { id: 'split', icon: 'scissors', label: 'Split', run: split };
+    const trimS: Tool = { id: 'trims', icon: 'crop', label: 'Trim start', run: () => trim('start') }; const trimE: Tool = { id: 'trime', icon: 'crop', label: 'Trim end', run: () => trim('end') };
+    const look: Tool[] = [{ id: 'fx', icon: 'star', label: 'Effects', run: pick('fx') }, { id: 'adjust', icon: 'sliders', label: 'Adjust', run: pick('adjust') }, { id: 'transform', icon: 'move', label: 'Position', run: pick('transform') }, { id: 'flip', icon: 'flip', label: 'Flip', run: () => update(c.id, { flipX: !c.flipX }) }, { id: 'rot', icon: 'rotate', label: 'Rotate', run: () => update(c.id, { rotate: ((c.rotate + 90 + 180) % 360) - 180 }) }];
+    const fade: Tool = { id: 'fade', icon: 'fade', label: 'Fade', run: pick('fade') };
+    if (c.kind === 'text') return [back, { id: 'text', icon: 'text', label: 'Text', run: pick('text') }, { id: 'transform', icon: 'move', label: 'Position', run: pick('transform') }, { id: 'length', icon: 'clock', label: 'Timing', run: pick('length') }, fade, split_, ...common];
+    if (c.kind === 'image') return [back, split_, { id: 'length', icon: 'clock', label: 'Timing', run: pick('length') }, ...look, { id: 'fill', icon: 'maximize', label: 'Fill', run: fillFrame }, fade, ...common];
+    if (c.kind === 'audio') return [back, split_, trimS, trimE, { id: 'volume', icon: c.volume > 0 ? 'volume' : 'mute', label: 'Volume', run: pick('volume') }, { id: 'speed', icon: 'gauge', label: 'Speed', run: pick('speed') }, fade, ...common];
+    return [back, split_, trimS, trimE, { id: 'speed', icon: 'gauge', label: 'Speed', run: pick('speed') }, { id: 'volume', icon: c.volume > 0 ? 'volume' : 'mute', label: 'Volume', run: pick('volume') }, ...look, { id: 'fill', icon: 'maximize', label: 'Fill', run: fillFrame }, fade, ...common];
+  };
+  const tools = c ? clipTools() : mainTools;
+
+  const sheetBody = () => {
+    switch (panel) {
+      case 'speed': return c && isMedia ? <><Slider label="Speed" value={speedOf(c)} min={0.25} max={4} step={0.05} show={(v) => `${v.toFixed(2)}×`} onChange={(v) => update(c.id, withSpeed(c, v), 'speed')} /><div className="cc-chips">{[0.5, 1, 1.5, 2, 3].map((v) => <button key={v} className={Math.abs(speedOf(c) - v) < 0.01 ? 'on' : ''} onClick={() => update(c.id, withSpeed(c, v))}>{v}×</button>)}</div></> : null;
+      case 'volume': return c && isMedia ? <><Slider label="Volume" value={c.volume} min={0} max={1} show={pct} onChange={(v) => update(c.id, { volume: v }, 'volume')} /><div className="cc-chips"><button className={c.volume === 0 ? 'on' : ''} onClick={() => update(c.id, { volume: c.volume > 0 ? 0 : 1 })}>{c.volume === 0 ? 'Unmute' : 'Mute'}</button></div></> : null;
+      case 'fade': return c ? <>{sl('Fade in', 'fadeIn', 0, 5, 0.1, (v) => `${v.toFixed(1)}s`)}{sl('Fade out', 'fadeOut', 0, 5, 0.1, (v) => `${v.toFixed(1)}s`)}</> : null;
+      case 'adjust': return c && c.kind !== 'audio' ? <>{c.kind !== 'text' && <>{sl('Brightness', 'brightness', 0, 2, 0.01, pct)}{sl('Contrast', 'contrast', 0, 2, 0.01, pct)}{sl('Saturation', 'saturation', 0, 2, 0.01, pct)}</>}{sl('Opacity', 'opacity', 0, 1, 0.01, pct)}</> : null;
+      case 'fx': return c && c.kind !== 'audio' && c.kind !== 'text' ? <div className="cc-fx" role="listbox" aria-label="Effects">{FX.map((f) => <button key={f.id} role="option" aria-selected={(c.fx ?? 'none') === f.id} className={(c.fx ?? 'none') === f.id ? 'on' : ''} onClick={() => update(c.id, { fx: f.id })}><span style={{ background: f.swatch }} /><em>{f.label}</em></button>)}</div> : <p className="muted small">Select a photo or video to give it a look.</p>;
+      case 'transform': return c && c.kind !== 'audio' ? <>{sl('Size', 'scale', 0.1, 5, 0.01, (v) => `${Math.round(v * 100)}%`)}{sl('Rotate', 'rotate', -180, 180, 1, (v) => `${Math.round(v)}°`)}{sl('Left / right', 'x', -1, 1, 0.01, (v) => v.toFixed(2))}{sl('Up / down', 'y', -1, 1, 0.01, (v) => v.toFixed(2))}<div className="cc-chips">{c.kind !== 'text' && <button onClick={fillFrame}>Fill frame</button>}<button onClick={resetLook}>Reset</button><button className={c.flipX ? 'on' : ''} onClick={() => update(c.id, { flipX: !c.flipX })}>Flip</button></div></> : null;
+      case 'length': return c ? <div className="cc-nums">{num('Start', 'start')}{num('Length', 'duration')}{isMedia ? num('Source offset', 'trimIn') : null}</div> : null;
+      case 'text': return c && c.kind === 'text' ? <><label className="cc-text"><input value={c.text ?? ''} aria-label="Text" placeholder="Type your text" onChange={(e) => update(c.id, { text: e.target.value }, 'text')} /></label>{sl('Size', 'fontSize', 12, 200, 1, (v) => `${Math.round(v)}`)}<label className="cc-num">Colour<input type="color" value={c.color ?? '#ffffff'} onChange={(e) => update(c.id, { color: e.target.value }, 'color')} /></label></> : null;
+      case 'captions': return <><div className="cc-chips"><button onClick={() => { addCaption(); }}>Add caption here</button><label className="cc-chip-file">Import .srt / .vtt<input type="file" hidden accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={(e) => { void importCaptions(e.target.files?.[0]); e.target.value = ''; }} /></label></div><p className="muted small">Captions are text clips under the picture. Drag them on the timeline to line them up.</p></>;
+      case 'ratio': return <div className="cc-chips">{(['16:9', '9:16', '1:1'] as Aspect[]).map((a) => <button key={a} className={data.aspect === a ? 'on' : ''} onClick={() => setDataRaw({ ...data, aspect: a })}>{a}</button>)}</div>;
+      case 'export': return (
+        <div className="cc-export">
+          <Select label="Format" value={exp.fmt} onChange={(v) => setExp({ ...exp, fmt: v })} options={[{ value: 'webm', label: 'WebM video' }, { value: 'png', label: 'PNG frame' }, { value: 'jpeg', label: 'JPEG frame' }]} />
+          <Select label="Resolution" value={exp.res} onChange={(v) => setExp({ ...exp, res: v })} options={[{ value: '720', label: '720p' }, { value: '1080', label: '1080p' }]} />
+          {exp.fmt === 'webm' && <Select label="Frame rate" value={exp.fps} onChange={(v) => setExp({ ...exp, fps: v })} options={[{ value: '24', label: '24 fps' }, { value: '30', label: '30 fps' }]} />}
+          {exp.busy ? <><div className="meter"><div style={{ width: `${exp.pct}%` }} /></div><button className="btn" onClick={() => { cancelExport.current = true; }}>Cancel export</button></> : <button className="btn primary" disabled={data.clips.length === 0} onClick={exportNow}>Export</button>}
+          <p className="muted small">Video export records the timeline in real time as WebM, so it takes as long as your video. Frame exports use the playhead position.</p>
+        </div>);
+      default: return null;
+    }
+  };
+
+  // timeline rows, top to bottom: overlays and text that exist, the main track, audio, and an empty "Add text" row ----------
+  const has = (tr: number) => data.clips.some((x) => x.track === tr);
+  const rows: { track: number; h: number; ghost?: 'text' | 'audio' }[] = [
+    ...(has(2) ? [{ track: 2, h: H_ROW }] : []), ...(has(1) ? [{ track: 1, h: H_ROW }] : []),
+    { track: 0, h: H_MAIN }, { track: AUDIO_TRACK, h: H_ROW, ghost: has(AUDIO_TRACK) ? undefined : 'audio' },
+    ...(has(1) ? [] : [{ track: 1, h: H_ROW, ghost: 'text' as const }]),
+  ];
   const tickStep = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => s * zoom >= 56) ?? 600;
   const ticks = Array.from({ length: Math.floor(dur / tickStep) + 2 }, (_, i) => i * tickStep);
+  const innerW = dur * zoom + pad * 2;
+  const muted = (mutable()?.kind === 'video' || mutable()?.kind === 'audio') && (mutable() as Clip).volume === 0;
 
   return (
-    <section className="editor">
-      <header className="ed-bar">
-        <a className="small" href="#/projects">Projects</a><strong className="grow title">{project.name}</strong>
-        <span className="muted small" role="status">{saved === 'saving' ? 'Saving…' : 'Saved'}</span>
-        <Select<Aspect> label="Canvas shape" value={data.aspect} onChange={(a) => setDataRaw({ ...data, aspect: a })} options={[{ value: '16:9', label: '16:9' }, { value: '9:16', label: '9:16' }, { value: '1:1', label: '1:1' }]} />
+    <section className="cc">
+      <header className="cc-top">
+        <button className="cc-icon" aria-label="Close editor" onClick={() => { location.hash = '#/projects'; }}><Icon name="close" size={24} /></button>
+        <span className="cc-name" title={project.name}>{project.name}<small role="status">{saved === 'saving' ? 'Saving…' : 'Saved'}</small></span>
+        <Select label="Resolution" value={exp.res} onChange={(v) => setExp({ ...exp, res: v })} options={[{ value: '720', label: '720p' }, { value: '1080', label: '1080p' }]} />
+        <button className="cc-export-btn" onClick={() => { pause(); setPanel('export'); }}>Export</button>
       </header>
-      {msg && <div className={`notice${msg.error ? ' error' : ''}`} role={msg.error ? 'alert' : 'status'}>{msg.text}</div>}
-      <div className="ed-main">
-        <aside className="ed-side ed-media panel">
-          <h2>Media</h2>
-          <label className="btn file">Import files<input type="file" multiple hidden accept="image/*,video/*,audio/*" onChange={(e) => { void importFiles(e.target.files); e.target.value = ''; }} /></label>
-          <ul className="list flush assets">{assets.map((a) => <li key={a.id} className="item"><span className="grow title small">{a.name}</span><button className="btn sm" onClick={() => addAsset(a)}>Add</button></li>)}</ul>
-          {lib.length > 0 && <><h2>Generated</h2><ul className="list flush assets">{lib.map((a) => <li key={a.id} className="item"><span className="grow title small">{a.name}</span><button className="btn sm" onClick={() => addAsset(a)}>Add</button></li>)}</ul></>}
-          {assets.length + lib.length === 0 && <p className="muted small">Import media or generate some in the studios.</p>}
-        </aside>
-        <div className="ed-center">
-          <div className="stage"><canvas ref={canvas} className="cv" style={{ aspectRatio: data.aspect.replace(':', '/') }} onPointerDown={onCanvasDown} aria-label="Preview. Tap a layer to select it, drag to move it." /></div>
-          <div className="ed-transport">
-            <div className="ed-group">
-              <button className="btn" aria-label="Go to start" onClick={() => seek(0)}>Start</button>
-              <button className="btn" aria-label="Previous cut" onClick={() => cut(-1)}>‹ Cut</button>
-              <button className="btn primary" onClick={play}>{playing ? 'Pause' : 'Play'}</button>
-              <button className="btn" aria-label="Next cut" onClick={() => cut(1)}>Cut ›</button>
-              <button className="btn" aria-label="Go to end" onClick={() => seek(dur)}>End</button>
-              <span className="time small" aria-label="Playhead time">{fmt(time)} / {fmt(dur)}</span>
-            </div>
-            <div className="ed-group">
-              <button className="btn" disabled={!past.current.length} onClick={undo}>Undo</button>
-              <button className="btn" disabled={!future.current.length} onClick={redo}>Redo</button>
-              <button className="btn" disabled={!c} onClick={split}>Split</button>
-              <button className="btn" disabled={!c} onClick={() => trim('start')} title="Cut everything before the playhead">Trim start</button>
-              <button className="btn" disabled={!c} onClick={() => trim('end')} title="Cut everything after the playhead">Trim end</button>
-              <button className="btn" disabled={!c} onClick={dup}>Duplicate</button>
-              <button className="btn" disabled={!c} onClick={del}>Delete</button>
-              <button className="btn" disabled={!c} onClick={ripple} title="Delete and close the gap">Ripple delete</button>
-              <button className="btn" onClick={addText}>Add text</button>
-            </div>
-            <div className="ed-group">
-              <button className="btn" aria-pressed={snap} onClick={() => setSnap(!snap)} title="Snap to cuts, the playhead and the frame centre">Snap {snap ? 'on' : 'off'}</button>
-              <button className="btn" onClick={() => setZoom((z) => clamp(z / 1.4, 10, 300))}>Zoom out</button>
-              <button className="btn" onClick={() => setZoom((z) => clamp(z * 1.4, 10, 300))}>Zoom in</button>
-              <button className="btn" onClick={fitZoom}>Fit</button>
-            </div>
-          </div>
-        </div>
-        <aside className="ed-side ed-props panel">
-          <h2>{c ? 'Properties' : 'Export'}</h2>
-          {c ? (<div className="stack">
-            {num('Start', 'start')}{num('Length', 'duration')}{isMedia ? num('Source offset', 'trimIn') : null}
-            {isMedia && (
-              <div className="field"><span>Speed <span className="muted">{speedOf(c).toFixed(2)}×</span></span>
-                <input type="range" min={0.25} max={4} step={0.05} value={speedOf(c)} aria-label="Speed" onChange={(e) => update(c.id, withSpeed(c, Number(e.target.value)), 'speed')} />
-                <div className="row">{[0.5, 1, 1.5, 2].map((v) => <button key={v} className="btn sm" onClick={() => update(c.id, withSpeed(c, v))}>{v}×</button>)}</div></div>)}
-            {c.kind !== 'audio' && <>{slider('Opacity', 'opacity', 0, 1)}{slider('Scale', 'scale', 0.1, 5)}{slider('Rotate', 'rotate', -180, 180, 1)}{slider('Position X', 'x', -1, 1)}{slider('Position Y', 'y', -1, 1)}
-              {c.kind !== 'text' && <>{slider('Brightness', 'brightness', 0, 2)}{slider('Contrast', 'contrast', 0, 2)}{slider('Saturation', 'saturation', 0, 2)}</>}
-              <div className="row">
-                {c.kind !== 'text' && <button className="btn" onClick={fillFrame} title="Scale up until the picture covers the whole frame">Fill frame</button>}
-                <button className="btn" onClick={resetLook}>Reset position</button>
-                <button className="btn" onClick={() => update(c.id, { flipX: !c.flipX })}>{c.flipX ? 'Unflip' : 'Flip'}</button>
-              </div>
-              <Select label="Layer" value={String(c.track)} onChange={(v) => update(c.id, { track: Number(v) })} options={[{ value: '0', label: 'Layer 1 (back)' }, { value: '1', label: 'Layer 2' }, { value: '2', label: 'Layer 3 (front)' }]} /></>}
-            {c.kind === 'text' && <><label className="field">Text<input value={c.text ?? ''} onChange={(e) => update(c.id, { text: e.target.value }, 'text')} /></label>{slider('Size', 'fontSize', 12, 200, 1)}<label className="field">Colour<input type="color" value={c.color ?? '#ffffff'} onChange={(e) => update(c.id, { color: e.target.value }, 'color')} /></label></>}
-            {isMedia && slider('Volume', 'volume', 0, 1)}
-            {slider('Fade in (s)', 'fadeIn', 0, 5)}{slider('Fade out (s)', 'fadeOut', 0, 5)}
-            <button className="btn" onClick={() => setSel(null)}>Done</button>
-          </div>) : (<div className="stack">
-            <Select label="Format" value={exp.fmt} onChange={(v) => setExp({ ...exp, fmt: v })} options={[{ value: 'webm', label: 'WebM video' }, { value: 'png', label: 'PNG frame' }, { value: 'jpeg', label: 'JPEG frame' }]} />
-            <Select label="Resolution" value={exp.res} onChange={(v) => setExp({ ...exp, res: v })} options={[{ value: '720', label: '720p' }, { value: '1080', label: '1080p' }]} />
-            {exp.fmt === 'webm' && <Select label="Frame rate" value={exp.fps} onChange={(v) => setExp({ ...exp, fps: v })} options={[{ value: '24', label: '24 fps' }, { value: '30', label: '30 fps' }]} />}
-            {exp.busy ? <><div className="meter"><div style={{ width: `${exp.pct}%` }} /></div><button className="btn" onClick={() => { cancelExport.current = true; }}>Cancel export</button></> : <button className="btn primary" disabled={data.clips.length === 0} onClick={exportNow}>Export</button>}
-            <p className="muted small">Video export records the timeline in real time as WebM, so it takes as long as your video and is re-encoded. MP4 export is not available yet. Frame exports use the playhead position.</p>
-          </div>)}
-        </aside>
+      {msg && <div className={`cc-toast${msg.error ? ' error' : ''}`} role={msg.error ? 'alert' : 'status'}>{msg.text}</div>}
+
+      <div className="cc-stage" ref={stage}><canvas ref={canvas} className="cv" onPointerDown={onCanvasDown} aria-label="Preview. Tap a layer to select it, drag to move it." /></div>
+
+      <div className="cc-ctl">
+        <button className="cc-icon" aria-label="Full screen preview" onClick={fullscreen}><Icon name="maximize" size={22} /></button>
+        <span className="cc-time" aria-label="Playhead time"><b>{clock(time)}</b> / {clock(dur)}</span>
+        <span className="cc-grow" />
+        <button className="cc-icon" aria-label="Previous cut" onClick={() => cut(-1)}><Icon name="skipBack" size={20} /></button>
+        <button className="cc-play" aria-label={playing ? 'Pause' : 'Play'} onClick={play}><Icon name={playing ? 'pause' : 'play'} size={26} /></button>
+        <button className="cc-icon" aria-label="Next cut" onClick={() => cut(1)}><Icon name="skipForward" size={20} /></button>
+        <span className="cc-grow" />
+        <button className={`cc-icon${snap ? ' on' : ''}`} aria-label={snap ? 'Snapping on' : 'Snapping off'} aria-pressed={snap} title="Snap to cuts and the playhead" onClick={() => setSnap(!snap)}><Icon name="magnet" size={21} /></button>
+        <button className="cc-icon" aria-label="Undo" disabled={!past.current.length} onClick={undo}><Icon name="undo" size={21} /></button>
+        <button className="cc-icon" aria-label="Redo" disabled={!future.current.length} onClick={redo}><Icon name="redo" size={21} /></button>
       </div>
-      <div className="ed-timeline panel">
-        <div ref={tlScroll} className="tl-scroll" onPointerDown={onTlDown} onPointerMove={onTlMove} onPointerUp={onTlUp} onPointerCancel={onTlUp} onWheel={(ev) => { if (ev.ctrlKey) { ev.preventDefault(); setZoom((z) => clamp(z * (ev.deltaY < 0 ? 1.1 : 0.9), 10, 300)); } }}>
-          <div className="tl-inner" style={{ width: dur * zoom + 120 }}>
-            <div className="ruler" onPointerDown={rulerSeek}>{ticks.map((t) => <span key={t} style={{ left: t * zoom }}>{tickLabel(t)}</span>)}</div>
-            {ROWS.map((r) => (
-              <div key={r.track} ref={(el) => { if (el) rowEls.current.set(r.track, el); else rowEls.current.delete(r.track); }} className="trow" onPointerDown={() => setSel(null)}>
-                <span className="tlabel">{r.label}</span>
+
+      <div className="cc-tl">
+        <div ref={tlScroll} className="cc-scroll" onScroll={onTlScroll} onPointerDown={onTlDown} onPointerMove={onTlMove} onPointerUp={onTlUp} onPointerCancel={onTlUp} onWheel={(ev) => { if (playingRef.current) pause(); if (ev.ctrlKey) { ev.preventDefault(); setZoom((z) => clamp(z * (ev.deltaY < 0 ? 1.1 : 0.9), 10, 300)); } }}>
+          <div className="cc-inner" style={{ width: innerW }}>
+            <div className="ruler" style={{ height: H_RULER }} onClick={rulerTap}>{ticks.map((t) => <span key={t} style={{ left: pad + t * zoom }}>{clock(t)}</span>)}{ticks.map((t) => <i key={`d${t}`} style={{ left: pad + (t + tickStep / 2) * zoom }} />)}</div>
+            {rows.map((r) => (
+              <div key={`${r.track}${r.ghost ?? ''}`} ref={(el) => { if (el && !r.ghost) rowEls.current.set(r.track, el); else if (!r.ghost) rowEls.current.delete(r.track); }} className="trow" style={{ height: r.h }} onClick={(e) => { if (e.target === e.currentTarget) setSel(null); }}>
+                {r.ghost && <button className="cc-ghost" style={{ left: pad, width: Math.max(dur * zoom, 220) }} onClick={() => (r.ghost === 'audio' ? setMedia('audio') : addText())}><Icon name="plus" size={16} />{r.ghost === 'audio' ? 'Add audio' : 'Add text'}</button>}
                 {data.clips.filter((x) => x.track === r.track).map((x) => {
-                  const th = x.mediaId && x.kind !== 'audio' && x.kind !== 'text' ? thumbs[x.mediaId] : undefined; const pk = x.kind === 'audio' && x.mediaId ? peaks[x.mediaId] : undefined; const sp = speedOf(x);
+                  const th = x.mediaId && x.kind !== 'audio' && x.kind !== 'text' ? thumbs[x.mediaId] : undefined; const pk = x.kind === 'audio' && x.mediaId ? peaks[x.mediaId] : undefined; const sp = speedOf(x); const on = x.id === sel;
                   return (
-                    <div key={x.id} className={`clip ${x.kind}${x.id === sel ? ' sel' : ''}${th ? ' has-thumb' : ''}`} style={{ left: x.start * zoom, width: Math.max(8, x.duration * zoom), ...(th ? { backgroundImage: `linear-gradient(rgba(0,0,0,.4),rgba(0,0,0,.4)), url(${th})` } : {}) }} onPointerDown={(e) => startDrag(e, x, 'move')} role="button" tabIndex={0} aria-label={`${x.name}, ${x.kind} clip`}>
+                    <div key={x.id} className={`clip ${x.kind}${on ? ' sel' : ''}${th ? ' has-thumb' : ''}${r.track === 0 ? ' main' : ''}`} style={{ left: pad + x.start * zoom, width: Math.max(10, x.duration * zoom), ...(th ? { backgroundImage: `url(${th})` } : {}) }}
+                      onPointerDown={(e) => { if (e.pointerType === 'mouse' || on) startDrag(e, x, 'move'); }} onClick={() => setSel(x.id)} role="button" tabIndex={0} aria-label={`${x.name}, ${x.kind} clip`} aria-pressed={on} onKeyDown={(e) => { if (e.key === 'Enter') setSel(x.id); }}>
                       {pk && <Wave peaks={pk.p} a={Math.round(clamp(x.trimIn / pk.d, 0, 1) * 1000) / 1000} b={Math.round(clamp((x.trimIn + x.duration * sp) / pk.d, 0, 1) * 1000) / 1000} />}
-                      <i className="h l" onPointerDown={(e) => startDrag(e, x, 'l')} /><span>{x.kind === 'text' ? x.text : x.name}{sp !== 1 ? ` · ${Number(sp.toFixed(2))}×` : ''}</span><i className="h r" onPointerDown={(e) => startDrag(e, x, 'r')} />
+                      {on && <i className="h l" onPointerDown={(e) => startDrag(e, x, 'l')} />}<span>{x.kind === 'text' ? x.text : x.kind === 'video' || x.kind === 'audio' ? `${x.volume === 0 ? '🔇 ' : ''}${sp !== 1 ? `${Number(sp.toFixed(2))}× ` : ''}${x.kind === 'audio' ? x.name : ''}` : ''}</span>{on && <i className="h r" onPointerDown={(e) => startDrag(e, x, 'r')} />}
                     </div>);
                 })}
+                {r.track === 0 && <button className="cc-add" style={{ left: pad + mainEnd() * zoom + 10 }} aria-label="Add media" onClick={() => setMedia('visual')}><Icon name="plus" size={24} /></button>}
               </div>))}
-            {data.clips.length === 0 && <p className="tl-empty muted small">Add media from the left. It lands at the playhead.</p>}
-            {guide !== null && <div className="guide" style={{ left: guide * zoom }} />}
-            <div className="playhead" style={{ left: time * zoom }} />
+            {guide !== null && <div className="guide" style={{ left: pad + guide * zoom }} />}
           </div>
         </div>
-        <p className="muted small">Space plays, S splits, [ and ] trim to the playhead, D duplicates, Delete removes (Shift+Delete closes the gap), arrows step a frame (Shift: one second), Ctrl+Z undoes. Drag clips to move them or switch layer, drag their edges to trim, pinch or Ctrl+scroll to zoom.</p>
+        <div className="cc-rail" aria-hidden={false}>
+          <div style={{ height: H_RULER }} />
+          {rows.map((r) => (
+            <div key={`${r.track}${r.ghost ?? ''}`} className="cc-rail-row" style={{ height: r.h }}>
+              {r.track === 0 && <><button className="cc-rail-btn" onClick={toggleMute}><Icon name={muted ? 'mute' : 'volume'} size={20} /><span>{muted ? 'Unmute' : 'Mute clip'}</span></button><button className="cc-rail-btn" onClick={setCoverNow}><Icon name="cover" size={20} /><span>Cover</span></button></>}
+              {r.track === AUDIO_TRACK && <button className="cc-rail-mini" aria-label="Add audio" onClick={() => setMedia('audio')}><Icon name="music" size={16} /></button>}
+              {r.track === 1 && <button className="cc-rail-mini" aria-label="Add text" onClick={() => addText()}><Icon name="text" size={16} /></button>}
+            </div>))}
+        </div>
+        <div className="cc-playhead" />
+        {data.clips.length === 0 && <p className="cc-hint muted small">Tap + to add photos or videos</p>}
       </div>
+
+      {media ? <MediaSheet mode={media} items={[...assets, ...lib]} onClose={() => setMedia('')} onImport={(f) => void importAndAdd(f, media)} onPick={(r) => { const m = media; setMedia(''); void addAsset(r, m); }} />
+        : panel ? (
+          <div className="cc-sheet" role="dialog" aria-label={TITLES[panel]}>
+            <div className="cc-sheet-head"><strong>{TITLES[panel]}</strong><button className="cc-icon" aria-label="Done" onClick={() => setPanel('')}><Icon name="check" size={24} /></button></div>
+            <div className="cc-sheet-body">{sheetBody()}</div>
+          </div>
+        ) : (
+          <nav className="cc-tools" aria-label="Editing tools">
+            {tools.map((t) => <button key={t.id} className={`cc-tool${t.danger ? ' danger' : ''}${t.on ? ' on' : ''}`} disabled={t.off} onClick={t.run}><Icon name={t.icon} size={22} /><span>{t.label}</span></button>)}
+          </nav>
+        )}
     </section>
   );
 }

@@ -1,28 +1,50 @@
 import { strToU8, zipSync } from 'fflate';
 import { parseMarkdown, plainText, rawFromReply, type Block, type Inline } from './markdown';
+import { csvToXlsx, markdownToPptx } from './office';
+import { BUNDLE_PROTOCOL } from './protocol';
 
-export type OutFormat = 'chat' | 'md' | 'txt' | 'csv' | 'json' | 'html' | 'docx' | 'pdf';
-export interface Wanted { format: OutFormat; /** deliver as a downloadable file as well as in the chat */ file: boolean; /** shown to the person when the exact format asked for is not available yet */ note?: string; }
+export type OutFormat = 'chat' | 'md' | 'txt' | 'csv' | 'json' | 'html' | 'docx' | 'pdf' | 'xlsx' | 'pptx' | 'zip' | 'file';
+export interface Wanted { format: OutFormat; /** deliver as a downloadable file as well as in the chat */ file: boolean; /** shown to the person when the exact format asked for is not available yet */ note?: string; /** for format 'file': the extension to save (py, sql, yaml, svg ...) */ ext?: string; }
 
-const has = (t: string, re: RegExp) => re.test(t);
+/** Plain-text formats that can be written on request and saved under their own extension. */
+export const TEXT_EXTS = ['py', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'css', 'scss', 'sql', 'yaml', 'yml', 'xml', 'svg', 'ics', 'srt', 'vtt', 'tex', 'sh', 'bat', 'ps1', 'ini', 'toml', 'env', 'log', 'tsv', 'java', 'kt', 'swift', 'go', 'rs', 'c', 'cpp', 'cs', 'php', 'rb', 'dart', 'lua', 'r', 'vue', 'svelte', 'gradle', 'properties', 'conf', 'dockerfile', 'gitignore', 'rtf', 'vcf', 'eml', 'bib', 'tf'];
+const MIME: Record<string, string> = { svg: 'image/svg+xml', xml: 'application/xml', ics: 'text/calendar', css: 'text/css', yaml: 'text/yaml', yml: 'text/yaml', tsv: 'text/tab-separated-values', rtf: 'application/rtf', vcf: 'text/vcard', js: 'text/javascript', mjs: 'text/javascript' };
+
+// A format only counts as the OUTPUT when the wording asks for it ("as a PDF", "into Word", "make me an Excel sheet"),
+// so "summarise this PDF" or "fix the bug in app.py" are not mistaken for a request to build a file.
+const CUE = '(?:as|into|to|in|make|create|generate|build|produce|write|draft|prepare|give me|send me|get me|export(?: it| this| them)?(?: as| to)?|save(?: it| this| them)?(?: as| to)?|convert(?: it| this| them)?(?: to| into)|turn(?: it| this| them)?(?: into| to)|need|want)';
+const outRe = (fmt: string) => new RegExp(`\\b${CUE}\\s+(?:me\\s+)?(?:(?:an?|the|one|some|my|your)\\s+)?(?:(?!(?:of|this|that|attached|uploaded|these|those)\\b)[\\w-]+\\s+){0,2}(?:${fmt})\\b`, 'i');
+const pointing = (fmt: string) => new RegExp(`\\b(?:make|turn|convert|save|export|put|give me|get|change)\\s+(?:this|that|it|them|these|those|the above|the answer|everything)\\s+(?:(?:into|to|as|in)\\s+)?(?:an?\\s+|the\\s+)?(?:${fmt})\\b`, 'i');
+const asks = (t: string, fmt: string) => outRe(fmt).test(t) || pointing(fmt).test(t) || new RegExp(`(?<!\\b(?:this|that|the|attached|uploaded|my|these|those)\\s)\\b(?:${fmt})\\s+(?:file|document|doc|version|copy|download|sheet|deck)\\b`, 'i').test(t) || new RegExp(`^\\s*(?:${fmt})\\b|\\b(?:in|as)\\s+(?:${fmt})\\s+format\\b`, 'i').test(t);
+
 /** Reads the wording of a request and decides how the answer should be delivered. Nothing named = a well-formatted chat answer. */
 export function wantedOutput(prompt: string): Wanted {
   const t = prompt.toLowerCase();
-  const fileAsk = has(t, /\b(as|in|into|to) (a |an )?(downloadable |separate )?(file|document)\b|\bdownload(able)?\b|\bsave (it |this )?as\b|\bexport( it| this)?( as| to)?\b|\b(send|give) me (a |the )?file\b/);
-  if (has(t, /\bdocx\b|\.docx|\bword (doc|document|file)\b|\bms word\b|\bmicrosoft word\b/)) return { format: 'docx', file: true };
-  if (has(t, /\bpdf\b/)) return { format: 'pdf', file: true };
-  if (has(t, /\b(xlsx|excel|spreadsheet|google sheet)\b/)) return { format: 'csv', file: true, note: 'I cannot build Excel files here yet, so I made a CSV that opens in Excel and Google Sheets.' };
-  if (has(t, /\bcsv\b/)) return { format: 'csv', file: true };
-  if (has(t, /\b(pptx|powerpoint|power point|slide ?deck|slides)\b/)) return { format: 'docx', file: true, note: 'I cannot build PowerPoint files here yet, so I wrote the deck slide by slide in a document you can paste into PowerPoint or Google Slides.' };
-  if (has(t, /\bjson\b/)) return { format: 'json', file: true };
-  if (has(t, /\b(html|web ?page|landing page)\b/) && has(t, /\b(write|create|make|build|generate|code)\b/)) return { format: 'html', file: true };
-  if (has(t, /\bmarkdown\b|\.md\b/)) return { format: 'md', file: true };
-  if (has(t, /\bplain text\b|\.txt\b|\btext file\b/)) return { format: 'txt', file: true };
-  if (fileAsk) return { format: has(t, /\b(report|letter|proposal|cv|resume|essay|contract|policy|plan|minutes|memo|cover letter|speech|guide|handbook|article|assignment|lesson)\b/) ? 'docx' : 'md', file: true };
+  const fileAsk = /\b(as|in|into|to) (a |an )?(downloadable |separate )?(file|document)\b|\bdownload(able)?\b|\bsave (it |this )?as\b|\bexport( it| this)?( as| to)?\b|\b(send|give) me (a |the )?file\b/.test(t);
+  // one archive holding several files ("the whole project as a zip", "zip it", "a zip with a PDF and a CSV")
+  if (/\.zip\b|\bzipped\b|\bzip (it|them|up|everything|all|the|file|folder|archive)\b/.test(t) || (asks(t, 'zip|archive|bundle') && !/\bzip ?codes?\b/.test(t)) || (/\b(whole|entire|full|complete) (project|app|website|codebase|source code)\b/.test(t) && (fileAsk || /\bfiles?\b/.test(t))))
+    return { format: 'zip', file: true };
+  if (asks(t, 'docx|\\.docx|word(?: doc(?:ument)?| file| format)|ms word|microsoft word') || /\b(?:as|into|to|in)\s+(?:an?\s+)?word\b(?!\s+(?:list|lists|count|problem|search|game|games|bank|cloud|limit|puzzle|processor))/.test(t)) return { format: 'docx', file: true };
+  if (asks(t, 'pdf|\\.pdf')) return { format: 'pdf', file: true };
+  if (asks(t, 'xlsx|\\.xlsx|excel|spreadsheet|google sheets?|workbook')) return { format: 'xlsx', file: true };
+  if (asks(t, 'csv|\\.csv')) return { format: 'csv', file: true };
+  if (asks(t, 'pptx|\\.pptx|powerpoint|power point|slide ?deck|slides|presentation|keynote')) return { format: 'pptx', file: true };
+  if (asks(t, 'json|\\.json')) return { format: 'json', file: true };
+  if (/\b(convert|turn|export|save|change|transform)\b/.test(t) && asks(t, 'html|\\.html|web ?page')) return { format: 'html', file: true };
+  if (/\b(html|web ?page|landing page)\b/.test(t) && /\b(write|create|make|build|generate|code)\b/.test(t) && !/\b(react|vue|next|angular|svelte|project|app)\b/.test(t)) return { format: 'html', file: true };
+  if (asks(t, 'markdown|\\.md')) return { format: 'md', file: true };
+  if (asks(t, 'plain text|\\.txt|text file|txt')) return { format: 'txt', file: true };
+  // any other text-based format: a ".py file", "as a YAML file", "save it as notes.sql"
+  const exts = TEXT_EXTS.join('|');
+  const named = t.match(new RegExp(`\\b(?:named|called|name it|save (?:it )?as|as|to|into)\\s+["'\`]?[\\w-]+\\.(${exts})\\b`)) ?? t.match(new RegExp(`(?:^|\\s)\\.(${exts})\\s+file\\b`));
+  const typed = t.match(new RegExp(`\\b(${exts}) (?:file|format|config|script)\\b`)) ?? (outRe(`\\.?(${exts})`).exec(t) && t.match(new RegExp(`\\.(${exts})\\b`)));
+  const ext = (named?.[1] ?? typed?.[1])?.toLowerCase();
+  if (ext && (fileAsk || named || /\b(write|create|make|build|generate|give|output|as|in|into)\b/.test(t))) return { format: 'file', file: true, ext };
+  if (fileAsk) return { format: /\b(report|letter|proposal|cv|resume|essay|contract|policy|plan|minutes|memo|cover letter|speech|guide|handbook|article|assignment|lesson)\b/.test(t) ? 'docx' : 'md', file: true };
   return { format: 'chat', file: false };
 }
 
-export const FORMAT_LABEL: Record<OutFormat, string> = { chat: 'chat', md: 'Markdown', txt: 'text', csv: 'CSV', json: 'JSON', html: 'HTML', docx: 'Word', pdf: 'PDF' };
+export const FORMAT_LABEL: Record<OutFormat, string> = { chat: 'chat', md: 'Markdown', txt: 'text', csv: 'CSV', json: 'JSON', html: 'HTML', docx: 'Word', pdf: 'PDF', xlsx: 'Excel', pptx: 'PowerPoint', zip: 'ZIP', file: 'file' };
 
 /** What the text model is told. It is kept in one place so every provider receives the same standard. */
 export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean } = {}): string {
@@ -32,6 +54,7 @@ export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean 
     'Match the request: a short factual question gets a direct answer first; a report, plan, guide, essay, analysis, study material or document gets a full, professional treatment. If the person gives a length, language, tone, audience or structure, follow it exactly. Reply in the language the person writes in.',
     'Structure: use Markdown. Start with the answer or a one-line summary, then use clear headings, short paragraphs, lists for steps and options, tables for comparisons, and fenced code blocks (with the language name) for all code, commands and config. Give complete working code, never fragments with "rest of code here".',
     'Honesty: if something is uncertain or you cannot know it, say so plainly. Do not invent sources, quotes, statistics or links. If the request is ambiguous, make the most sensible assumption, state it in one line, and carry on instead of asking questions.',
+    'Never ask the person for an API key, model name, provider, framework or other setup detail that the task does not strictly need. Choose sensible defaults, state any assumption in one line, and deliver the result. When the person asks for code, an app or a project, deliver complete, working files.',
     o.hasFiles ? 'The person attached files. Read them carefully and base your answer on their actual content; refer to them by name.' : '',
     o.today ? `Today's date is ${o.today}.` : '',
   ];
@@ -44,6 +67,10 @@ export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean 
     csv: 'Format: output ONLY valid CSV inside one ```csv code block: a header row, then one row per record, comma separated, quoting any value that contains a comma or quote. Put nothing else in the reply.',
     json: 'Format: output ONLY valid, complete, pretty-printed JSON inside one ```json code block. Put nothing else in the reply.',
     html: 'Format: output ONE complete, self-contained HTML5 document (inline CSS and JS, responsive, accessible, polished design) inside one ```html code block. Put nothing else in the reply.',
+    xlsx: 'Format: output ONLY valid CSV inside one ```csv code block, which becomes a real Excel workbook: a header row, then one row per record, quoting any value that contains a comma or quote. Write numbers as plain numbers (no currency symbols or thousands separators) and use Excel formulas such as =SUM(B2:B9) for totals. For several sheets, start each with a line "--- sheet: Name ---". Put nothing else in the reply.',
+    pptx: 'Format: a slide deck written as a Markdown outline that becomes a real PowerPoint file: "# Deck title" then one short subtitle line, then one "## Slide title" per slide followed by 3 to 6 short bullet points (under 14 words each). Unless told otherwise make 8 to 12 slides with a clear story: opening, key points, evidence or examples, next steps. No chatter before or after, no code fence.',
+    zip: `Format: several files that will be delivered together as one ZIP. ${BUNDLE_PROTOCOL}`,
+    file: `Format: output ONLY the complete, raw contents of one .${w.ext ?? 'txt'} file inside a single \`\`\`${w.ext ?? 'text'} code block. Put nothing else in the reply.`,
   };
   return [...base.filter(Boolean), fmt[w.format]].join('\n\n');
 }
@@ -180,6 +207,10 @@ export async function buildFile(reply: string, w: Wanted, prompt: string): Promi
     case 'csv': return { blob: new Blob(['\ufeff', rawFromReply(reply, ['csv'])], { type: 'text/csv' }), name: `${base}.csv`, mime: 'text/csv' };
     case 'json': return { blob: new Blob([rawFromReply(reply, ['json'])], { type: 'application/json' }), name: `${base}.json`, mime: 'application/json' };
     case 'html': return { blob: new Blob([rawFromReply(reply, ['html'])], { type: 'text/html' }), name: `${base}.html`, mime: 'text/html' };
+    case 'xlsx': return { blob: csvToXlsx(rawFromReply(reply, ['csv'])), name: `${base}.xlsx`, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+    case 'pptx': return { blob: markdownToPptx(reply), name: `${base}.pptx`, mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+    case 'file': { const e = w.ext ?? 'txt'; const mime = MIME[e] ?? 'text/plain'; return { blob: new Blob([rawFromReply(reply, [e, 'text', 'plaintext'])], { type: mime }), name: e === 'dockerfile' || e === 'gitignore' ? (e === 'dockerfile' ? 'Dockerfile' : '.gitignore') : `${base}.${e}`, mime }; }
+    case 'zip': return null; // built from several files by bundle.ts
     case 'md': return { blob: new Blob([reply], { type: 'text/markdown' }), name: `${base}.md`, mime: 'text/markdown' };
     case 'txt': return { blob: new Blob([reply.replace(/^#{1,6}\s+/gm, '').replace(/\*\*(.+?)\*\*/g, '$1')], { type: 'text/plain' }), name: `${base}.txt`, mime: 'text/plain' };
   }

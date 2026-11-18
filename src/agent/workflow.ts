@@ -2,6 +2,7 @@ import { call, failure, generateImages, type GenImage, type ProviderErr } from '
 import { generateText, rankText, type ChatTurn, type TextModel } from '../models/text';
 import { base64Of, type Attachment } from './attachments';
 import { buildFile, systemPrompt, wantedOutput, type OutFile } from './deliver';
+import { buildBundle, bundleSummary } from './bundle';
 import type { ImageModel, VideoModel } from '../models/registry';
 import { interpret, planImage } from '../models/router';
 import { startVideo } from '../models/video';
@@ -214,7 +215,18 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Add a Google Gemini key for Text & documents to include videos and audio.`);
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
       let file: OutFile | null = null;
-      if (wanted.file) { log.step('Preparing your file…'); try { file = await buildFile(out.text, wanted, prompt); } catch { notes.push('The answer is above, but I could not build the file this time. You can copy it from the chat.'); } }
+      if (wanted.file) {
+        log.step(wanted.format === 'zip' ? 'Packing your files…' : 'Preparing your file…');
+        try {
+          if (wanted.format === 'zip') {
+            // attached files travel with the new ones when the request says "with these / my files"
+            const keep = o.files.length > 0 && /\b(with|including|plus|and)\b[^.?!\n]{0,40}\b(these|them|my|attached|uploaded|files?)\b/i.test(prompt);
+            const extra = keep ? await Promise.all(o.files.map(async (f) => ({ path: f.name, data: new Uint8Array(await f.blob.arrayBuffer()) }))) : [];
+            const b = await buildBundle(out.text, prompt.length > 60 ? prompt.slice(0, 60) : prompt, extra);
+            if (b) { file = { blob: b.blob, name: b.name, mime: 'application/zip' }; notes.push(...b.notes); log.say('ok', 'zip ready', bundleSummary(b.files)); }
+          } else file = await buildFile(out.text, wanted, prompt);
+        } catch { notes.push('The answer is above, but I could not build the file this time. You can copy it from the chat.'); }
+      }
       saveGood(model.id);
       return { text: out.text, model, file, notes };
     } catch (e) {

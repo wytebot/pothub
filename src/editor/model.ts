@@ -8,6 +8,8 @@ export interface Clip {
   /** playback speed of video/audio, 1 = normal. Missing on older projects, so always read it with speedOf. */
   speed?: number;
   text?: string; fontSize?: number; color?: string;
+  /** look preset id from FX (missing or 'none' = untouched). Older projects have none. */
+  fx?: string;
 }
 export type Aspect = '16:9' | '9:16' | '1:1';
 export interface TimelineData { aspect: Aspect; clips: Clip[]; }
@@ -76,3 +78,39 @@ export const canvasSize = (a: Aspect, h: 720 | 1080) => {
   const long = h === 720 ? 1280 : 1920;
   return a === '16:9' ? { w: long, h } : a === '9:16' ? { w: h, h: long } : { w: h, h };
 };
+
+/** Look presets for the Effects tool. `f` is appended to the canvas filter; `blur` is in pixels on a 720-high frame. */
+export interface Fx { id: string; label: string; f: string; blur?: number; swatch: string; }
+export const FX: Fx[] = [
+  { id: 'none', label: 'None', f: '', swatch: '#3a3a3a' },
+  { id: 'vivid', label: 'Vivid', f: 'saturate(1.45) contrast(1.1)', swatch: '#e2574c' },
+  { id: 'warm', label: 'Warm', f: 'sepia(.35) saturate(1.25) hue-rotate(-12deg)', swatch: '#d99a4e' },
+  { id: 'cool', label: 'Cool', f: 'hue-rotate(18deg) saturate(1.1) brightness(1.03)', swatch: '#4e8fd9' },
+  { id: 'mono', label: 'Mono', f: 'grayscale(1) contrast(1.1)', swatch: '#9a9a9a' },
+  { id: 'noir', label: 'Noir', f: 'grayscale(1) contrast(1.45) brightness(.9)', swatch: '#1c1c1c' },
+  { id: 'fade', label: 'Fade', f: 'contrast(.85) brightness(1.1) saturate(.8)', swatch: '#b9b2a8' },
+  { id: 'retro', label: 'Retro', f: 'sepia(.6) contrast(.95) brightness(1.05)', swatch: '#a8814f' },
+  { id: 'dream', label: 'Dream', f: 'brightness(1.08) saturate(1.2)', blur: 1.6, swatch: '#c79be0' },
+  { id: 'blur', label: 'Blur', f: '', blur: 6, swatch: '#6b7a8f' },
+];
+/** The canvas filter for a clip at frame height h: the three sliders plus the chosen look. */
+export function filterOf(c: Clip, h = 720): string {
+  const fx = FX.find((x) => x.id === c.fx);
+  return `brightness(${c.brightness}) contrast(${c.contrast}) saturate(${c.saturation})${fx?.f ? ` ${fx.f}` : ''}${fx?.blur ? ` blur(${((fx.blur * h) / 720).toFixed(2)}px)` : ''}`;
+}
+
+/** Subtitles from an .srt or .vtt file as timed lines. */
+export function parseSrt(text: string): { start: number; end: number; text: string }[] {
+  const out: { start: number; end: number; text: string }[] = [];
+  const secs = (s: string) => { const p = s.replace(',', '.').split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]; };
+  for (const block of text.replace(/^\ufeff/, '').replace(/\r\n?/g, '\n').split(/\n{2,}/)) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const i = lines.findIndex((l) => /-->/.test(l)); if (i < 0) continue;
+    const m = lines[i].match(/((?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?)\s*-->\s*((?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?)/); if (!m) continue;
+    const t = lines.slice(i + 1).join('\n').replace(/<[^>]+>/g, '').trim(); const start = secs(m[1]); const end = secs(m[2]);
+    if (t && end > start) out.push({ start, end, text: t });
+  }
+  return out;
+}
+/** Seconds as 00:00 (or 0:00:00 past an hour). */
+export const clock = (t: number) => { const s = Math.max(0, Math.round(t)); const h = Math.floor(s / 3600); const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0'); const ss = String(s % 60).padStart(2, '0'); return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`; };

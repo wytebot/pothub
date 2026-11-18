@@ -66,7 +66,7 @@ export function Projects() {
         <ul className="list">
           {sorted.map((p) => (
             <li key={p.id} className="item">
-              <div className="thumb" aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</div>
+              <div className="thumb" aria-hidden="true">{typeof p.data.cover === 'string' ? <img src={p.data.cover} alt="" /> : p.name.slice(0, 1).toUpperCase()}</div>
               <div className="grow"><div className="title">{p.name}</div><div className="muted small">Edited {when(p.updatedAt)}</div></div>
               <Menu label={`Actions for ${p.name}`} disabled={busy} items={[
                 { label: 'Open in editor', onSelect: () => { location.hash = `/editor/${p.id}`; } },

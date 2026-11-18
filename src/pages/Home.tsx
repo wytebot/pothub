@@ -18,6 +18,8 @@ import type { OutFile } from '../agent/deliver';
 import type { ChatTurn } from '../models/text';
 import { getSettings } from '../settings';
 import { platform } from '../platform';
+import { Icon } from '../ui/Icon';
+import { detectLocal, runLocal } from '../agent/local';
 
 interface Msg {
   id: string; role: 'user' | 'assistant'; text: string; state?: 'working' | 'done' | 'error';
@@ -94,7 +96,7 @@ function Media({ ids }: { ids: string[] }) {
       {recs.map((r) => (
         <figure key={r.id} className="chat-tile">
           {r.kind === 'video' ? <video src={urlFor(r)} controls playsInline preload="metadata" /> : <img src={urlFor(r)} alt={r.name.replace(/-/g, ' ')} />}
-          <button className="chat-dl" onClick={() => void platform.saveFile(r.blob, r.name)}>Download</button>
+          <button className="chat-dl" aria-label="Download" title="Download" onClick={() => void platform.saveFile(r.blob, r.name)}><Icon name="download" size={16} /></button>
         </figure>
       ))}
     </div>
@@ -106,7 +108,7 @@ function Chip({ a, onRemove }: { a: Attachment; onRemove?: () => void }) {
     <span className="attach-chip" title={`${a.name} · ${sizeLabel(a.size)}`}>
       {a.kind === 'image' ? <img src={thumbOf(a)} alt="" /> : <span className="attach-glyph" aria-hidden="true">{GLYPH[a.kind] ?? 'FILE'}</span>}
       <span className="attach-name">{a.name}</span>
-      {onRemove && <button className="attach-x" aria-label={`Remove ${a.name}`} onClick={onRemove}>×</button>}
+      {onRemove && <button className="attach-x" aria-label={`Remove ${a.name}`} onClick={onRemove}><Icon name="close" size={12} /></button>}
     </span>
   );
 }
@@ -135,6 +137,7 @@ export function Home() {
   const [picker, setPicker] = useState<{ extra: MediaRecord[]; preselect: string[] } | null>(null);
   const [copied, setCopied] = useState('');
   const [active, setActive] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [lift, setLift] = useState(0);
   const [, tick] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -215,6 +218,16 @@ export function Home() {
     try {
       const { text, flags } = parseCommands(prompt);
       if (flags.models) { task = 'text'; await runInfo(prompt, log, signal); patch(id, { state: 'done', text: 'These are the models your connected providers offer right now.' }); return; }
+      // Plain file jobs (zip, convert, merge, photos to PDF, "make that a PDF") are done right here: no model, no key, no catalog check.
+      const local = flags.task ? null : detectLocal(text, atts, history);
+      if (local) {
+        task = 'text'; log.step('Building your file on this device…');
+        const lr = log.start('cmd', `local ${local.kind} --to ${local.format}`);
+        const out = await runLocal(local, atts); log.done(lr, `${out.file.name} · ${sizeLabel(out.file.blob.size)}`); log.say('ok', 'done');
+        outFiles.set(id, out.file);
+        patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: { name: out.file.name, size: out.file.blob.size } });
+        return;
+      }
       const photos = atts.filter((a) => a.kind === 'image');
       const intent = interpret(text, { hasFiles: atts.length > 0, hasImageFile: photos.length > 0 });
       task = flags.task ?? intent.task;
@@ -304,7 +317,7 @@ export function Home() {
         <div className="usage" aria-label="Usage left today">
           {premium ? <span>Premium · unlimited</span> : <><span><b>{imagesLeft}</b> images</span><i aria-hidden="true" /><span><b>{videosLeft}</b> videos</span><span className="muted"> left today</span></>}
         </div>
-        {messages.length > 0 && <button className="chat-new" onClick={newChat}>New chat</button>}
+        {messages.length > 0 && <button className="chat-new" aria-label="New chat" title="New chat" onClick={newChat}><Icon name="newChat" size={18} /></button>}
       </header>
 
       <div className="chat-thread" ref={thread} aria-live="polite">
@@ -312,7 +325,7 @@ export function Home() {
           <div className="chat-empty">
             <h2>What can I help you with?</h2>
             <p className="muted small">Ask, write, analyse a file, or describe an image or video.</p>
-            {providerCount === 0 && <p className="muted small">Connect an AI provider first. <a href="#/providers">Add an API key</a></p>}
+            {providerCount === 0 && <p className="muted small">Zipping, converting and merging files works without any key. When you want writing, images or video, <a href="#/providers">add an AI key</a>.</p>}
           </div>
         ) : messages.map((m) => m.role === 'user' ? (
           <div key={m.id} className="chat-message user">
@@ -325,10 +338,10 @@ export function Home() {
               {m.text}
             </div>
             <div className="msg-actions">
-              {m.text && <button onClick={() => copyText(m.id, m.text)}>{copied === m.id ? 'Copied' : 'Copy'}</button>}
-              {m.text && <button onClick={() => { setIdea(m.text); setFiles(sent.get(m.id) ?? []); input.current?.focus(); }}>Edit</button>}
-              <button disabled={active} onClick={() => { const i = messages.findIndex((x) => x.id === m.id); if (messages[i + 1]) redo(messages[i + 1].id); }}>Resend</button>
-              {(sent.get(m.id) ?? []).some((a) => recOf(a)) && <button onClick={() => { const extra = (sent.get(m.id) ?? []).map(recOf).filter((r): r is MediaRecord => !!r); setPicker({ extra, preselect: extra.map((r) => r.id) }); }}>Edit in Editor</button>}
+              {m.text && <button className="ia" aria-label="Copy" title="Copy" onClick={() => copyText(m.id, m.text)}><Icon name={copied === m.id ? 'check' : 'copy'} size={16} /></button>}
+              {m.text && <button className="ia" aria-label="Edit message" title="Edit" onClick={() => { setIdea(m.text); setFiles(sent.get(m.id) ?? []); input.current?.focus(); }}><Icon name="pencil" size={16} /></button>}
+              <button className="ia" aria-label="Send again" title="Send again" disabled={active} onClick={() => { const i = messages.findIndex((x) => x.id === m.id); if (messages[i + 1]) redo(messages[i + 1].id); }}><Icon name="refresh" size={16} /></button>
+              {(sent.get(m.id) ?? []).some((a) => recOf(a)) && <button className="ia" aria-label="Edit in Editor" title="Edit in Editor" onClick={() => { const extra = (sent.get(m.id) ?? []).map(recOf).filter((r): r is MediaRecord => !!r); setPicker({ extra, preselect: extra.map((r) => r.id) }); }}><Icon name="editor" size={16} /></button>}
             </div>
           </div>
         ) : (
@@ -339,12 +352,14 @@ export function Home() {
               {m.media && m.media.length > 0 && <Media ids={m.media} />}
               {m.state !== 'working' && (
                 <div className="msg-actions">
-                  {m.kind === 'text' && m.text && <button onClick={() => copyText(m.id, m.text)}>{copied === m.id ? 'Copied' : 'Copy'}</button>}
-                  {(m.media?.length || m.text) && m.state === 'done' && <button className={outFiles.has(m.id) ? 'primary' : ''} onClick={() => void download(m)}>{outFiles.has(m.id) ? `Download ${outFiles.get(m.id)!.name}` : m.media?.length ? 'Download' : 'Save as file'}</button>}
-                  {m.kind === 'image' && m.media?.length && m.state === 'done' && <button onClick={() => void useAsReference(m)}>Edit this photo</button>}
-                  {m.media?.length && m.state === 'done' && <button onClick={() => void editInEditor(m)}>Edit in Editor</button>}
-                  {m.kind === 'text' && m.state === 'done' && /length limit|cut short/.test((m.notes ?? []).join(' ')) && <button disabled={active} onClick={() => send('Continue exactly where you stopped.')}>Continue</button>}
-                  <button disabled={active} onClick={() => redo(m.id)}>{m.state === 'error' ? 'Try again' : 'Regenerate'}</button>
+                  {m.kind === 'text' && m.text && <button className="ia" aria-label="Copy" title="Copy" onClick={() => copyText(m.id, m.text)}><Icon name={copied === m.id ? 'check' : 'copy'} size={16} /></button>}
+                  {(m.media?.length || m.text) && m.state === 'done' && (outFiles.has(m.id)
+                    ? <button className="primary file" aria-label={`Download ${outFiles.get(m.id)!.name}`} title={`Download ${outFiles.get(m.id)!.name}`} onClick={() => void download(m)}><Icon name={/\.zip$/i.test(outFiles.get(m.id)!.name) ? 'zip' : 'file'} size={16} /><span>{outFiles.get(m.id)!.name}</span></button>
+                    : <button className="ia" aria-label={m.media?.length ? 'Download' : 'Save as file'} title={m.media?.length ? 'Download' : 'Save as file'} onClick={() => void download(m)}><Icon name="download" size={16} /></button>)}
+                  {m.kind === 'image' && m.media?.length && m.state === 'done' && <button className="ia" aria-label="Edit this photo" title="Edit this photo" onClick={() => void useAsReference(m)}><Icon name="photoEdit" size={16} /></button>}
+                  {m.media?.length && m.state === 'done' && <button className="ia" aria-label="Edit in Editor" title="Edit in Editor" onClick={() => void editInEditor(m)}><Icon name="editor" size={16} /></button>}
+                  {m.kind === 'text' && m.state === 'done' && /length limit|cut short/.test((m.notes ?? []).join(' ')) && <button className="ia" aria-label="Continue" title="Continue where it stopped" disabled={active} onClick={() => send('Continue exactly where you stopped.')}><Icon name="continue" size={16} /></button>}
+                  <button className="ia" aria-label={m.state === 'error' ? 'Try again' : 'Regenerate'} title={m.state === 'error' ? 'Try again' : 'Regenerate'} disabled={active} onClick={() => redo(m.id)}><Icon name="refresh" size={16} /></button>
                 </div>
               )}
             </div>
@@ -353,7 +368,7 @@ export function Home() {
       </div>
 
       <div className="chat-bottom">
-        {!idea.trim() && !files.length && (
+        {!focused && !idea.trim() && !files.length && (
           <div className="marquee" aria-label="Suggested prompts">
             <div className="marquee-track">
               {track.map((p, i) => <button key={`${p}-${i}`} className="suggestion" tabIndex={i < prompts.length ? 0 : -1} aria-hidden={i >= prompts.length} onClick={() => { setIdea(p); input.current?.focus(); }}>{p}</button>)}
@@ -369,13 +384,13 @@ export function Home() {
           )}
           <div className="composer-row">
             <div className="plus-wrap" ref={plus}>
-              <button className="plus-button" type="button" aria-label="Add photos, videos or files" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES} onClick={() => setMenu((o) => !o)}><span>+</span></button>
+              <button className="plus-button" type="button" aria-label="Add photos, videos or files" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES} onClick={() => setMenu((o) => !o)}><Icon name="plus" size={22} /></button>
               {menu && (
                 <div className="plus-menu" role="menu">
-                  <button role="menuitem" onClick={() => pick(mediaIn.current)}><b aria-hidden="true">▣</b><span>Photos & videos<small>From your gallery</small></span></button>
-                  <button role="menuitem" onClick={() => pick(fileIn.current)}><b aria-hidden="true">▤</b><span>Files<small>PDF, Word, text, code, audio</small></span></button>
-                  <button role="menuitem" onClick={() => { setMenu(false); const extra = files.map(recOf).filter((r): r is MediaRecord => !!r); setPicker({ extra, preselect: extra.map((r) => r.id) }); }}><b aria-hidden="true">✎</b><span>Edit in Editor<small>Pick media to edit</small></span></button>
-                  {platform.kind === 'web' && coarse && <button role="menuitem" onClick={() => pick(camIn.current)}><b aria-hidden="true">◉</b><span>Take a photo<small>Use the camera</small></span></button>}
+                  <button role="menuitem" onClick={() => pick(mediaIn.current)}><b aria-hidden="true"><Icon name="image" size={18} /></b><span>Photos & videos<small>From your gallery</small></span></button>
+                  <button role="menuitem" onClick={() => pick(fileIn.current)}><b aria-hidden="true"><Icon name="file" size={18} /></b><span>Files<small>PDF, Word, text, code, audio</small></span></button>
+                  <button role="menuitem" onClick={() => { setMenu(false); const extra = files.map(recOf).filter((r): r is MediaRecord => !!r); setPicker({ extra, preselect: extra.map((r) => r.id) }); }}><b aria-hidden="true"><Icon name="editor" size={18} /></b><span>Edit in Editor<small>Pick media to edit</small></span></button>
+                  {platform.kind === 'web' && coarse && <button role="menuitem" onClick={() => pick(camIn.current)}><b aria-hidden="true"><Icon name="camera" size={18} /></b><span>Take a photo<small>Use the camera</small></span></button>}
                 </div>
               )}
               <input ref={mediaIn} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
@@ -383,12 +398,12 @@ export function Home() {
               <input ref={camIn} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
             <textarea ref={input} value={idea} rows={1} maxLength={20000} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, or describe an image or video…'} aria-label="Message"
-              onChange={(e) => setIdea(e.target.value)} onFocus={() => setTimeout(() => toEnd(), 250)}
+              onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
               onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !coarse) { e.preventDefault(); send(); } }} />
             {active
-              ? <button className="send-button stop" aria-label="Stop" onClick={() => abort.current?.abort()}><span>■</span></button>
-              : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><span>↑</span></button>}
+              ? <button className="send-button stop" aria-label="Stop" onClick={() => abort.current?.abort()}><Icon name="stop" size={18} /></button>
+              : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><Icon name="send" size={20} /></button>}
           </div>
         </div>
       </div>
