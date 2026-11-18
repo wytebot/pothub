@@ -56,7 +56,7 @@ Premium is bought for one month or one year and simply ends; nothing renews and 
 
 Flow: Billing page card form -> `POST /api/pay/start` (server validates, fixes the NGN price from a live rate, records a pending payment, AES-256-GCM-encrypts the card fields and calls `POST /orchestration/direct-charges`) -> Flutterwave answers `next_action`: `requires_pin` or `requires_otp` (the app shows a PIN/OTP box and calls `/api/pay/authorize`, which does `PUT /charges/{id}`), or `redirect_url` (3-D Secure page) -> `/api/pay/status` re-fetches the charge from Flutterwave and only then grants premium. The webhook (`flutterwave-signature`, HMAC-SHA256 of the raw body) re-fetches the same way, so a payment completed after the app closed is still recorded; the license is claimed by the device that started the payment.
 
-Storage: Firestore holds billing records only (subscriptions, payments, webhook ids, pending payments). Media and projects never leave the device. `firestore.rules` denies all client access; only the server (Admin SDK) reads or writes.
+Storage: Firestore holds billing and security metadata (subscriptions, payments, account links, server roles, usage counters, rate limits, audit events and pending payments). Media and projects stay on the device. `firestore.rules` denies all client access; only the server (Admin SDK) reads or writes.
 
 PCI: the card number, expiry, CVV and PIN pass through YOUR server in memory to be encrypted (Flutterwave's v4 direct card charge needs the encryption key, which must not be in the app). They are never stored or logged (see the comments in `server/src/index.ts` and `flutterwave.ts`), but this puts your server in scope for card-data handling. Run it only over HTTPS on infrastructure you control, never log request bodies, and ask Flutterwave/your acquirer about PCI requirements for direct card charges before launch. If that is too much, the alternative is Flutterwave's hosted checkout (card data never touches you).
 
@@ -66,7 +66,7 @@ Go-live checklist
 3. Make ONE real payment at the real price with your own card and go through the PIN/OTP steps; confirm premium turns on and the webhook is received. Then ask Flutterwave to refund it. Confirmed from Flutterwave's v4 guides: token call, direct-charges request shape and headers, encryption scheme, `next_action` types, `PUT /charges/{id}` PIN body, `GET /charges/{id}`, webhook signature. NOT confirmed: the OTP body (`otp:{code}`, sent unencrypted), the production API host (override with `FLW_BASE_URL`), whether your account is enabled for direct card charges, and AVS/address challenges (shown as "unsupported").
 4. Cards that need extra fields (address) are not supported and show a clear message.
 
-Known limits: no accounts, so a lost license cannot be recovered by us; Android opens 3-D Secure in the system browser and users return and press "Check payment"; no email receipts from us (Flutterwave may send its own).
+Known limits: Android opens 3-D Secure in the system browser and users return and press "Check payment"; no email receipts from us (Flutterwave may send its own). Account-linked license recovery requires the same verified Google email used for purchase.
 
 ## Added in build 5
 - Settings page with preferred image/video model and default priority (used by Auto routing), provider "Test all", premium-ending reminder, pull-to-refresh (not in the editor), pinch / Ctrl+scroll timeline zoom on empty timeline areas.
@@ -80,7 +80,7 @@ Checkout and renewals, image editing/inpainting/upscaling, image-to-video, other
 ## Verify before relying on it
 - Model IDs, request shapes and the two Capacitor plugin versions were written from memory and NOT checked against current docs. Check them first.
 - Browser calls straight to provider APIs depend on their CORS support.
-- The daily allowance lives in localStorage and can be edited by the user; real enforcement needs the billing server.
+- The local daily usage display is a cache and can be edited; generation attempts are checked and counted by the authenticated server API when `VITE_API_URL` is configured.
 
 ## Known limits
 - Not yet installed, built or run in the authoring environment (no network): run `npm install && npm run build && npm test` first.
@@ -109,3 +109,23 @@ Same layout as before (media list | preview | properties, timeline underneath; o
 Chat: message buttons are icons; suggested prompts disappear as soon as the box is focused or has text.
 
 Verification: the new file builders were checked offline (openpyxl, python-pptx, LibreOffice render, zip listing) and all new logic type-checks. Run `npm install && npm run build && npm test` on your machine for the full check.
+
+
+## Server-enforced security (security hardening)
+
+Generation requests now reserve image/video allowance through `POST /api/usage/reserve` before contacting a user's selected provider. The server verifies the Firebase ID token (including revocation), reads the subscription from Firestore, and atomically increments a per-user UTC-day counter. Free limits (30 images / 10 videos per UTC day) are defined only in the server package; localStorage counters are display caches and are not authorization sources. A reservation counts an attempt, including provider failures, to prevent clients from releasing or replaying allowance.
+
+`GET /api/account/me` returns a server-derived profile, role, subscription entitlement and usage. Admin role membership is configured only through the server-only `ADMIN_UIDS` environment variable (comma-separated Firebase UIDs); clients cannot assign roles. Billing checkout and its PIN/OTP/status continuations require a verified Firebase account, match the checkout email to that account, and bind pending transactions to the Firebase UID. Existing account linking now verifies that the signed-in verified email matches the subscription email and refuses replacing an existing account link.
+
+Firestore server-only collections include `subscriptions`, `payments`, `accounts`, `accountRoles`, `pendingPayments`, `usageCounters`, `rateLimits`, `securityAudit` and `webhookEvents`. Account roles are initialized and resolved by the server; `ADMIN_UIDS` is the server-side bootstrap/override list, and no client role field is accepted. The supplied Firestore rules deny all client reads/writes; only Firebase Admin on the server accesses these collections. Rate limits use Firestore transactions so they apply across server instances. Audit entries store a hashed UID, action and non-sensitive metadata; request bodies, card details, provider secrets and raw IP addresses are not logged. Configure Firestore TTL on `rateLimits.expiresAt`, `usageCounters.expiresAt` and `securityAudit.expiresAt` to clean up expired limiter records, old daily counters and audit records after their retention periods. Run `cd server && npm install && npm test` to execute the server security-policy tests.
+
+### Required deployment configuration
+
+- Deploy the `server/` service with Firebase Admin credentials and Firestore access. Do not put service-account JSON, Flutterwave secrets, `LICENSE_SECRET`, or private provider keys in any `VITE_*` variable.
+- Set the frontend build variable `VITE_API_URL` to the HTTPS base URL of that server. The build now rejects secret-looking environment-variable names with the public `VITE_` prefix.
+- Set `ADMIN_UIDS` only on the server if an administrator role is required. Leave it empty otherwise.
+- Deploy `server/firestore.rules` to the Firebase project and retain deny-by-default rules.
+- Use HTTPS, configure `APP_ORIGIN` and `EXTRA_ORIGINS` narrowly, and enable Firestore TTL for rate-limit cleanup.
+- BYOK API keys deliberately entered by a user remain in the app's encrypted local vault and are sent directly to the provider chosen by that user; they are not server environment credentials. Server-owned provider keys, if added later, must be used only by server-side provider adapters and must never be prefixed `VITE_`.
+
+**Important boundary:** the current BYOK image/video provider requests still run from the user's device. The new server quota endpoint blocks the normal app workflow, but a technically capable user can modify a distributed client and call their own provider directly, outside Pothub. Strict enforcement against modified clients requires routing generation through server-side provider adapters and never exposing those server-owned keys.

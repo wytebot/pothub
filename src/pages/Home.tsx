@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { FREE_LIMITS, isPremium, record, remaining, usage } from '../quota/daily';
+import { FREE_LIMITS, isPremium, remaining, usage } from '../quota/daily';
 import { defaultKeys } from '../vault/vault';
 import { FNS } from '../models/providerInfo';
 import { listLibrary, putMedia, uid, type MediaRecord } from '../storage/db';
@@ -258,7 +258,7 @@ export function Home() {
       log.step('Saving your image…');
       const sv = log.start('cmd', 'library.save'); const ids: string[] = [];
       for (const m of res.images) { const mid = uid(); await putMedia({ id: mid, projectId: null, kind: 'image', name: `${slug(res.prompt)}.${ext(m.mime)}`, mime: m.mime, size: m.blob.size, createdAt: Date.now(), blob: m.blob }); ids.push(mid); }
-      record('image', res.images.length); log.done(sv, `${ids.length} saved on this device`); log.say('ok', 'done');
+      log.done(sv, `${ids.length} saved on this device`); log.say('ok', 'done');
       patch(id, { state: 'done', kind: 'image', media: ids, text: [`Made with ${res.model.name}${photos.length ? ' from your photo' : ` at ${res.aspect}`}.`, ...res.notes].join(' ') });
     } catch (e) {
       log.settle('failed');

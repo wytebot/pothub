@@ -1,5 +1,4 @@
 import { putMedia, uid } from '../storage/db';
-import { record } from '../quota/daily';
 import { getSecret, listKeys, usableKey, type ProviderId } from '../vault/vault';
 import { downloadVideo, pollVideo } from '../models/video';
 import { logFor } from './log';
@@ -36,7 +35,7 @@ export async function pollJobs(): Promise<boolean> {
         const mediaId = uid();
         await putMedia({ id: mediaId, projectId: null, kind: 'video', name: `${slug(j.prompt)}.mp4`, mime: blob.type || 'video/mp4', size: blob.size, createdAt: Date.now(), blob });
         lg.step('Saving it to your library…'); const sv = lg.start('cmd', 'library.save'); lg.done(sv, 'saved on this device'); lg.say('ok', 'done');
-        record('video', 1); patchJob(j.id, { status: 'done', mediaId }); saved = true; window.dispatchEvent(new Event('library:changed'));
+        patchJob(j.id, { status: 'done', mediaId }); saved = true; window.dispatchEvent(new Event('library:changed'));
       }
     } catch (e) { /* transient errors: keep polling until timeout */ if (e instanceof Error && /removed|no longer stored/.test(e.message)) patchJob(j.id, { status: 'failed', error: e.message }); }
     finally { polling.delete(j.id); }

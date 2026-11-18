@@ -1,4 +1,18 @@
-{ "name": "studio-billing-server", "private": true, "type": "module",
-  "scripts": { "start": "tsx src/index.ts" },
-  "dependencies": { "firebase-admin": "^13.0.0", "tsx": "^4.19.0" },
-  "devDependencies": { "@types/node": "^22.7.0" } }
+{
+  "name": "studio-billing-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "tsx --test src/securityPolicy.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "typescript": "^5.5.4"
+  }
+}

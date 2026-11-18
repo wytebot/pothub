@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { idToken } from '../auth/session';
 const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '');
 export const apiConfigured = !!API;
 const LIC = 'billing.license'; const UNTIL = 'billing.entitledUntil'; const PEND = 'billing.pending';
@@ -46,12 +47,13 @@ async function finish(s: PayStep): Promise<PayStep> {
 }
 /** The card details exist only in this request body: they are never written to storage or logs. */
 export async function payStart(i: StartInput): Promise<PayStep> {
-  const s = await call<PayStep>('/api/pay/start', { method: 'POST', body: i });
+  const token = await idToken(); if (!token) throw new Error('Sign in before purchasing a plan.');
+  const s = await call<PayStep>('/api/pay/start', { method: 'POST', body: i, token });
   if (s.txRef && s.claim) localStorage.setItem(PEND, JSON.stringify({ txRef: s.txRef, claim: s.claim }));
   return finish(s);
 }
-export async function payAuthorize(a: { pin?: string; otp?: string }): Promise<PayStep> { const p = pend(); if (!p) throw new Error('No payment in progress.'); return finish(await call<PayStep>('/api/pay/authorize', { method: 'POST', body: { ...p, ...a } })); }
-export async function payStatus(): Promise<PayStep | null> { const p = pend(); if (!p) return null; return finish(await call<PayStep>('/api/pay/status', { method: 'POST', body: p })); }
+export async function payAuthorize(a: { pin?: string; otp?: string }): Promise<PayStep> { const p = pend(); if (!p) throw new Error('No payment in progress.'); const token = await idToken(); if (!token) throw new Error('Sign in again to continue.'); return finish(await call<PayStep>('/api/pay/authorize', { method: 'POST', body: { ...p, ...a }, token })); }
+export async function payStatus(): Promise<PayStep | null> { const p = pend(); if (!p) return null; const token = await idToken(); if (!token) throw new Error('Sign in again to continue.'); return finish(await call<PayStep>('/api/pay/status', { method: 'POST', body: p, token })); }
 /** Account-linked licence recovery. Authenticated with the Firebase ID token; the licence never leaves the signed-in user's own record. */
 export const linkLicenseToAccount = (token: string, license: string) => call<{ linked: boolean }>('/api/account/link', { method: 'POST', token, body: { license } });
 export const restoreLicenseFromAccount = (token: string) => call<{ license: string }>('/api/account/license', { token });

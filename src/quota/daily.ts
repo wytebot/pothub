@@ -1,4 +1,4 @@
-// Client-side allowance counter. UTC day. NOT tamper-proof: server enforcement arrives with the billing backend.
+// Local display cache only. All generation attempts are enforced atomically by the authenticated server API.
 export type Kind = 'image' | 'video';
 export const FREE_LIMITS: Record<Kind, number> = { image: 30, video: 10 };
 const dayKey = () => `quota.${new Date().toISOString().slice(0, 10)}`;
@@ -11,5 +11,4 @@ export function usage(): Record<Kind, number> {
   try { return { image: 0, video: 0, ...JSON.parse(localStorage.getItem(dayKey()) ?? '{}') }; } catch { return { image: 0, video: 0 }; }
 }
 export const remaining = (k: Kind) => (isPremium() ? Infinity : Math.max(0, FREE_LIMITS[k] - usage()[k]));
-export function record(k: Kind, n: number) { const u = usage(); u[k] += n; localStorage.setItem(dayKey(), JSON.stringify(u)); }
 export const resetsAt = () => { const d = new Date(); d.setUTCHours(24, 0, 0, 0); return d; };

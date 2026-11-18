@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { entitled, luhn, memoryStore, ngnAmount, PRICE_USD, settleCharge, verifySignature, type Plan, type Store } from './billing';
 import { verifyIdToken } from './identity';
+import { audit, configuredAdmins, distributedLimit, getAccountRole, readUsage, reserveUsage } from './securityStore';
+import { FREE_LIMITS, validUsageRequest } from './securityPolicy';
 import { authorizeCharge, FlwError, getCharge, isLive, startCardCharge, toTx, type ChargeResult } from './flutterwave';
 
 const env = process.env; const PORT = Number(env.PORT ?? 8787);
@@ -39,6 +41,7 @@ createServer(async (req, res) => {
   const send = (code: number, body: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ORIGINS.has(reqOrigin) ? reqOrigin : ORIGIN, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
   const ip = (env.TRUST_PROXY === '1' ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') || req.socket.remoteAddress || 'x';
   const json = async () => { try { return JSON.parse((await raw(req)).toString('utf8') || '{}') as Record<string, any>; } catch { throw new SyntaxError('bad json'); } };
+  const logAudit = async (uid: string | null, action: string, meta: Record<string, string | number | boolean | null> = {}) => { try { await audit(uid, action, meta); } catch { console.error('security audit persistence failed'); } };
 
   /** Verifies the caller owns this payment, then maps a charge to what the app should show next. */
   const reply = async (pendingTx: string, c: ChargeResult, claim?: string) => {
@@ -46,6 +49,7 @@ createServer(async (req, res) => {
     if (c.status === 'pending') return { state: 'pending', txRef: pendingTx, claim };
     const pend = await store.getPending(pendingTx);
     const r = await settleCharge(store, toTx(c));
+    if (r.result === 'applied') await logAudit(pend?.ownerUid ?? null, 'billing.payment_settled', { plan: pend?.plan ?? 'unknown' });
     if (r.result === 'ignored') return { state: 'failed', txRef: pendingTx, reason: r.reason };
     return { state: 'paid', txRef: pendingTx, license: licenseFor((pend?.customerKey ?? r.customerKey)!) };
   };
@@ -59,12 +63,16 @@ createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x'); const p = url.pathname;
     if (req.method === 'OPTIONS') return send(204, {});
     if (p === '/api/config') return send(200, { checkoutEnabled: configured(), live: isLive(), prices: PRICE_USD });
-    if (p === '/api/rates') { const r = await usdNgn(); return send(200, { usdNgn: r, monthlyNgn: ngnAmount(PRICE_USD.monthly, r, STEP), annualNgn: ngnAmount(PRICE_USD.annual, r, STEP), asOf: new Date(rate!.at).toISOString(), roundedUpToNearest: STEP }); }
+    if (p === '/api/rates') { if (limited(`rates:${ip}`, 30)) return send(429, { error: 'Too many requests.' }); const r = await usdNgn(); return send(200, { usdNgn: r, monthlyNgn: ngnAmount(PRICE_USD.monthly, r, STEP), annualNgn: ngnAmount(PRICE_USD.annual, r, STEP), asOf: new Date(rate!.at).toISOString(), roundedUpToNearest: STEP }); }
 
     if (p === '/api/pay/start' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in before purchasing a plan.' });
+      if (!who.emailVerified) return send(403, { error: 'Verify your Google account email before purchasing.' });
+      if (await distributedLimit(`pay-start:${who.uid}`, 5)) return send(429, { error: 'Too many checkout attempts. Wait a minute and try again.' });
       if (!configured()) return send(503, { error: 'Payments are not configured on this server.' });
       if (limited(`start:${ip}`, 6)) return send(429, { error: 'Too many attempts. Wait a minute and try again.' });
       const b = await json(); const plan = b.plan as Plan; const email = String(b.email ?? '').trim().toLowerCase();
+      if (!who.email || who.email.toLowerCase() !== email) return send(403, { error: 'The checkout email must match your signed-in Google account.' });
       const name = String(b.name ?? '').trim().split(/\s+/); const card = b.card ?? {};
       const number = String(card.number ?? '').replace(/\s|-/g, ''); const month = String(card.month ?? '').padStart(2, '0'); const yr = String(card.year ?? ''); const year = yr.length === 4 ? yr.slice(2) : yr; const cvv = String(card.cvv ?? '');
       const phone = String(b.phone ?? '').replace(/\D/g, '').replace(/^0+/, ''); const phoneCode = String(b.phoneCode ?? '234').replace(/\D/g, '');
@@ -77,53 +85,83 @@ createServer(async (req, res) => {
       if (!/^\d{3,4}$/.test(cvv)) return send(400, { error: 'Enter the 3 or 4 digit security code.' });
       const amountNgn = ngnAmount(PRICE_USD[plan], await usdNgn(), STEP);
       if (Number(b.expectedNgn) !== amountNgn) return send(409, { error: 'The naira price changed with the exchange rate. Review the new amount.', amountNgn });
-      const existing = await store.findSubByEmail(email);
-      const customerKey = existing?.customerKey ?? randomBytes(12).toString('hex');
+      const linkedKey = await store.getLink(who.uid);
+      const existing = linkedKey ? await store.getSub(linkedKey) : await store.findSubByEmail(email);
+      if (existing?.email && existing.email.toLowerCase() !== email) return send(403, { error: 'This subscription is linked to a different account.' });
+      const customerKey = linkedKey ?? existing?.customerKey ?? randomBytes(12).toString('hex');
+      await store.putLink(who.uid, customerKey);
       const txRef = `sub_${plan}_${customerKey}_${randomBytes(6).toString('hex')}`; const claim = randomBytes(24).toString('base64url');
-      await store.putPending({ txRef, customerKey, email, plan, amountNgn, claimHash: sha(claim), createdAt: Date.now() });
+      await store.putPending({ txRef, customerKey, email, plan, amountNgn, claimHash: sha(claim), createdAt: Date.now(), ownerUid: who.uid });
       const c = await startCardCharge({ reference: txRef, amountNgn, email, first: name[0], last: name.slice(1).join(' '), phoneCode, phone, card: { number, month, year, cvv }, redirectUrl: `${ORIGIN}/` });
-      await store.putPending({ txRef, customerKey, email, plan, amountNgn, claimHash: sha(claim), createdAt: Date.now(), chargeId: c.id });
+      await store.putPending({ txRef, customerKey, email, plan, amountNgn, claimHash: sha(claim), createdAt: Date.now(), ownerUid: who.uid, chargeId: c.id });
       return send(200, await reply(txRef, c, claim));
     }
     if (p === '/api/pay/authorize' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
+      if (await distributedLimit(`pay-authorize:${who.uid}`, 10)) return send(429, { error: 'Too many authorization attempts.' });
       if (limited(`auth:${ip}`, 12)) return send(429, { error: 'Too many attempts. Wait a minute and try again.' });
-      const b = await json(); const pend = await owned(b); if (!pend?.chargeId) return send(404, { error: 'This payment was not found or has expired. Start again.' });
+      const b = await json(); const pend = await owned(b); if (!pend?.chargeId || pend.ownerUid !== who.uid) return send(404, { error: 'This payment was not found or has expired. Start again.' });
       const pin = typeof b.pin === 'string' && /^\d{4,6}$/.test(b.pin) ? b.pin : null; const otp = typeof b.otp === 'string' && /^\d{4,10}$/.test(b.otp) ? b.otp : null;
       if (!pin && !otp) return send(400, { error: 'Enter the digits you were asked for.' });
       return send(200, await reply(pend.txRef, await authorizeCharge(pend.chargeId, pin ? { pin } : { otp: otp! })));
     }
     if (p === '/api/pay/status' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
+      if (await distributedLimit(`pay-status:${who.uid}`, 30)) return send(429, { error: 'Too many status checks.' });
       if (limited(`status:${ip}`, 40)) return send(429, { error: 'Too many attempts.' });
-      const pend = await owned(await json()); if (!pend?.chargeId) return send(404, { error: 'This payment was not found or has expired. If you were charged, contact support with your receipt.' });
+      const pend = await owned(await json()); if (!pend?.chargeId || pend.ownerUid !== who.uid) return send(404, { error: 'This payment was not found or has expired. If you were charged, contact support with your receipt.' });
       return send(200, await reply(pend.txRef, await getCharge(pend.chargeId)));
     }
     if (p === '/api/subscription/status' || p === '/api/billing/history') {
       const key = customerFromLicense(req.headers.authorization); if (!key) return send(401, { error: 'Invalid license.' });
+      if (await distributedLimit(`license-read:${key}`, 90)) return send(429, { error: 'Too many requests.' });
       if (p === '/api/billing/history') return send(200, { payments: await store.listPayments(key) });
       const s = await store.getSub(key); return send(200, { entitled: entitled(s), plan: s?.plan ?? null, status: entitled(s) ? 'active' : s ? 'expired' : 'none', currentPeriodEnd: s?.currentPeriodEnd ?? null });
+    }
+    if (p === '/api/account/me' && req.method === 'GET') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
+      if (await distributedLimit(`me:${who.uid}`, 90)) return send(429, { error: 'Too many requests.' });
+      const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined;
+      const usage = await readUsage(who.uid); const premium = entitled(sub);
+      return send(200, { uid: who.uid, email: who.email ?? null, role: await getAccountRole(who.uid, configuredAdmins()), plan: premium ? sub?.plan ?? null : null, entitled: premium, currentPeriodEnd: premium ? sub?.currentPeriodEnd ?? null : null, usage, limits: premium ? null : FREE_LIMITS });
+    }
+    if (p === '/api/usage/reserve' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to use generation features.' });
+      if (await distributedLimit(`usage:${who.uid}`, 40)) return send(429, { error: 'Too many generation requests. Wait a moment.' });
+      const b = await json(); const kind = b.kind; const amount = Number(b.amount ?? 1);
+      if (!validUsageRequest(kind, amount)) return send(400, { error: 'Invalid usage request.' });
+      const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined;
+      const result = await reserveUsage(who.uid, kind, amount, entitled(sub));
+      if (!result.allowed) { await logAudit(who.uid, 'usage.limit_rejected', { kind, requested: amount }); return send(429, { error: `Daily ${kind} allowance reached. It resets at 00:00 UTC.`, ...result }); }
+      await logAudit(who.uid, 'usage.reserved', { kind, amount }); return send(200, result);
     }
     if (p === '/api/account/link' && req.method === 'POST') {
       if (limited(`link:${ip}`, 20)) return send(429, { error: 'Too many attempts.' });
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
+      if (!who.emailVerified) return send(403, { error: 'Verify your Google account email before linking a subscription.' });
+      if (await distributedLimit(`account-link:${who.uid}`, 10)) return send(429, { error: 'Too many account-link attempts.' });
       const key = customerFromLicense(String((await json()).license ?? '')); if (!key) return send(400, { error: 'That licence was not recognised.' });
-      await store.putLink(who.uid, key); return send(200, { linked: true });
+      const sub = await store.getSub(key); if (!sub || !who.email || sub.email?.toLowerCase() !== who.email.toLowerCase()) return send(403, { error: 'This licence does not belong to the signed-in account.' });
+      const prior = await store.getLink(who.uid); if (prior && prior !== key) return send(409, { error: 'This account is already linked to a different subscription.' });
+      await store.putLink(who.uid, key); await logAudit(who.uid, 'account.license_linked'); return send(200, { linked: true });
     }
     if (p === '/api/account/license') {
       if (limited(`acct:${ip}`, 30)) return send(429, { error: 'Too many attempts.' });
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
+      if (await distributedLimit(`account-license:${who.uid}`, 20)) return send(429, { error: 'Too many requests.' });
       const key = await store.getLink(who.uid); if (!key) return send(404, { error: 'No licence is saved to this account.' });
       return send(200, { license: licenseFor(key) });
     }
     if (p === '/webhooks/flutterwave' && req.method === 'POST') {
       const body = await raw(req); if (!HASH || !verifySignature(body, req.headers['flutterwave-signature'] as string | undefined, HASH)) return send(401, { error: 'bad signature' });
       const ev = JSON.parse(body.toString('utf8')) as { type?: string; data?: { id?: string } }; const id = ev.data?.id;
-      if (String(ev.type ?? '').startsWith('charge.') && id) return send(200, await settleCharge(store, toTx(await getCharge(id)))); // re-fetched from Flutterwave; the webhook body is never trusted
+      if (String(ev.type ?? '').startsWith('charge.') && id) { const result = await settleCharge(store, toTx(await getCharge(id))); await logAudit(null, 'billing.webhook_processed', { result: result.result }); return send(200, result); } // re-fetched from Flutterwave; the webhook body is never trusted
       return send(200, { ignored: true });
     }
     send(404, { error: 'not found' });
   } catch (e) {
-    const msg = e instanceof SyntaxError ? 'invalid request' : e instanceof Error ? e.message : 'unknown'; // never log bodies: they may contain card data
-    console.error('request failed:', msg);
+    // Never log request bodies or provider exception messages: they may contain card data or credentials.
+    console.error('request failed:', e instanceof FlwError ? `provider status ${e.status}` : e instanceof SyntaxError ? 'invalid request' : 'internal error');
     if (e instanceof FlwError && e.status === 422) return send(422, { error: 'The card details could not be processed. Check them and try again.' });
     if (e instanceof FlwError && e.status >= 400 && e.status < 500) return send(402, { error: 'The payment provider declined this request. Check the details or try another card.' });
     send(e instanceof SyntaxError ? 400 : 500, { error: e instanceof SyntaxError ? 'Invalid request.' : 'Something went wrong.' });

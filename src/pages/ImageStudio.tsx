@@ -6,7 +6,7 @@ import { cachedCatalog, refreshCatalog } from '../agent/detect';
 import { RunLog } from '../agent/log';
 import { runImage, runInfo } from '../agent/workflow';
 import { Terminal } from '../ui/Terminal';
-import { FREE_LIMITS, isPremium, record, remaining, usage } from '../quota/daily';
+import { FREE_LIMITS, isPremium, remaining, usage } from '../quota/daily';
 import { platform } from '../platform';
 import { getSettings } from '../settings';
 import { Select } from '../ui/Select';
@@ -50,7 +50,7 @@ export function ImageStudio() {
       const res = await runImage({ prompt, count: Number(count), format, prefer, model, signal, log, left, limit: FREE_LIMITS.image, premium: isPremium() });
       const sv = log.start('cmd', 'library.save');
       for (const m of res.images) await putMedia({ id: uid(), projectId: null, kind: 'image', name: `${slug(res.prompt)}.png`, mime: m.mime, size: m.blob.size, createdAt: Date.now(), blob: m.blob }); // saved locally immediately
-      record('image', res.images.length); setUsed(usage().image);
+      setUsed(usage().image);
       log.done(sv, `${res.images.length} saved on this device`); log.say('ok', 'done');
       setMsg({ text: [`Created ${res.images.length} image(s) with ${res.model.name} at ${res.aspect}.`, ...res.notes].join(' ') });
       await load();

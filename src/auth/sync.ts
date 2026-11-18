@@ -1,6 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { apiConfigured, linkLicenseToAccount, restoreLicenseFromAccount, storedLicense, verifyLicense } from '../billing/api';
 import { auth } from '../firebase';
+import { getServerProfile } from '../security/api';
 import { idToken } from './session';
 
 /**
@@ -16,8 +17,17 @@ export async function syncLicense() {
   try {
     const token = await idToken(); if (!token) return;
     const local = storedLicense();
-    if (local) await linkLicenseToAccount(token, local);
+    if (local) await linkLicenseToAccount(token, local).catch(() => null);
     else { const r = await restoreLicenseFromAccount(token).catch(() => null); if (r?.license) { await verifyLicense(r.license); window.dispatchEvent(new Event('billing:licensed')); } }
+    const profile = await getServerProfile().catch(() => null);
+    if (profile) {
+      if (profile.entitled && profile.currentPeriodEnd) {
+        const until = String(new Date(profile.currentPeriodEnd).getTime());
+        localStorage.setItem('billing.entitledUntil', until); localStorage.setItem('billing.lastUntil', until);
+      } else localStorage.removeItem('billing.entitledUntil');
+      localStorage.setItem(`quota.${profile.usage.day}`, JSON.stringify({ image: profile.usage.image, video: profile.usage.video }));
+      window.dispatchEvent(new Event('account:server-sync'));
+    }
   } catch { /* offline or server not configured */ } finally { running = false; }
 }
 export function startAccountSync() {

@@ -13,6 +13,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
+import { reserveUsage } from '../security/api';
 
 const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
@@ -85,7 +86,8 @@ export async function runImage(o: { /** the caller already decided this is an im
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text) throw new Error('Describe the image first (commands alone are not a prompt).');
   const count = flags.count ?? o.count;
-  if (!o.premium) { if (o.left < count) throw new Error(`You have ${o.left} free image(s) left today (limit ${o.limit}, resets at 00:00 UTC). Lower the count or come back tomorrow.`); log.say('info', 'quota', `${o.left} of ${o.limit} free images left today`); }
+  const allowance = await reserveUsage('image', count);
+  log.say('info', 'quota', allowance.premium ? 'server confirmed premium access' : `${allowance.remaining ?? 0} image(s) remaining today`);
   const prompt = wantEnhance(flags) ? await enhance(text, catalog, log, signal, 'image') : text;
   const refs = o.refs?.length ? await Promise.all(o.refs.slice(0, 4).map(async (a) => ({ mime: a.mime, data: await base64Of(a.blob) }))) : undefined;
   const tried = new Set<string>(); const skipKeys = new Set<string>(); const notes: string[] = []; let lastErr: unknown;
@@ -129,7 +131,8 @@ export async function runVideoStart(o: { prompt: string; modelId: string; signal
   const { log, signal } = o;
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text) throw new Error('Describe the video first (commands alone are not a prompt).');
-  if (!o.premium) { if (o.left < 1) throw new Error(`Daily free limit of ${o.limit} videos reached. It resets at 00:00 UTC.`); log.say('info', 'quota', `${o.left} of ${o.limit} free videos left today`); }
+  const allowance = await reserveUsage('video', 1);
+  log.say('info', 'quota', allowance.premium ? 'server confirmed premium access' : `${allowance.remaining ?? 0} video(s) remaining today`);
   const prompt = wantEnhance(flags) ? await enhance(text, catalog, log, signal, 'video') : text;
   const wanted = flags.aspect ?? interpret(text).aspect; const tried = new Set<string>(); const skipKeys = new Set<string>(); let lastErr: unknown;
   const pref = flags.prefer ?? getSettings().priority;
