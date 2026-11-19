@@ -144,7 +144,7 @@ async function drive(once: (take: (t: string) => void) => Promise<Round>, carryO
       if (net && !isOnline()) {
         // Offline mid-answer: pause, then carry on from exactly where it stopped (or start the round again if nothing had arrived).
         await waitOnline(signal);
-        if (got) round = { text: got, truncated: true }; else { i--; continue; }
+        if (got) round = { text: got, truncated: true }; else continue;
       } else if (got && net && drops < MAX_DROPS) { drops++; round = { text: got, truncated: true }; } else throw e;
     }
     unfinished = round.truncated;
