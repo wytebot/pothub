@@ -91,7 +91,7 @@ async function geminiParts(r: TextRequest, text: string, skip: Attachment[]): Pr
 
 async function geminiRound(secret: string, r: TextRequest, contents: unknown[], stream: boolean, onDelta: (t: string) => void): Promise<Round> {
   const url = `${GEMINI}/models/${r.model}:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`;
-  const res = await call(url, { method: 'POST', signal: r.signal, headers: { 'x-goog-api-key': secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ systemInstruction: { parts: [{ text: r.system }] }, contents, generationConfig: { temperature: 0.7, maxOutputTokens: r.maxTokens ?? 8192 } }) }, secret);
+  const res = await call(url, { method: 'POST', signal: r.signal, headers: { 'x-goog-api-key': secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ systemInstruction: { parts: [{ text: r.system }] }, contents, generationConfig: { temperature: 0.7, ...(r.maxTokens ? { maxOutputTokens: r.maxTokens } : {}) } }) }, secret);
   if (!res.ok) throw await failure(res, secret);
   let out = ''; let finish = ''; let blocked = '';
   const take = (j: { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[]; promptFeedback?: { blockReason?: string } }) => {
@@ -109,7 +109,7 @@ async function geminiRound(secret: string, r: TextRequest, contents: unknown[], 
 
 async function compatRound(p: 'openai' | 'xai', secret: string, r: TextRequest, messages: unknown[], stream: boolean, onDelta: (t: string) => void): Promise<Round> {
   const cfg = COMPAT[p];
-  const body = { model: r.model, messages, [cfg.tokens]: r.maxTokens ?? 8000, ...(stream ? { stream: true } : {}) };
+  const body = { model: r.model, messages, ...(r.maxTokens ? { [cfg.tokens]: r.maxTokens } : {}), ...(stream ? { stream: true } : {}) };
   const res = await call(cfg.url, { method: 'POST', signal: r.signal, headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, secret);
   if (!res.ok) {
     // Some accounts cannot stream some models. Retry once without streaming.
@@ -129,7 +129,26 @@ async function compatRound(p: 'openai' | 'xai', secret: string, r: TextRequest, 
 }
 
 const CONTINUE = 'Continue exactly where you stopped. Do not repeat anything already written, do not add an introduction, and keep the same structure and format.';
-const MAX_ROUNDS = 5;
+const MAX_ROUNDS = 400; // a safety stop only; a long answer simply keeps going until the model says it is finished
+const MAX_DROPS = 4;
+
+/** Runs one round after another until the model finishes. A round that stops at its length limit, or whose connection drops part-way, is continued from exactly where it stopped. Returns true if it still ended unfinished. */
+async function drive(once: (take: (t: string) => void) => Promise<Round>, carryOn: (written: string) => void, push: (t: string) => void): Promise<boolean> {
+  let unfinished = false; let drops = 0;
+  for (let i = 0; i < MAX_ROUNDS; i++) {
+    let got = ''; const take = (t: string) => { got += t; push(t); };
+    let round: Round;
+    try { round = await once(take); }
+    catch (e) {
+      const status = (e as ProviderErr).status;
+      if (got && !status && !(e instanceof Error && e.message === 'Cancelled.') && drops < MAX_DROPS) { drops++; round = { text: got, truncated: true }; } else throw e;
+    }
+    unfinished = round.truncated;
+    if (!round.truncated || !round.text.trim()) break;
+    carryOn(round.text);
+  }
+  return unfinished;
+}
 
 /** Writes the answer. If the provider stops at its length limit, asks it to carry on (up to a few times) so long documents arrive whole. */
 export async function generateText(p: ProviderId, secret: string, r: TextRequest): Promise<TextResult> {
@@ -142,11 +161,7 @@ export async function generateText(p: ProviderId, secret: string, r: TextRequest
 
   if (p === 'gemini') {
     const contents: unknown[] = [...r.history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.text }] })), { role: 'user', parts: await geminiParts(r, r.prompt, skip) }];
-    for (let i = 0; i < MAX_ROUNDS; i++) {
-      const round = await geminiRound(secret, r, contents, stream, push); truncated = round.truncated;
-      if (!round.truncated) break;
-      contents.push({ role: 'model', parts: [{ text: round.text }] }, { role: 'user', parts: [{ text: CONTINUE }] });
-    }
+    truncated = await drive((take) => geminiRound(secret, r, contents, stream, take), (text) => { contents.push({ role: 'model', parts: [{ text }] }, { role: 'user', parts: [{ text: CONTINUE }] }); }, push);
   } else {
     const content: unknown[] = [];
     for (const f of r.files) {
@@ -157,11 +172,7 @@ export async function generateText(p: ProviderId, secret: string, r: TextRequest
     }
     content.push({ type: 'text', text: r.prompt });
     const messages: unknown[] = [{ role: 'system', content: r.system }, ...r.history.map((h) => ({ role: h.role, content: h.text })), { role: 'user', content: content.length === 1 ? r.prompt : content }];
-    for (let i = 0; i < MAX_ROUNDS; i++) {
-      const round = await compatRound(p, secret, r, messages, stream, push); truncated = round.truncated;
-      if (!round.truncated) break;
-      messages.push({ role: 'assistant', content: round.text }, { role: 'user', content: CONTINUE });
-    }
+    truncated = await drive((take) => compatRound(p, secret, r, messages, stream, take), (text) => { messages.push({ role: 'assistant', content: text }, { role: 'user', content: CONTINUE }); }, push);
   }
   if (!soFar.trim()) throw perr('The model sent back an empty answer. Try again, or try a different model.');
   return { text: soFar.trim(), truncated, unread: skip.map((f) => f.name) };

@@ -25,7 +25,6 @@ export async function syncLicense() {
         const until = String(new Date(profile.currentPeriodEnd).getTime());
         localStorage.setItem('billing.entitledUntil', until); localStorage.setItem('billing.lastUntil', until);
       } else localStorage.removeItem('billing.entitledUntil');
-      localStorage.setItem(`quota.${profile.usage.day}`, JSON.stringify({ image: profile.usage.image, video: profile.usage.video }));
       window.dispatchEvent(new Event('account:server-sync'));
     }
   } catch { /* offline or server not configured */ } finally { running = false; }

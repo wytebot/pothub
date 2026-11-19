@@ -1,20 +1,21 @@
-export const LEGAL_VERSION = '1.0';
-export const LEGAL_EFFECTIVE = '16 November 2026';
+export const LEGAL_VERSION = '1.1';
+export const LEGAL_EFFECTIVE = '18 November 2026';
 export interface LegalDoc { id: string; title: string; sections: [string, string][]; }
 
 export const LEGAL_DOCS: LegalDoc[] = [
   { id: 'terms', title: 'Terms of Service', sections: [
     ['Agreement', 'These Terms govern your use of Pothub (the "App"), operated by its publisher ("we", "us"). By using the App you agree to them. If you do not agree, do not use the App. You must be old enough to form a binding contract where you live.'],
     ['What the App does', 'The App is a local creative workspace. It helps you send prompts to third-party AI providers using credentials you supply, store the results on your own device, and edit and export them. We do not operate the AI models and we do not host your media.'],
-    ['Free and premium use', 'Free use includes a daily allowance of 30 image generations and 10 video generations in the App. Premium is prepaid for a fixed period, does not renew automatically, and removes these App allowances while it lasts. These are limits on the App only: they are not AI credits, and your providers may apply their own prices, quotas and rate limits.'],
+    ['Free and premium use', 'Creating images and videos in the App is unlimited for everyone. Free use includes 10 attachments (files, photos or videos added to a chat) and 10 file analyses (answers that read your attached files) every 5 hours; if the file-analysis allowance is used up, the App still answers but does not read the files and says so. Premium is prepaid for a fixed period, does not renew automatically, and while it lasts removes both limits and includes web search. Your AI providers may apply their own prices, quotas and rate limits, which are separate from the App.'],
     ['Your responsibilities', 'You are responsible for your provider accounts, keys, charges, prompts and uploaded material, and for keeping your device secure. You must follow the Acceptable Use Policy and the terms of every provider you use.'],
     ['Changes and availability', 'We may update the App and these Terms. Material changes will be shown in the App with a new version number and effective date. The App is provided as available; features that depend on third parties may change or stop working without notice.'],
     ['Governing law', 'These Terms are governed by the laws of the Federal Republic of Nigeria, and the courts of Nigeria have jurisdiction, without removing any consumer rights you have under mandatory law where you live.'],
   ]},
   { id: 'privacy', title: 'Privacy Policy', sections: [
     ['Summary', 'Your generated media, projects and editing data are stored only on your device. We do not receive them. We process only the limited account, subscription and payment metadata described below.'],
-    ['Data kept on your device', 'Projects, images, video, audio, timelines, generation history, usage counters and your encrypted provider keys are stored locally in your browser or Android app storage. We cannot access, recover or delete this data for you.'],
+    ['Data kept on your device', 'Projects, images, video, audio, timelines, your chat history, attachment and file-analysis counters and your encrypted provider keys are stored locally in your browser or Android app storage. We cannot access, recover or delete this data for you.'],
     ['Data we process', 'When you buy premium we process your email, a license identifier, the plan, payment references, amounts, dates and premium end date. This is stored in Google Firestore and used to verify payments, prevent duplicate credit and meet legal and accounting duties. Card details are handled in transit only: they pass through our server to be encrypted and forwarded to Flutterwave, and are never stored or logged by us. Your media and projects are never sent to us.'],
+    ['Web search (Premium)', 'When you switch web search on, the words of your message (up to 200 characters) are sent to our server, which looks them up with a third-party search engine and returns the results. We do not store the search text. Do not switch it on for messages containing information you would not want searched.'],
     ['Data sent to AI providers', 'When you generate, your prompt, any reference media and your API key are sent directly from your device to the provider you chose. That provider processes them under its own terms and privacy policy. We do not receive your keys or prompts.'],
     ['Retention and your rights', 'Subscription and payment records are kept for as long as needed for billing, disputes and legal obligations. You may ask about, correct or request deletion of the metadata we hold, subject to those obligations, through the Support page. Where applicable law gives you additional rights, such as under the Nigeria Data Protection Act, we will honour them.'],
     ['Security', 'We use access controls and encryption in transit on our billing systems. Keys on your device are encrypted, but no client-side protection can stop someone with full control of your unlocked device or browser tools.'],
@@ -38,7 +39,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
   { id: 'refunds', title: 'Cancellation and Refund Policy', sections: [
     ['Nothing to cancel', 'Because premium is prepaid and never renews automatically, there is no subscription to cancel. You simply do not pay again when the period ends.'],
     ['Refunds', 'Because premium access starts immediately, payments are generally non-refundable once the period starts, except where required by law, where we charged you in error, or where you were charged twice. Request a refund through the Support page within 14 days of the charge and include the payment reference from your receipt.'],
-    ['Free allowance', 'The free daily allowance is available without payment so you can evaluate the App before buying.'],
+    ['Free use', 'Image and video creation, and 10 attachments every 5 hours, are available without payment so you can evaluate the App before buying.'],
   ]},
   { id: 'copyright', title: 'Copyright and Intellectual Property Policy', sections: [
     ['Our rights', 'The App, its design and code belong to us or our licensors. These Terms give you a limited, non-exclusive right to use the App; they do not transfer ownership.'],
