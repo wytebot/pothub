@@ -15,6 +15,7 @@ import { Billing } from './pages/Billing';
 import { Settings } from './pages/Settings';
 import { AppearancePage } from './pages/Appearance';
 import { ImageStudio } from './pages/ImageStudio';
+import { SiteTools } from './pages/SiteTools';
 import { getStorageInfo } from './storage/quota';
 import { useMe } from './auth/session';
 import { startJobPoller } from './agent/jobs';
@@ -31,6 +32,7 @@ const primary: Route[] = [
   { path: '/projects', label: 'Projects', icon: 'folder', el: <Projects /> },
   { path: '/providers', label: 'AI Providers', icon: 'key', el: <Providers /> },
   { path: '/billing', label: 'Account and Billing', icon: 'card', el: <Billing /> },
+  { path: '/sites', label: 'Website tools', icon: 'link', el: <SiteTools /> },
 ];
 const secondary: Route[] = [
   { path: '/settings', label: 'Settings', el: <Settings /> },

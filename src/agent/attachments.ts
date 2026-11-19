@@ -8,7 +8,9 @@ export interface AttachmentMeta { name: string; kind: AttachKind; size: number; 
 
 // Keep the picker itself uncapped: the plan-aware 10-per-5-hour free allowance is enforced
 // by quota/attachments.ts when files are staged and sent. Premium remains unlimited.
-export const MAX_FILES = Number.POSITIVE_INFINITY;
+export const MAX_FILES = 20;
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB per file
+export const MAX_BATCH_BYTES = 60 * 1024 * 1024; // 60 MB per message batch
 
 const TEXT_EXT = new Set(['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'env', 'log', 'html', 'htm', 'css', 'scss', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'php', 'java', 'kt', 'kts', 'swift', 'go', 'rs', 'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'sh', 'bash', 'zsh', 'ps1', 'sql', 'r', 'lua', 'dart', 'vue', 'svelte', 'tex', 'srt', 'vtt', 'rtf', 'gradle', 'properties', 'conf', 'cfg']);
 const OFFICE_EXT = new Set(['xlsx', 'xlsm', 'pptx', 'odt', 'ods', 'odp', 'epub', 'rtf']);
@@ -37,11 +39,15 @@ export const kindLabel: Record<AttachKind, string> = { image: 'photo', video: 'v
 /** Turns picked files into attachments. Files that cannot be used come back in `skipped` with a friendly reason. */
 export function toAttachments(files: File[], _have: Attachment[]): { added: Attachment[]; skipped: string[] } {
   const added: Attachment[] = []; const skipped: string[] = [];
+  let batchBytes = have.reduce((n, a) => n + a.size, 0);
   for (const f of files) {
+    if (have.length + added.length >= MAX_FILES) { skipped.push(`${f.name}: maximum ${MAX_FILES} files per message`); continue; }
+    if (f.size > MAX_ATTACHMENT_BYTES) { skipped.push(`${f.name}: exceeds the 25 MB per-file limit`); continue; }
+    if (batchBytes + f.size > MAX_BATCH_BYTES) { skipped.push(`${f.name}: message attachments cannot exceed 60 MB total`); continue; }
     const kind = classify(f);
     if (f.size === 0) { skipped.push(`${f.name} is empty`); continue; }
 
-    added.push({ id: crypto.randomUUID(), name: f.name || 'file', mime: f.type || 'application/octet-stream', size: f.size, kind, blob: f });
+    added.push({ id: crypto.randomUUID(), name: f.name || 'file', mime: f.type || 'application/octet-stream', size: f.size, kind, blob: f }); batchBytes += f.size;
   }
   return { added, skipped };
 }
