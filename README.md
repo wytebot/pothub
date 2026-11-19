@@ -140,3 +140,12 @@ Firestore server-only collections include `subscriptions`, `payments`, `accounts
 ## Backups
 
 Use **Storage → Download full backup** to export chat history, editor projects, and saved/generated media into a ZIP. **Restore backup** merges by record ID and timestamp; it never clears unrelated existing data and will not overwrite a newer local record with an older backup copy. Store the downloaded ZIP somewhere outside the app. Google Drive syncing is not part of this version.
+
+
+### Large-file completeness (v0.5.3)
+
+Pothub no longer applies an application-level character, aggregate attachment-size, attachment-count, archive-entry-count, per-archive-entry-size, or aggregate archive-text cutoff during extraction. Readable text is passed through overlapping provider-sized chunks, and large chunk findings are consolidated hierarchically before the final answer. Text generation continues across provider length-limit responses without a fixed round-count ceiling. The browser, available device memory/storage, network, provider upload limits, model context window, provider quotas, and unsupported/encrypted formats remain real external constraints; failures are surfaced rather than silently dropping a tail. Very large archives may require substantial device memory while ZIP/TAR contents are expanded.
+
+
+### Plan allowances preserved (v0.5.4)
+The large-file extraction/chunking change does **not** remove plan allowances. Free accounts retain 10 attachments per 5-hour window and 10 completed file-analysis requests per 5-hour window. Both windows begin with the first use and reset 5 hours later. A single analysis request can read multiple source files and counts as one analysis; generated files count when they are supplied as source inputs to a file-analysis request. Premium accounts have unlimited attachments and file analyses. The picker itself remains dynamically plan-aware rather than hard-coding a 10-file cap, so Premium is not accidentally capped.

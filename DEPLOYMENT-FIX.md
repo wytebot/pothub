@@ -57,3 +57,12 @@ Google Drive syncing has been removed. Backups are user-managed downloads; no cl
 **Conversation context.** Full history remains saved locally. Free requests include up to 8 recent exchanges from the current conversation; Premium includes up to 40. Editing a user request updates its existing assistant response in place.
 
 **Web research.** Free accounts can use 3 searches per day (up to 3 results); Premium can use up to 30 searches per day (up to 8 results). The server enforces the allowance.
+
+
+## v0.5.3: complete extraction and unbounded continuation
+
+Removed the 4,000,000-character text/Word extraction truncation, 25 MB archive-entry skip, 400-entry archive cap, 3 MB archive text budget, 30 MB binary strings scan cap, and 400,000-character strings output cap. Removed application-level attachment count and aggregate size caps. All readable archive entries are extracted and passed through the existing chunk pipeline. Chunk summaries are hierarchically consolidated to keep each provider request within practical context sizes. Removed the fixed 400-round generation ceiling; provider length-limit continuations now continue until completion or an explicit provider/network/cancellation failure. Device/browser memory, provider file-size/context limits, network availability, quotas, and unsupported/encrypted formats remain unavoidable platform constraints and are reported instead of silently truncating content.
+
+
+## v0.5.4: restore/confirm Free and Premium file allowances
+The extraction-cap removal does not remove subscription allowances. Free remains limited to 10 attachments per 5-hour window and 10 completed file-analysis requests per 5-hour window. Premium remains unlimited for both. Attachment allowance counts distinct files submitted; analysis allowance counts one completed request that reads one or more source files. Generated files are included when attached/reintroduced as source inputs for analysis. The UI copy and policy text now state this explicitly, and regression tests cover the Free limits, 5-hour reset, duplicate attachment resends, and Premium unlimited status.
