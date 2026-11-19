@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { FREE_LIMITS, isPremium, remaining, usage } from '../quota/daily';
+import { attachStatus, clockLabel, consume, costOf, useAttachStatus } from '../quota/attachments';
+import { AnalysisLimitDialog, AttachLimitDialog } from '../ui/AttachLimit';
+import { Dialog } from '../ui/Dialog';
+import { consumeAnalysis, analysisStatus } from '../quota/analysis';
+import { setWebWanted, webActive, webWanted, WEB_CHANGED } from '../agent/search';
+import { announceChats, CHAT_OPEN, currentChatId, openChat, setCurrentChatId, titleFrom } from '../chat/state';
+import type { ChatMessage as Msg } from '../chat/types';
+import { getChat, putChat } from '../storage/db';
 import { defaultKeys } from '../vault/vault';
 import { FNS } from '../models/providerInfo';
 import { listLibrary, putMedia, uid, type MediaRecord } from '../storage/db';
@@ -13,7 +20,7 @@ import { parseCommands } from '../agent/commands';
 import { interpret } from '../models/router';
 import { addJob, readJobs } from '../agent/jobs';
 import { friendlyNote, type TaskName } from '../agent/friendly';
-import { MAX_FILES, meta, sizeLabel, toAttachments, type Attachment, type AttachmentMeta } from '../agent/attachments';
+import { MAX_FILES, meta, sizeLabel, toAttachments, type Attachment } from '../agent/attachments';
 import type { OutFile } from '../agent/deliver';
 import type { ChatTurn } from '../models/text';
 import { getSettings } from '../settings';
@@ -21,17 +28,7 @@ import { platform } from '../platform';
 import { Icon } from '../ui/Icon';
 import { detectLocal, runLocal } from '../agent/local';
 
-interface Msg {
-  id: string; role: 'user' | 'assistant'; text: string; state?: 'working' | 'done' | 'error';
-  kind?: 'text' | 'image' | 'video'; media?: string[]; jobId?: string;
-  /** user messages: what was attached (names only, the bytes are not kept in the saved chat) */
-  files?: AttachmentMeta[];
-  /** assistant messages: a short friendly note under the reply (a problem, or something worth knowing) */
-  note?: string; providers?: boolean; notes?: string[];
-  /** assistant messages: a file that was built for the person */
-  fileOut?: { name: string; size: number };
-}
-const KEY = 'chat.v3'; const KEEP = 50;
+const OLD_KEY = 'chat.v3';
 const PROMPTS = [
   'A cinematic product photo of a luxury wristwatch',
   'Write a detailed business plan for a small bakery in Lagos',
@@ -62,27 +59,31 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 const ext = (mime: string) => (mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png');
 const GLYPH: Record<string, string> = { pdf: 'PDF', docx: 'DOC', text: 'TXT', audio: '♪', video: '▶', image: '▣' };
 
-function load(): Msg[] {
+/** Messages as they come back from storage: files built last time are gone, and a request that was still running is checked against the job list. */
+function revive(all: Msg[]): Msg[] {
+  return all.map((m) => {
+    if (m.fileOut) m = { ...m, fileOut: undefined }; // the built file only lives while the app is open
+    if (m.state !== 'working') return m;
+    const j = m.jobId ? readJobs().find((x) => x.id === m.jobId) : undefined;
+    return j?.status === 'running' ? m : { ...m, state: 'error' as const, note: 'This request was interrupted. Send it again.' };
+  });
+}
+/** The chat from before conversations were kept in IndexedDB. Moved over once, then removed. */
+function takeLegacy(): Msg[] {
   try {
-    const all = JSON.parse(localStorage.getItem(KEY) ?? localStorage.getItem('chat.v2') ?? '[]') as Msg[];
-    return all.map((m) => {
-      if (m.fileOut) m = { ...m, fileOut: undefined }; // the built file only lives while the app is open
-      if (m.state !== 'working') return m;
-      const j = m.jobId ? readJobs().find((x) => x.id === m.jobId) : undefined;
-      return j?.status === 'running' ? m : { ...m, state: 'error' as const, note: 'This request was interrupted. Send it again.' };
-    });
+    const raw = localStorage.getItem(OLD_KEY) ?? localStorage.getItem('chat.v2'); if (!raw) return [];
+    const all = JSON.parse(raw) as Msg[]; return Array.isArray(all) ? all : [];
   } catch { return []; }
 }
 
-/** The last few answered questions, so a follow-up like "make it shorter" has something to refer to. Only text answers count. */
+/** Every answered question in this chat, so a follow-up like "make it shorter" has something to refer to. Only text answers count. */
 function historyOf(ms: Msg[]): ChatTurn[] {
   const turns: ChatTurn[] = [];
   for (let i = 1; i < ms.length; i++) {
     const a = ms[i]; const u = ms[i - 1];
     if (a.role === 'assistant' && a.kind === 'text' && a.state === 'done' && a.text && u.role === 'user' && u.text) turns.push({ role: 'user', text: u.text }, { role: 'assistant', text: a.text });
   }
-  let kept = turns.slice(-12); let size = kept.reduce((n, t) => n + t.text.length, 0);
-  while (kept.length > 2 && size > 24_000) { size -= kept[0].text.length + kept[1].text.length; kept = kept.slice(2); }
+  const kept = turns; // the whole conversation is sent; nothing is trimmed here
   return kept;
 }
 
@@ -128,7 +129,15 @@ const recOf = (a: Attachment): MediaRecord | null => (a.kind === 'image' || a.ki
 const recsFor = async (ids: string[]) => (await listLibrary()).filter((r) => ids.includes(r.id));
 
 export function Home() {
-  const [messages, setMessages] = useState<Msg[]>(load);
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [ready, setReady] = useState(false);
+  const [limitDlg, setLimitDlg] = useState<null | 'over' | 'last' | 'analysis'>(null);
+  const [premDlg, setPremDlg] = useState(false);
+  const [web, setWeb] = useState(webWanted);
+  const idRef = useRef('');
+  const created = useRef(0);
+  const fromLoad = useRef<Msg[] | null>(null);
+  const flush = useRef<(() => void) | null>(null);
   const [idea, setIdea] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [fileNote, setFileNote] = useState('');
@@ -149,12 +158,62 @@ export function Home() {
   const camIn = useRef<HTMLInputElement>(null);
   const prompts = useMemo(() => [...PROMPTS].sort(() => Math.random() - 0.5), []);
   const providerCount = new Set(FNS.flatMap((f) => defaultKeys(f).map((k) => k.provider))).size;
-  const premium = isPremium(); const u = usage();
-  const imagesLeft = Math.max(0, FREE_LIMITS.image - u.image); const videosLeft = Math.max(0, FREE_LIMITS.video - u.video);
+  const attach = useAttachStatus();
+  const webOn = web && attach.unlimited;
+  useEffect(() => { const f = () => setWeb(webWanted()); window.addEventListener(WEB_CHANGED, f); return () => window.removeEventListener(WEB_CHANGED, f); }, []);
+  const staged = costOf(files.map((f) => f.id));
+  const noRoom = !attach.unlimited && attach.left - staged <= 0;
   const closeMenu = useCallback(() => setMenu(false), []);
   useOutside(plus, menu, closeMenu);
 
-  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(messages.slice(-KEEP))); } catch { /* storage full */ } }, [messages]);
+  // ---- conversations live in IndexedDB: no size cap, and every chat stays in the History menu ----
+  const loadChat = useCallback(async (id: string) => {
+    let msgs: Msg[] = []; let cid = id; created.current = 0;
+    try {
+      const c = id ? await getChat(id) : undefined;
+      if (c) { msgs = revive(c.messages); created.current = c.createdAt; }
+      else if (id) cid = ''; // the pointer led to a chat that no longer exists
+      else {
+        const legacy = takeLegacy();
+        if (legacy.length) {
+          cid = uid(); const now = Date.now(); const first = legacy.find((m) => m.role === 'user');
+          await putChat({ id: cid, title: titleFrom(first?.text ?? ''), createdAt: now, updatedAt: now, messages: legacy });
+          try { localStorage.removeItem(OLD_KEY); localStorage.removeItem('chat.v2'); } catch { /* storage blocked */ }
+          msgs = revive(legacy); created.current = now; announceChats();
+        }
+      }
+    } catch { msgs = []; cid = ''; }
+    idRef.current = cid; setCurrentChatId(cid); fromLoad.current = msgs; setMessages(msgs); setReady(true);
+  }, []);
+  useEffect(() => { void loadChat(currentChatId()); }, [loadChat]);
+  useEffect(() => {
+    const f = (e: Event) => {
+      abort.current?.abort();
+      outFiles.clear(); sent.clear(); thumbs.forEach((u) => URL.revokeObjectURL(u)); thumbs.clear();
+      setIdea(''); setFiles([]); setFileNote(''); setMenu(false);
+      void loadChat((e as CustomEvent<{ id: string | null }>).detail?.id ?? '');
+    };
+    window.addEventListener(CHAT_OPEN, f); return () => window.removeEventListener(CHAT_OPEN, f);
+  }, [loadChat]);
+
+  useEffect(() => {
+    if (!ready || !messages.length || messages === fromLoad.current) return;
+    const id = idRef.current; if (!id) return;
+    const save = () => {
+      flush.current = null;
+      const first = messages.find((m) => m.role === 'user'); const now = Date.now();
+      void putChat({ id, title: titleFrom(first?.text || first?.files?.[0]?.name || ''), createdAt: created.current || now, updatedAt: now, messages: messages.map((m) => (m.fileOut ? { ...m, fileOut: undefined } : m)) }).then(() => announceChats()).catch(() => {});
+    };
+    flush.current = save; const t = setTimeout(save, 500);
+    return () => clearTimeout(t);
+  }, [messages, ready]);
+  // Leaving the page or the app must not lose the last few seconds.
+  useEffect(() => {
+    const f = () => flush.current?.();
+    const v = () => { if (document.visibilityState === 'hidden') f(); };
+    document.addEventListener('visibilitychange', v); window.addEventListener('pagehide', f);
+    return () => { document.removeEventListener('visibilitychange', v); window.removeEventListener('pagehide', f); f(); };
+  }, []);
 
   // Rise with the on-screen keyboard (browsers that do not resize the page themselves).
   useEffect(() => {
@@ -204,9 +263,12 @@ export function Home() {
   // ---- attachments (+ button, paste, drop) ----
   const addFiles = (list: FileList | File[] | null | undefined) => {
     const picked = Array.from(list ?? []); if (!picked.length) return;
-    const { added, skipped } = toAttachments(picked, files);
+    // Free accounts have a limited number of attachments per 5 hours; only that many files go in, and the person is told when the rest can come back.
+    const room = attach.unlimited ? picked.length : Math.max(0, attach.left - staged);
+    const { added, skipped } = toAttachments(picked.slice(0, room), files);
     if (added.length) setFiles((f) => [...f, ...added]);
     setFileNote(skipped.length ? `${skipped.slice(0, 2).join('. ')}${skipped.length > 2 ? ` (and ${skipped.length - 2} more)` : ''}.` : '');
+    if (picked.length > room) setLimitDlg('over');
     setMenu(false); input.current?.focus();
   };
   useEffect(() => { if (!fileNote) return; const t = setTimeout(() => setFileNote(''), 7000); return () => clearTimeout(t); }, [fileNote]);
@@ -236,9 +298,13 @@ export function Home() {
 
       if (task === 'text') {
         let last = 0;
-        const out = await runText({ prompt, files: atts, history, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
+        // Free file analysis: when it is used up the files are NOT read, but the question is still answered and the answer says so.
+        const an = analysisStatus(); const analyzing = atts.length > 0;
+        const blockedUntil = analyzing && !an.unlimited && an.left <= 0 ? an.resetsAt : null;
+        const out = await runText({ prompt, files: blockedUntil !== null ? [] : atts, blocked: blockedUntil !== null ? { names: atts.map((a) => a.name), back: clockLabel(blockedUntil) } : undefined, web: webActive(), history, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
           partial = t; const now = Date.now(); if (now - last < 90) return; last = now; patch(id, { kind: 'text', text: t });
         } });
+        if (analyzing && blockedUntil === null) { consumeAnalysis(); const left = analysisStatus(); if (!left.unlimited && left.left === 0) setLimitDlg('analysis'); } // told once, at the moment the free analyses run out
         if (out.file) outFiles.set(id, out.file);
         log.say('ok', 'done');
         patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size } : undefined });
@@ -247,14 +313,14 @@ export function Home() {
 
       if (task === 'edit' && !photos.length) throw new Error('Attach the photo you want changed with the + button, then describe the change and send it again.');
       if (task === 'video') {
-        const st = await runVideoStart({ prompt, modelId: 'auto', signal, log, left: remaining('video'), limit: FREE_LIMITS.video, premium: isPremium() });
+        const st = await runVideoStart({ prompt, modelId: 'auto', signal, log });
         const jobId = uid();
         addJob({ id: jobId, provider: st.model.provider, keyId: st.keyId, model: st.model.id, op: st.op, prompt: st.prompt, aspect: st.aspect, createdAt: Date.now(), status: 'running' });
         logFor(jobId).step('Your video is rendering. This can take a few minutes…');
         patch(id, { jobId, kind: 'video', state: 'working', text: '', notes: [`Rendering with ${st.model.name}. You can keep chatting or leave this page.${atts.length ? ' Your attachment was not used: making a video from a photo is not available yet.' : ''}`] });
         return;
       }
-      const res = await runImage({ prompt, count: 1, format: 'auto', prefer: getSettings().priority, model: 'auto', signal, log, left: remaining('image'), limit: FREE_LIMITS.image, premium: isPremium(), routed: true, refs: photos });
+      const res = await runImage({ prompt, count: 1, format: 'auto', prefer: getSettings().priority, model: 'auto', signal, log, routed: true, refs: photos });
       log.step('Saving your image…');
       const sv = log.start('cmd', 'library.save'); const ids: string[] = [];
       for (const m of res.images) { const mid = uid(); await putMedia({ id: mid, projectId: null, kind: 'image', name: `${slug(res.prompt)}.${ext(m.mime)}`, mime: m.mime, size: m.blob.size, createdAt: Date.now(), blob: m.blob }); ids.push(mid); }
@@ -273,13 +339,16 @@ export function Home() {
     const id = replace?.id ?? uid(); const log = new RunLog(); logs.set(id, log); outFiles.delete(id);
     const history = historyOf(replace ? replace.before : messages);
     if (replace) setMessages((ms) => ms.map((m) => (m.id === id ? { id, role: 'assistant', text: '', state: 'working' } : m)));
-    else { const userId = uid(); sent.set(userId, atts); setMessages((ms) => [...ms, { id: userId, role: 'user', text: prompt, files: atts.map(meta) }, { id, role: 'assistant', text: '', state: 'working' }]); }
+    else { if (!idRef.current) { idRef.current = uid(); created.current = Date.now(); setCurrentChatId(idRef.current); } const userId = uid(); sent.set(userId, atts); setMessages((ms) => [...ms, { id: userId, role: 'user', text: prompt, files: atts.map(meta) }, { id, role: 'assistant', text: '', state: 'working' }]); }
     setActive(true); void run(id, prompt, log, atts, history);
   };
   const send = (value = idea) => {
     const prompt = value.trim(); if ((!prompt && !files.length) || active) return;
-    const atts = files; begin(prompt, atts);
+    const atts = files; const ids = atts.map((a) => a.id); const cost = costOf(ids);
+    if (atts.length && !consume(ids)) { setLimitDlg('over'); return; }
+    begin(prompt, atts);
     setIdea(''); setFiles([]); setFileNote(''); setMenu(false);
+    if (cost > 0) { const st = attachStatus(); if (!st.unlimited && st.left === 0) setLimitDlg('last'); }
   };
   /** Regenerate / retry / resend: run the same request again where it stands. */
   const redo = (assistantId: string) => {
@@ -299,11 +368,11 @@ export function Home() {
   };
   const useAsReference = async (m: Msg) => {
     const recs = (await recsFor(m.media ?? [])).filter((r) => r.kind === 'image'); if (!recs.length) return;
-    const { added } = toAttachments(recs.map((r) => new File([r.blob], r.name, { type: r.mime })), files); setFiles((f) => [...f, ...added]);
+    addFiles(recs.map((r) => new File([r.blob], r.name, { type: r.mime })));
     setIdea((t) => t || 'Change '); input.current?.focus();
   };
   const editInEditor = async (m: Msg) => { const recs = await recsFor(m.media ?? []); setPicker({ extra: recs, preselect: recs.map((r) => r.id) }); };
-  const newChat = () => { setMessages([]); setIdea(''); setFiles([]); setFileNote(''); outFiles.clear(); sent.clear(); thumbs.forEach((u) => URL.revokeObjectURL(u)); thumbs.clear(); };
+  const newChat = () => openChat(null);
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   const track = [...prompts, ...prompts];
   const canSend = !!idea.trim() || files.length > 0;
@@ -314,14 +383,12 @@ export function Home() {
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDrag(false); }}
       onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } setDrag(false); }}>
       <header className="chat-top">
-        <div className="usage" aria-label="Usage left today">
-          {premium ? <span>Premium · unlimited</span> : <><span><b>{imagesLeft}</b> images</span><i aria-hidden="true" /><span><b>{videosLeft}</b> videos</span><span className="muted"> left today</span></>}
-        </div>
+        <div className="usage"><span className="muted">{messages.length ? 'Chat' : 'New chat'}</span></div>
         {messages.length > 0 && <button className="chat-new" aria-label="New chat" title="New chat" onClick={newChat}><Icon name="newChat" size={18} /></button>}
       </header>
 
       <div className="chat-thread" ref={thread} aria-live="polite">
-        {messages.length === 0 ? (
+        {!ready ? null : messages.length === 0 ? (
           <div className="chat-empty">
             <h2>What can I help you with?</h2>
             <p className="muted small">Ask, write, analyse a file, or describe an image or video.</p>
@@ -368,7 +435,7 @@ export function Home() {
       </div>
 
       <div className="chat-bottom">
-        {!focused && !idea.trim() && !files.length && (
+        {ready && messages.length === 0 && !focused && !idea.trim() && !files.length && (
           <div className="marquee" aria-label="Suggested prompts">
             <div className="marquee-track">
               {track.map((p, i) => <button key={`${p}-${i}`} className="suggestion" tabIndex={i < prompts.length ? 0 : -1} aria-hidden={i >= prompts.length} onClick={() => { setIdea(p); input.current?.focus(); }}>{p}</button>)}
@@ -384,7 +451,7 @@ export function Home() {
           )}
           <div className="composer-row">
             <div className="plus-wrap" ref={plus}>
-              <button className="plus-button" type="button" aria-label="Add photos, videos or files" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES} onClick={() => setMenu((o) => !o)}><Icon name="plus" size={22} /></button>
+              <button className="plus-button" type="button" aria-label="Add photos, videos or files" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES} onClick={() => { if (noRoom) setLimitDlg('over'); else setMenu((o) => !o); }}><Icon name="plus" size={22} /></button>
               {menu && (
                 <div className="plus-menu" role="menu">
                   <button role="menuitem" onClick={() => pick(mediaIn.current)}><b aria-hidden="true"><Icon name="image" size={18} /></b><span>Photos & videos<small>From your gallery</small></span></button>
@@ -397,7 +464,8 @@ export function Home() {
               <input ref={fileIn} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
               <input ref={camIn} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
-            <textarea ref={input} value={idea} rows={1} maxLength={20000} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, or describe an image or video…'} aria-label="Message"
+            <button className={`web-button${webOn ? ' on' : ''}`} type="button" aria-label="Web search" aria-pressed={webOn} title={attach.unlimited ? (webOn ? 'Web search is on' : 'Search the web') : 'Web search (Premium)'} onClick={() => { if (!attach.unlimited) setPremDlg(true); else setWebWanted(!web); }}><Icon name="globe" size={20} />{!attach.unlimited && <i className="lock" aria-hidden="true" />}</button>
+            <textarea ref={input} value={idea} rows={1} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, or describe an image or video…'} aria-label="Message"
               onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
               onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !coarse) { e.preventDefault(); send(); } }} />
@@ -407,6 +475,8 @@ export function Home() {
           </div>
         </div>
       </div>
+      {premDlg && <Dialog title="Web search is part of Premium" onClose={() => setPremDlg(false)} actions={<><a className="btn" href="#/billing" onClick={() => setPremDlg(false)}>See Premium</a><button className="btn primary" onClick={() => setPremDlg(false)}>Got it</button></>}><p>Turn on the globe and Pothub looks things up on the web before it answers, so replies can use recent information and link to their sources.</p></Dialog>}
+      {limitDlg === 'analysis' ? <AnalysisLimitDialog onClose={() => setLimitDlg(null)} /> : limitDlg && <AttachLimitDialog lastOne={limitDlg === 'last'} onClose={() => setLimitDlg(null)} />}
       {picker && <MediaPicker extra={picker.extra} preselect={picker.preselect} onClose={() => setPicker(null)} />}
     </section>
   );

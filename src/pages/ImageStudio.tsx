@@ -6,7 +6,6 @@ import { cachedCatalog, refreshCatalog } from '../agent/detect';
 import { RunLog } from '../agent/log';
 import { runImage, runInfo } from '../agent/workflow';
 import { Terminal } from '../ui/Terminal';
-import { FREE_LIMITS, isPremium, remaining, usage } from '../quota/daily';
 import { platform } from '../platform';
 import { getSettings } from '../settings';
 import { Select } from '../ui/Select';
@@ -24,7 +23,6 @@ export function ImageStudio() {
   const [items, setItems] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
-  const [used, setUsed] = useState(usage().image);
   const [catalog, setCatalog] = useState(cachedCatalog);
   const log = useRef(new RunLog()).current;
   const abort = useRef<AbortController | null>(null);
@@ -39,7 +37,6 @@ export function ImageStudio() {
   useEffect(() => { sessionStorage.removeItem('studio.prompt'); setKeys(listKeys()); load().catch(() => setMsg({ text: 'Your image library could not be read.', error: true })); return () => urls.current.forEach(URL.revokeObjectURL); }, [load]);
 
   const connected = new Set(defaultKeys('image').map((k) => k.provider));
-  const left = remaining('image');
   // Live list of models the connected keys can really use right now (quiet refresh, never blocks the page).
   useEffect(() => { setCatalog(cachedCatalog()); if (connected.size) void refreshCatalog().then(setCatalog); }, [keys]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -47,10 +44,9 @@ export function ImageStudio() {
     setMsg(null); log.clear(); setBusy(true); abort.current = new AbortController(); const signal = abort.current.signal;
     try {
       if (await runInfo(prompt, log, signal)) return;
-      const res = await runImage({ prompt, count: Number(count), format, prefer, model, signal, log, left, limit: FREE_LIMITS.image, premium: isPremium() });
+      const res = await runImage({ prompt, count: Number(count), format, prefer, model, signal, log });
       const sv = log.start('cmd', 'library.save');
       for (const m of res.images) await putMedia({ id: uid(), projectId: null, kind: 'image', name: `${slug(res.prompt)}.png`, mime: m.mime, size: m.blob.size, createdAt: Date.now(), blob: m.blob }); // saved locally immediately
-      setUsed(usage().image);
       log.done(sv, `${res.images.length} saved on this device`); log.say('ok', 'done');
       setMsg({ text: [`Created ${res.images.length} image(s) with ${res.model.name} at ${res.aspect}.`, ...res.notes].join(' ') });
       await load();
@@ -71,7 +67,7 @@ export function ImageStudio() {
     <section className="page">
       <header className="page-head">
         <h1>Image Studio</h1>
-        <span className="muted small">{isPremium() ? 'Unlimited' : `${Math.max(0, FREE_LIMITS.image - used)} of ${FREE_LIMITS.image} free images left today`}</span>
+        <span className="muted small">Unlimited</span>
       </header>
       {connected.size === 0 && <div className="notice">No default image key. <a href="#/providers">Add an API key</a> and tick it as default for Images.</div>}
       <div className="panel stack">

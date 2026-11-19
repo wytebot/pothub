@@ -6,7 +6,6 @@ import { cachedCatalog, refreshCatalog } from '../agent/detect';
 import { RunLog, logFor } from '../agent/log';
 import { runInfo, runVideoStart } from '../agent/workflow';
 import { Terminal } from '../ui/Terminal';
-import { FREE_LIMITS, isPremium, remaining, usage } from '../quota/daily';
 import { platform } from '../platform';
 import { getSettings } from '../settings';
 import { Select } from '../ui/Select';
@@ -20,7 +19,6 @@ export function VideoStudio() {
   const [jobs, setJobs] = useState<Job[]>(readJobs());
   const [items, setItems] = useState<{ rec: MediaRecord; url: string }[]>([]);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
-  const [used, setUsed] = useState(usage().video);
   const urls = useRef<string[]>([]);
   const hasKey = defaultKeys('video').length > 0;
   const m = catalog.video.find((x) => x.id === model);
@@ -37,7 +35,7 @@ export function VideoStudio() {
 
   // Poll running jobs; survives refreshes because jobs live in localStorage (no secrets).
   useEffect(() => {
-    const sync = () => { setJobs(readJobs()); setUsed(usage().video); void load(); };
+    const sync = () => { setJobs(readJobs()); void load(); };
     window.addEventListener('jobs:changed', sync); window.addEventListener('library:changed', sync);
     return () => { window.removeEventListener('jobs:changed', sync); window.removeEventListener('library:changed', sync); };
   }, [load]);
@@ -46,7 +44,7 @@ export function VideoStudio() {
     setMsg(null); startLog.clear(); setBusy(true); abort.current = new AbortController(); const signal = abort.current.signal;
     try {
       if (await runInfo(prompt, startLog, signal)) return;
-      const st = await runVideoStart({ prompt, modelId: model, signal, log: startLog, left: remaining('video'), limit: FREE_LIMITS.video, premium: isPremium() });
+      const st = await runVideoStart({ prompt, modelId: model, signal, log: startLog });
       const id = uid(); addJob({ id, provider: st.model.provider, keyId: st.keyId, model: st.model.id, op: st.op, prompt: st.prompt, aspect: st.aspect, createdAt: Date.now(), status: 'running' }); setJobs(readJobs());
       const lg = logFor(id); lg.say('info', `job started with ${st.model.name}`, 'videos usually take a few minutes; you can leave this page'); setActive(id);
       setMsg({ text: `Started with ${st.model.name} at ${st.aspect}, ${st.model.durations[0]} seconds. You can leave this page.` });
@@ -59,7 +57,7 @@ export function VideoStudio() {
 
   return (
     <section className="page">
-      <header className="page-head"><h1>Video Studio</h1><span className="muted small">{isPremium() ? 'Unlimited' : `${Math.max(0, FREE_LIMITS.video - used)} of ${FREE_LIMITS.video} free videos left today`}</span></header>
+      <header className="page-head"><h1>Video Studio</h1><span className="muted small">Unlimited</span></header>
       {!hasKey && <div className="notice">No default video key. <a href="#/providers">Add an API key</a> and tick it as default for Video.</div>}
       <div className="panel stack">
         <label className="field">Describe the video<textarea rows={3} value={prompt} maxLength={2000} placeholder="A slow camera push through a neon-lit street in the rain" onChange={(e) => setPrompt(e.target.value)} /></label>

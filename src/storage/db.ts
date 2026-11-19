@@ -1,22 +1,36 @@
+import type { ChatMessage } from '../chat/types';
 export type MediaKind = 'image' | 'video' | 'audio';
 export interface ProjectRecord { id: string; name: string; createdAt: number; updatedAt: number; data: Record<string, unknown>; }
 export interface MediaRecord { id: string; projectId: string | null; kind: MediaKind; name: string; mime: string; size: number; createdAt: number; blob: Blob; }
 
+/** One saved conversation. */
+export interface ChatRecord { id: string; title: string; createdAt: number; updatedAt: number; messages: ChatMessage[]; }
+
 const DB_NAME = 'creative-studio';
+const DB_VERSION = 2;
 let dbp: Promise<IDBDatabase> | null = null;
 
 export const uid = () => crypto.randomUUID();
 
 function open(): Promise<IDBDatabase> {
   return (dbp ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB_NAME, 1);
+    const r = indexedDB.open(DB_NAME, DB_VERSION);
     r.onupgradeneeded = () => {
+      // Runs for brand-new installs (0 -> 2) and for people upgrading from the first version (1 -> 2). Existing data is never touched.
       const d = r.result;
-      d.createObjectStore('projects', { keyPath: 'id' });
-      d.createObjectStore('media', { keyPath: 'id' }).createIndex('projectId', 'projectId');
+      if (!d.objectStoreNames.contains('projects')) d.createObjectStore('projects', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('media')) d.createObjectStore('media', { keyPath: 'id' }).createIndex('projectId', 'projectId');
+      if (!d.objectStoreNames.contains('chats')) d.createObjectStore('chats', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
     };
-    r.onsuccess = () => resolve(r.result);
+    r.onsuccess = () => {
+      const d = r.result;
+      // If a newer version of the app opens in another tab, let go so its upgrade is never blocked.
+      d.onversionchange = () => { d.close(); dbp = null; };
+      resolve(d);
+    };
     r.onerror = () => { dbp = null; reject(r.error); };
+    r.onblocked = () => { /* an old tab still has the database open; it closes itself through onversionchange */ };
   }));
 }
 const req = <T,>(r: IDBRequest<T>) => new Promise<T>((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
@@ -92,4 +106,33 @@ export async function listLibrary(): Promise<MediaRecord[]> {
 }
 export async function deleteMedia(id: string): Promise<void> {
   const t = (await open()).transaction('media', 'readwrite'); const f = done(t); t.objectStore('media').delete(id); await f;
+}
+
+// ---------------------------------------------------------------- chat history (IndexedDB, no size cap)
+export async function putChat(c: ChatRecord): Promise<void> {
+  try { const t = (await open()).transaction('chats', 'readwrite'); const f = done(t); t.objectStore('chats').put(c); await f; } catch (e) { throw friendly(e); }
+}
+export async function getChat(id: string): Promise<ChatRecord | undefined> {
+  return req((await open()).transaction('chats').objectStore('chats').get(id));
+}
+/** Every saved conversation. */
+export async function allChats(): Promise<ChatRecord[]> {
+  return (await req((await open()).transaction('chats').objectStore('chats').getAll())) as ChatRecord[];
+}
+/** Visible conversations, newest first. */
+export async function listChats(): Promise<ChatRecord[]> {
+  return (await allChats()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+/** Removes a conversation from this device. */
+export async function deleteChat(id: string): Promise<void> {
+  const t = (await open()).transaction('chats', 'readwrite'); const f = done(t); t.objectStore('chats').delete(id); await f;
+}
+export async function getMeta<T>(key: string): Promise<T | undefined> {
+  return req((await open()).transaction('meta').objectStore('meta').get(key)) as Promise<T | undefined>;
+}
+export async function setMeta(key: string, value: unknown): Promise<void> {
+  const t = (await open()).transaction('meta', 'readwrite'); const f = done(t); t.objectStore('meta').put(value, key); await f;
+}
+export async function delMeta(key: string): Promise<void> {
+  const t = (await open()).transaction('meta', 'readwrite'); const f = done(t); t.objectStore('meta').delete(key); await f;
 }
