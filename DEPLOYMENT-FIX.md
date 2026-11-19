@@ -2,7 +2,7 @@
 
 ## Active frontend entry points
 
-Vercel builds this project from the repository root. `index.html` loads `/src/main.tsx`; that file mounts `src/App.tsx` and imports `src/styles.css`. The root-level `App.tsx` and `styles.css` are legacy files and are not used by the Vite web build. Make browser-app changes under `src/` unless you intentionally change the Vite entry point.
+Vercel builds this project from the repository root. `index.html` loads `/src/main.tsx`; that file mounts `src/App.tsx` and imports `src/styles.css`. The old duplicate root-level copies (`App.tsx`, `styles.css`, `pages/`, `agent/`, `models/`, `ui/`, `auth/`, `vault/`, `security/`) were removed in v0.3.0 so edits can only land in `src/`.
 
 ## Vercel settings
 
@@ -26,3 +26,14 @@ The deployment sends no-store/no-cache headers for the HTML entry and service wo
 ## Verification limitation
 
 The source ZIP and JSON configuration were inspected. Dependency installation timed out in the execution environment, so a complete `npm run build` and live Vercel deployment could not be verified here. Vercel's deployment log remains the authoritative check for the actual production build.
+
+
+## Never serving an old version (v0.3.0)
+
+Every build gets an id (the Vercel commit SHA, or a timestamp). The id is baked into the app (`__BUILD_ID__`), into `dist/version.json`, and into the service worker's cache name (`pothub-static-<id>`), so each deployment changes `sw.js` and the browser installs it and deletes the old cache. The app checks `/version.json` (served no-store) when it opens, when you return to it and every 10 minutes: right after opening it reloads itself onto the new version, and mid-use it shows an "Update now" notice so a running answer is never cut off. It reloads at most once per version, so it cannot loop. The Android APK carries its own files and skips this check; rebuild the APK to ship changes there.
+
+## Server (billing service) changes in v0.4.0
+
+- Image and video limits were removed; `/api/usage/reserve` now only confirms sign-in so older installed apps keep working.
+- New Premium-only route `GET /api/search?q=` looks the query up on DuckDuckGo (`server/src/search.ts`). DuckDuckGo has no official search API, so this reads its HTML results page and falls back to its Instant Answer API; if DuckDuckGo blocks or changes that page, the app tells the user web search was unavailable and still answers. Results are cached for 10 minutes in memory.
+- Redeploy the server together with the front end. Free limits (10 attachments and 10 file analyses per 5 hours) live on the device.
