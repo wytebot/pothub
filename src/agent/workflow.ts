@@ -249,16 +249,16 @@ async function chunkLargeTextFiles(files: Attachment[], provider: ProviderId, se
  * Chat, writing, analysis, coding and documents. Picks the best ready text model for the files and the request,
  * streams the answer as it is written, falls back to another model or key if one fails, and builds a file when the person asked for one.
  */
-export async function runText(o: { prompt: string; files: Attachment[]; history: ChatTurn[]; prefer: 'quality' | 'speed'; signal: AbortSignal; log: RunLog; onText: (soFar: string) => void; /** free file analysis is used up: these files are NOT read, and the answer must say so */ blocked?: { names: string[]; back: string }; /** Premium: look things up on the web first */ web?: boolean }): Promise<TextOutcome> {
+export async function runText(o: { prompt: string; files: Attachment[]; history: ChatTurn[]; prefer: 'quality' | 'speed'; signal: AbortSignal; log: RunLog; onText: (soFar: string) => void; /** free file analysis is used up: these files are NOT read, and the answer must say so */ blocked?: { names: string[]; back: string }; /** When true, search the web before generating the response; plan quotas still apply. */ web?: boolean }): Promise<TextOutcome> {
   const { log, signal } = o;
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text && !o.files.length && !o.blocked) throw new Error('Type your question or request first (commands alone are not a prompt).');
   const prompt = text || (o.files.length ? 'Describe and summarise the attached file(s) in detail.' : 'The person attached file(s) but did not write a message.');
   const wanted = wantedOutput(prompt); const notes: string[] = [];
   if (wanted.note) notes.push(wanted.note);
-  if (webWanted() && !o.web && webRemaining() <= 0) notes.push('You have used today’s free web-search allowance. The answer below was prepared without fresh web results; Premium includes deeper research.');
+  if (webRemaining() <= 0) notes.push('You have used today’s free web-search allowance. This response cannot include fresh web results until the allowance resets; Premium includes unlimited web research.');
   if (o.blocked) notes.push(`File analysis limit reached: I could not read ${o.blocked.names.slice(0, 3).join(', ')}${o.blocked.names.length > 3 ? ` and ${o.blocked.names.length - 3} more` : ''}. Free file analysis returns at ${o.blocked.back}. Premium has no limit.`);
-  // Premium web search: look it up first and hand the results to the model with the question.
+  // Mandatory web research: look it up first and hand the results to the model with the question.
   let sent = prompt;
   if (o.web) {
     log.step('Searching the web…');
@@ -266,7 +266,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const hits = await webSearch(q);
       if (hits.length) { sent = `${prompt}\n\nFor this web-researched answer, give a thorough, well-structured response that directly answers the request. Separate verified facts from estimates or uncertainty, include relevant dates, compare useful details, and cite the supplied source URLs inline. Do not invent sources or facts.\n\n---\n${resultsBlock(q, hits, today())}`; notes.push('Searched the web.'); log.say('ok', 'web search', `${hits.length} result(s)`); }
       else { notes.push('Web search found nothing useful, so this answer does not include live results.'); }
-    } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push(/free web searches|daily research limit/i.test(msg(e)) ? msg(e) : 'Web search was not available this time, so this answer does not include live results.'); }
+    } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push(/free web searches|daily research limit|free web-search allowance/i.test(msg(e)) ? msg(e) : 'Web search was not available this time, so this answer does not include live results.'); }
   }
   // Every file is made readable on this device first (documents, sheets, slides, archives, unknown formats...), before any provider is chosen.
   let files = o.files;
