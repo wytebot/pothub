@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { parseMarkdown, type Block, type Inline } from '../agent/markdown';
 import { platform } from '../platform';
+import { isPremium } from '../quota/daily';
 
 const EXT: Record<string, string> = { js: 'js', javascript: 'js', jsx: 'jsx', ts: 'ts', typescript: 'ts', tsx: 'tsx', python: 'py', py: 'py', html: 'html', css: 'css', json: 'json', csv: 'csv', sql: 'sql', bash: 'sh', sh: 'sh', shell: 'sh', java: 'java', kotlin: 'kt', swift: 'swift', go: 'go', rust: 'rs', c: 'c', cpp: 'cpp', csharp: 'cs', php: 'php', ruby: 'rb', yaml: 'yml', yml: 'yml', xml: 'xml', md: 'md', markdown: 'md', dart: 'dart' };
 
@@ -22,7 +23,11 @@ const inline = (xs: Inline[]): ReactNode => xs.map((x, i) => {
   if (x.code) n = <code>{n}</code>;
   if (x.b) n = <strong>{n}</strong>;
   if (x.i) n = <em>{n}</em>;
-  if (x.href) n = <a href={x.href} target="_blank" rel="noopener noreferrer">{n}</a>;
+  if (x.href) {
+    const iconOnly = x.s === '🌐';
+    const host = (() => { try { return new URL(x.href).hostname; } catch { return ''; } })();
+    n = <a href={x.href} target="_blank" rel={isPremium() ? 'noopener noreferrer' : 'noopener noreferrer nofollow'} aria-label={iconOnly ? `Open ${host}` : undefined} title={iconOnly ? host : undefined}>{iconOnly ? <img className="citation-favicon" src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=16`} alt="" loading="lazy" /> : n}</a>;
+  }
   return <Fragment key={i}>{n}</Fragment>;
 });
 
