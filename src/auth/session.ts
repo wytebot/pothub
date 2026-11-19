@@ -2,7 +2,6 @@ import { Capacitor } from '@capacitor/core';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithRedirect, getRedirectResult, signOut as fbSignOut, type User } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { auth } from '../firebase';
-import { captureFromSignIn, DRIVE_SCOPE } from '../cloud/token';
 
 export interface Me { uid: string; name: string; email: string; photo: string; }
 const toMe = (u: User | null): Me | null => (u ? { uid: u.uid, name: u.displayName ?? '', email: u.email ?? '', photo: u.photoURL ?? '' } : null);
@@ -38,16 +37,14 @@ export async function signInWithGoogle(): Promise<SignInResult> {
   try {
     if (Capacitor.isNativePlatform()) {
       const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-      const r = await FirebaseAuthentication.signInWithGoogle({ skipNativeAuth: true, scopes: [DRIVE_SCOPE] });
+      const r = await FirebaseAuthentication.signInWithGoogle({ skipNativeAuth: true });
       const idToken = r.credential?.idToken;
       if (!idToken) throw Object.assign(new Error('no id token'), { code: 'auth/missing-token' });
       await signInWithCredential(auth, GoogleAuthProvider.credential(idToken, r.credential?.accessToken));
-      void captureFromSignIn(r.credential?.accessToken, auth.currentUser?.email ?? '');
     } else {
       // Use a top-level browser navigation instead of a popup. This is reliable in
       // mobile browsers/PWAs where popup windows may be silently suppressed.
       const p = new GoogleAuthProvider();
-      p.addScope(DRIVE_SCOPE); // the private Pothub folder in the person's own Drive, used to carry their work to other devices
       p.setCustomParameters({ prompt: 'select_account' });
       sessionStorage.setItem('auth.redirectPending', '1');
       await signInWithRedirect(auth, p);
@@ -86,7 +83,6 @@ function publishRedirectError(message: string) {
 function resolveBrowserRedirectOnce() {
   if (redirectResultTask) return redirectResultTask;
   redirectResultTask = getRedirectResult(auth).then((result) => {
-    if (result?.user) void captureFromSignIn(GoogleAuthProvider.credentialFromResult(result)?.accessToken, result.user.email ?? '');
     const wasPending = sessionStorage.getItem('auth.redirectPending') === '1';
     sessionStorage.removeItem('auth.redirectPending');
     if (wasPending && !result?.user && !auth.currentUser) {

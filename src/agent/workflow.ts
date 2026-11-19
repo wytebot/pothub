@@ -1,6 +1,6 @@
 import { call, failure, generateImages, type GenImage, type ProviderErr } from '../models/providers';
 import { generateText, rankText, type ChatTurn, type TextModel } from '../models/text';
-import { base64Of, type Attachment } from './attachments';
+import { base64Of, textOf, type Attachment } from './attachments';
 import { buildFile, systemPrompt, wantedOutput, type OutFile } from './deliver';
 import { buildBundle, bundleSummary } from './bundle';
 import type { ImageModel, VideoModel } from '../models/registry';
@@ -13,7 +13,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
-import { resultsBlock, webSearch } from './search';
+import { resultsBlock, webSearch, webWanted, webRemaining } from './search';
 import { readyFiles } from './readers';
 
 const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
@@ -111,6 +111,8 @@ export async function runImage(o: { /** the caller already decided this is an im
     try {
       let todo = count;
       while (todo > 0) { const k = Math.min(todo, plan.model.maxBatch); made.push(...await generateImages(plan.model.provider, secret, { model: plan.model.id, prompt, aspect: refs && !(flags.aspect ?? (o.format !== 'auto' ? o.format : '')) ? '' : plan.aspect, count: k, signal, refs })); todo -= k; log.update(g, { detail: `${made.length}/${count} done` }); }
+      if (made.length !== count || made.some((m) => m.blob.size <= 0 || !m.mime.startsWith('image/'))) throw new Error('The image provider returned an incomplete or invalid image. No incomplete result was delivered.');
+      log.step('Checking the generated image files…');
       const bytes = made.reduce((n, m) => n + m.blob.size, 0);
       log.done(g, `${made.length} image${made.length > 1 ? 's' : ''} · ${(bytes / 1_048_576).toFixed(1)} MB · ${secs(Date.now() - t0)}`);
       return { images: made, model: plan.model, aspect: plan.aspect, notes, prompt };
@@ -173,6 +175,56 @@ const blockedNow = (): Set<string> => { const all = readJson<Record<string, numb
 const block = (ids: string[]) => { try { const all = readJson<Record<string, number>>(BLOCKED, {}); const now = Date.now(); for (const k of Object.keys(all)) if (all[k] <= now) delete all[k]; for (const id of ids) all[id] = now + BLOCK_MS; localStorage.setItem(BLOCKED, JSON.stringify(all)); } catch { /* storage blocked */ } };
 const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
+
+// Provider context limits vary. Keep each extracted-text segment comfortably below common
+// request limits, overlap boundaries so sentences are not lost, and process every segment.
+const CHUNK_CHARS = 28_000;
+const CHUNK_OVERLAP = 900;
+export function splitTextIntoChunks(text: string): string[] {
+  if (text.length <= CHUNK_CHARS) return [text];
+  const chunks: string[] = []; let start = 0;
+  while (start < text.length) {
+    let end = Math.min(text.length, start + CHUNK_CHARS);
+    if (end < text.length) {
+      const boundary = Math.max(text.lastIndexOf('\n', end), text.lastIndexOf('. ', end), text.lastIndexOf(' ', end - 500));
+      if (boundary > start + CHUNK_CHARS * 0.65) end = boundary + 1;
+    }
+    chunks.push(text.slice(start, end));
+    if (end >= text.length) break;
+    start = Math.max(start + 1, end - CHUNK_OVERLAP);
+  }
+  return chunks;
+}
+
+async function chunkLargeTextFiles(files: Attachment[], provider: ProviderId, secret: string, model: TextModel,
+  signal: AbortSignal, log: RunLog): Promise<{ files: Attachment[]; evidence: string[]; notes: string[] }> {
+  const prepared: Attachment[] = []; const evidence: string[] = []; const notes: string[] = [];
+  for (const file of files) {
+    if (file.kind !== 'text' && file.kind !== 'docx') { prepared.push(file); continue; }
+    const source = await textOf(file);
+    if (/\[(?:file|document) continues;/.test(source)) notes.push(`${file.name} exceeded the on-device text extraction cap; the remaining tail could not be processed.`);
+    const chunks = splitTextIntoChunks(source);
+    if (chunks.length === 1) { prepared.push(file); evidence.push(`Source ${file.name}:\n${source}`); continue; }
+    log.step(`Processing ${file.name} in ${chunks.length} overlapping chunks…`);
+    const summaries: string[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      if (signal.aborted) throw new Error('Cancelled.');
+      const part = await generateText(provider, secret, {
+        model: model.id,
+        system: 'You are a careful source-analysis agent. Extract all relevant facts, figures, names, dates, requirements, decisions, and caveats from this source segment. Preserve exact values and distinguish explicit facts from uncertainty. Do not invent missing context. Include a short segment locator.',
+        history: [], prompt: `File: ${file.name}\nSegment ${i + 1} of ${chunks.length}\n\n${chunks[i]}`,
+        files: [], signal,
+      });
+      summaries.push(`SEGMENT ${i + 1}/${chunks.length}\n${part.text}`);
+      log.step(`${file.name}: verified segment ${i + 1} of ${chunks.length}`);
+    }
+    evidence.push(`Chunked source ${file.name} (${source.length.toLocaleString()} characters):\n${summaries.join('\n\n')}`);
+    prepared.push({ ...file, kind: 'text', mime: 'text/plain', size: summaries.join('\n').length,
+      blob: new Blob([`Source: ${file.name}\n${summaries.join('\n\n')}`], { type: 'text/plain' }) });
+  }
+  return { files: prepared, evidence, notes };
+}
+
 /**
  * Chat, writing, analysis, coding and documents. Picks the best ready text model for the files and the request,
  * streams the answer as it is written, falls back to another model or key if one fails, and builds a file when the person asked for one.
@@ -184,6 +236,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   const prompt = text || (o.files.length ? 'Describe and summarise the attached file(s) in detail.' : 'The person attached file(s) but did not write a message.');
   const wanted = wantedOutput(prompt); const notes: string[] = [];
   if (wanted.note) notes.push(wanted.note);
+  if (webWanted() && !o.web && webRemaining() <= 0) notes.push('You have used today’s free web-search allowance. The answer below was prepared without fresh web results; Premium includes deeper research.');
   if (o.blocked) notes.push(`File analysis limit reached: I could not read ${o.blocked.names.slice(0, 3).join(', ')}${o.blocked.names.length > 3 ? ` and ${o.blocked.names.length - 3} more` : ''}. Free file analysis returns at ${o.blocked.back}. Premium has no limit.`);
   // Premium web search: look it up first and hand the results to the model with the question.
   let sent = prompt;
@@ -193,14 +246,19 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const hits = await webSearch(q);
       if (hits.length) { sent = `${prompt}\n\n---\n${resultsBlock(q, hits, today())}`; notes.push('Searched the web.'); log.say('ok', 'web search', `${hits.length} result(s)`); }
       else { notes.push('Web search found nothing useful, so this answer does not include live results.'); }
-    } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push('Web search was not available this time, so this answer does not include live results.'); }
+    } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push(/free web searches|daily research limit/i.test(msg(e)) ? msg(e) : 'Web search was not available this time, so this answer does not include live results.'); }
   }
   // Every file is made readable on this device first (documents, sheets, slides, archives, unknown formats...), before any provider is chosen.
   let files = o.files;
   if (files.length) {
-    log.step('Reading your files…');
+    const hasZip = files.some((f) => /\.(zip|tar|tgz|gz)$/i.test(f.name));
+    const codeChange = /\b(fix|debug|repair|update|edit|amend|refactor|wire|implement|change|remove|add)\b/i.test(prompt);
+    if (hasZip && codeChange) log.step('Stripping off the ZIP archive…');
+    if (hasZip && codeChange) log.step('Detecting the affected files…');
+    else log.step('Reading your files…');
     const ready = await readyFiles(files, { nativeMedia: defaultKeys('text').some((k) => k.provider === 'gemini'), step: (s) => log.step(s) });
     files = ready.files; notes.push(...ready.notes);
+    if (hasZip && codeChange) log.step('Planning the solution from the extracted project…');
   }
   const pref = flags.prefer ?? o.prefer;
   const skipKeys = new Set<string>(); const tried = new Set<string>(); let lastErr: unknown; let partial = '';
@@ -227,17 +285,42 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
     const key = usableKey(model.provider, 'text', skipKeys); if (!key) { tried.add(model.id); continue; }
     let secret: string; try { secret = await getSecret(key.id); } catch (e) { skipKeys.add(key.id); lastErr = e; log.say('warn', `skipping "${key.label}"`, 'its secret could not be opened'); continue; }
 
-    log.step(files.length ? 'Reading your files and writing…' : wanted.file ? `Writing your ${wanted.format === 'docx' ? 'document' : 'file'}…` : 'Writing your answer…');
+    log.step(files.length ? (/\.(zip|tar|tgz|gz)$/i.test(o.files.map((f) => f.name).join(' ')) && /\b(fix|debug|repair|update|edit|amend|refactor|wire|implement|change|remove|add)\b/i.test(prompt) ? 'Applying the fixes and amending other affected files…' : 'Preparing your files and solution…') : wanted.file ? `Writing your ${wanted.format === 'docx' ? 'document' : 'file'}…` : 'Writing your answer…');
     const g = log.start('cmd', `${model.id} generate ${q(prompt, 40)}`); const t0 = Date.now(); partial = '';
     try {
-      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, blockedFiles: o.blocked?.names, web: !!o.web }), history, prompt: sent, files, signal, onText: (t) => { partial = t; o.onText(t); } });
+      // Large text documents are summarized in ordered, overlapping provider-sized chunks;
+      // the final writer receives the complete set of segment findings, not a truncated prefix.
+      const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log) : { files, evidence: [] as string[], notes: [] as string[] };
+      notes.push(...chunked.notes);
+      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, blockedFiles: o.blocked?.names, web: !!o.web }), history, prompt: sent, files: chunked.files, signal, onText: (t) => { partial = t; o.onText(t); } });
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
+      // Independent quality-control pass before any text deliverable is released.
+      log.step(files.length ? 'Fact-checking the draft against the supplied sources…' : 'Checking the result against your exact request…');
+      const evidence = chunked.evidence.join('\n\n');
+      try {
+        const review = await generateText(model.provider, secret, {
+          model: model.id,
+          system: files.length
+            ? 'You are an independent fact-checking agent. Treat supplied source evidence as authoritative. Check every concrete claim, number, date, name, quotation, and conclusion in the draft. Correct unsupported or contradicted claims, preserve correct useful content, and clearly label any point the sources cannot establish. Do not claim to have verified facts absent from the evidence. Return the complete corrected draft only.'
+            : `You are an independent quality-assurance agent. Compare the draft with the exact user request. Check that it performs the requested task, uses the requested output format and language, follows constraints, is complete, internally consistent, and does not drift into unrelated material. Review factual claims for obvious errors and unsupported certainty; do not invent external verification. Correct problems while preserving useful content. ${wanted.format === 'zip' ? 'For ZIP deliverables, preserve every === FILE: path === and === END FILE === marker exactly, preserve paths, and do not omit or shorten file contents.' : ''} Return the complete improved draft only.`,
+          history: [],
+          prompt: `User request: ${prompt}\n\nSOURCE EVIDENCE:\n${files.length ? evidence || '[Some source formats could not be read; state limitations rather than inventing verification.]' : '[No source files were supplied. Do not claim external fact-checking.]'}\n\nDRAFT TO CHECK:\n${out.text}`,
+          files: chunked.files, signal,
+        });
+        if (!review.text.trim()) throw new Error('The reviewer returned an empty result.');
+        out.text = review.text; partial = review.text; o.onText(review.text);
+        log.say('ok', files.length ? 'source fact-check complete' : 'quality check complete', 'reviewed before delivery');
+      } catch (e) {
+        if (isCancel(e)) throw e;
+        notes.push('The independent quality-check pass could not finish, so the draft is delivered without a completed second review. Please review important details before relying on it.');
+        log.say('warn', 'quality check unavailable', msg(e));
+      }
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Add a Google Gemini key for Text & documents to include videos and audio.`);
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
       if (trimmed) notes.push('This conversation is longer than the model can hold at once, so the oldest messages were left out of this reply.');
       let file: OutFile | null = null;
       if (wanted.file) {
-        log.step(wanted.format === 'zip' ? 'Packing your files…' : 'Preparing your file…');
+        log.step(wanted.format === 'zip' ? 'Packaging the ZIP…' : 'Preparing your file…');
         try {
           if (wanted.format === 'zip') {
             // attached files travel with the new ones when the request says "with these / my files"
