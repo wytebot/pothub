@@ -13,7 +13,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
-import { resultsBlock, webSearch, webWanted, webRemaining } from './search';
+import { resultsBlock, webSearch, webRemaining, shouldAutoWebSearch } from './search';
 import { readyFiles } from './readers';
 
 const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
@@ -260,7 +260,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   if (o.blocked) notes.push(`File analysis limit reached: I could not read ${o.blocked.names.slice(0, 3).join(', ')}${o.blocked.names.length > 3 ? ` and ${o.blocked.names.length - 3} more` : ''}. Free file analysis returns at ${o.blocked.back}. Premium has no limit.`);
   // Mandatory web research: look it up first and hand the results to the model with the question.
   let sent = prompt;
-  if (o.web) {
+  if (shouldAutoWebSearch(prompt) && webRemaining() > 0) {
     log.step('Searching the web…');
     try {
       const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const hits = await webSearch(q);
