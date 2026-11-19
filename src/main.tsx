@@ -1,3 +1,4 @@
+import { rearmQuotaNotifications } from './quota/resetNotification';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
@@ -24,4 +25,5 @@ watchForNewVersion();
 startNotifications();
 // After a bank (3-D Secure) page, send the customer back to Billing to confirm the payment.
 if (location.search && localStorage.getItem('billing.pending')) location.hash = '/billing';
+rearmQuotaNotifications();
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
