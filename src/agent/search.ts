@@ -2,6 +2,11 @@ import { request } from '../security/api';
 import { isPremium } from '../quota/daily';
 
 export interface WebHit { title: string; url: string; snippet: string; }
+/** Detect requests whose answer depends on current or externally verifiable information. */
+export function shouldAutoWebSearch(prompt: string): boolean {
+  return /\b(today|right now|currently|current|latest|recent|this week|this month|this year|breaking|news|price|pricing|cost|exchange rate|weather|forecast|schedule|standings|score|who is the richest|newest version|availability|compare.*(202[5-9]|2030)|as of \w+ 20\d{2}|202[5-9]|2030)\b/i.test(prompt);
+}
+
 const KEY = 'chat.web.v1';
 const USAGE = 'web.free.daily.v1';
 export const WEB_CHANGED = 'web:changed';

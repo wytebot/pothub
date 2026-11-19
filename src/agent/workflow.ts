@@ -264,7 +264,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
     log.step('Searching the web…');
     try {
       const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const hits = await webSearch(q);
-      if (hits.length) { sent = `${prompt}\n\n---\n${resultsBlock(q, hits, today())}`; notes.push('Searched the web.'); log.say('ok', 'web search', `${hits.length} result(s)`); }
+      if (hits.length) { sent = `${prompt}\n\nFor this web-researched answer, give a thorough, well-structured response that directly answers the request. Separate verified facts from estimates or uncertainty, include relevant dates, compare useful details, and cite the supplied source URLs inline. Do not invent sources or facts.\n\n---\n${resultsBlock(q, hits, today())}`; notes.push('Searched the web.'); log.say('ok', 'web search', `${hits.length} result(s)`); }
       else { notes.push('Web search found nothing useful, so this answer does not include live results.'); }
     } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push(/free web searches|daily research limit/i.test(msg(e)) ? msg(e) : 'Web search was not available this time, so this answer does not include live results.'); }
   }
