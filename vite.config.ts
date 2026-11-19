@@ -19,8 +19,30 @@ const versioning = () => ({
   },
 });
 
+
+// Vite exposes every VITE_* variable to the browser. Refuse to build when a secret-looking name uses that prefix.
+// (Lives here, not in scripts/, so the build can never fail because a helper file is missing from Git.)
+const FORBIDDEN = /(?:SECRET|PRIVATE|PASSWORD|TOKEN|CREDENTIAL|SERVICE_ACCOUNT|ENCRYPTION_KEY|WEBHOOK_HASH|API_KEY|ACCESS_KEY|(?:OPENAI|GEMINI|ANTHROPIC|FLUTTERWAVE|STRIPE|PAYPAL).*KEY|(?:^|_)KEY$)/i;
+const PUBLIC_OK = new Set(['VITE_FIREBASE_API_KEY']);
+const publicEnvGuard = () => ({
+  name: 'pothub-public-env-guard',
+  apply: 'build' as const,
+  buildStart() {
+    const keys = new Set(Object.keys(process.env));
+    for (const file of ['.env', '.env.local', '.env.production', '.env.production.local']) {
+      if (!existsSync(file)) continue;
+      for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+        const m = line.trim().match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+        if (m) keys.add(m[1]);
+      }
+    }
+    const bad = [...keys].filter((k) => k.startsWith('VITE_') && !PUBLIC_OK.has(k) && FORBIDDEN.test(k));
+    if (bad.length) throw new Error(`Refusing to build: private-looking environment variables use the public VITE_ prefix: ${bad.join(', ')}`);
+  },
+});
+
 export default defineConfig({
-  plugins: [react(), versioning()],
+  plugins: [react(), publicEnvGuard(), versioning()],
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   test: { environment: 'node' },
 });
