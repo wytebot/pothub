@@ -129,3 +129,14 @@ Firestore server-only collections include `subscriptions`, `payments`, `accounts
 - BYOK API keys deliberately entered by a user remain in the app's encrypted local vault and are sent directly to the provider chosen by that user; they are not server environment credentials. Server-owned provider keys, if added later, must be used only by server-side provider adapters and must never be prefixed `VITE_`.
 
 **Important boundary:** the current BYOK image/video provider requests still run from the user's device. The new server quota endpoint blocks the normal app workflow, but a technically capable user can modify a distributed client and call their own provider directly, outside Pothub. Strict enforcement against modified clients requires routing generation through server-side provider adapters and never exposing those server-owned keys.
+
+## Large-file analysis and source verification (new)
+- Extracted text and Word content above the provider-sized threshold is split into ordered 28,000-character segments with 900-character overlap. Each segment is analyzed separately, then the combined segment findings are passed to the final response writer. This avoids silently dropping the tail of large text documents and keeps segment boundaries from losing nearby context.
+- Before a file-based response is delivered, a separate verification pass checks the draft against the source files / extracted segment findings and corrects unsupported or contradicted details where the model can verify them.
+- The chunk pipeline is sequential and uses the user's selected provider/model and existing BYOK key. More chunks mean more provider requests, latency and possible provider charges. It is not a claim that every provider accepts arbitrarily large native video/audio files; native media limits still apply.
+- **Background completion limitation:** this PWA currently runs BYOK text/media requests on the device. A hidden tab may continue while the operating system allows it, but mobile browsers can suspend or kill it, and a service worker cannot safely keep arbitrary provider generation running after the app is closed. Guaranteed completion after closing the app requires a server-owned durable job queue + object storage + authenticated job status/result delivery; Android needs a native WorkManager/foreground-worker integration for device-local jobs. That infrastructure is not present in this ZIP, so the app must not promise uninterrupted completion while closed.
+
+
+## Backups
+
+Use **Storage → Download full backup** to export chat history, editor projects, and saved/generated media into a ZIP. **Restore backup** merges by record ID and timestamp; it never clears unrelated existing data and will not overwrite a newer local record with an older backup copy. Store the downloaded ZIP somewhere outside the app. Google Drive syncing is not part of this version.

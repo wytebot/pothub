@@ -35,18 +35,25 @@ Every build gets an id (the Vercel commit SHA, or a timestamp). The id is baked 
 ## Server (billing service) changes in v0.4.0
 
 - Image and video limits were removed; `/api/usage/reserve` now only confirms sign-in so older installed apps keep working.
-- New Premium-only route `GET /api/search?q=` looks the query up on DuckDuckGo (`server/src/search.ts`). DuckDuckGo has no official search API, so this reads its HTML results page and falls back to its Instant Answer API; if DuckDuckGo blocks or changes that page, the app tells the user web search was unavailable and still answers. Results are cached for 10 minutes in memory.
+- New Authenticated route `GET /api/search?q=` (3 daily searches for Free; up to 30 for Premium) looks the query up on DuckDuckGo (`server/src/search.ts`). DuckDuckGo has no official search API, so this reads its HTML results page and falls back to its Instant Answer API; if DuckDuckGo blocks or changes that page, the app tells the user web search was unavailable and still answers. Results are cached for 10 minutes in memory.
 - Redeploy the server together with the front end. Free limits (10 attachments and 10 file analyses per 5 hours) live on the device.
 
 
-## v0.5.0: Google Drive sync, offline mode, universal file reading
+## v0.5.2: backups, request routing, quality checks and memory
 
-**Google Drive sync (no Firestore).** Chats, projects and media are copied to each user's own hidden Drive app folder (`appDataFolder`, scope `drive.appdata`). Do these once in Google Cloud for project `pothub-ca2a1`:
-1. Enable the **Google Drive API** (APIs & Services -> Library).
-2. In **Google Auth Platform -> Data access**, add the scope `.../auth/drive.appdata` (a non-sensitive scope, so no Google review is needed).
-3. Optional, web only: set `VITE_GOOGLE_CLIENT_ID` (the web OAuth client Firebase uses for Google sign-in) so the browser renews its Drive token quietly instead of asking the user to reconnect each hour. The Vercel origin must be an authorised JavaScript origin on that client. Without it, web users tap "Connect Google Drive" after the hour is up. The Android app asks through its own Google sheet.
-New sign-ins ask for the Drive permission up front; people who were already signed in tap "Connect Google Drive" once in Account and Billing. I could not test against a real Drive here, so try it with two devices after deploying.
+**Offline.** The service worker caches the app shell. Network requests still require connectivity; provider generation is not guaranteed to finish if the browser or Android process is terminated.
 
-**Offline.** The service worker now saves every built file at install (list injected by `vite.config.ts`), so the app opens offline after the first visit. Requests wait for the connection and resume by themselves: `src/models/online.ts`, `models/http.ts`, and `drive()` in `models/text.ts` (an answer that was streaming continues from where it stopped).
+**File reading.** `src/agent/readers.ts` reads documents, sheets, slides, e-books, ZIP/TAR/GZIP archives, notebooks, RTF, PDFs (text layer), and attempts readable-string recovery for unknown binaries. 7z/RAR are not currently supported on-device. Unsupported or encrypted formats are reported rather than silently treated as fully read.
 
-**File reading.** `src/agent/readers.ts` turns documents, sheets, slides, e-books, archives (zip/tar/gz, nested), notebooks, RTF, PDFs (text layer, via `pdfjs-dist`, loaded only when a PDF is attached) and even unknown binaries (readable-strings scan) into text before any model is chosen. Only photos, scanned PDFs and (on Gemini) video/audio go to the provider as they are. Video is otherwise reduced to frames. 7z/RAR cannot be opened on-device. Run `npm install` to pick up `pdfjs-dist`.
+## Full backup and restore
+
+The Storage page exports chat history, editing projects and saved media into a downloadable ZIP. Restore merges by stable record ID and timestamp: newer backup records update matching records, older versions do not overwrite newer local records, and unrelated local data is never cleared. Keep multiple copies of the ZIP outside the app.
+
+Google Drive syncing has been removed. Backups are user-managed downloads; no cloud copy is created by Pothub.
+
+
+**Request routing and QA.** Explicit image/video requests no longer fall back to a text answer when a media provider is unavailable. Text responses receive an independent request-compliance review; file-based answers are checked against extracted source evidence. Image/video outputs are checked for valid non-empty files before saving. This is structural QA, not a guarantee of semantic perfection.
+
+**Conversation context.** Full history remains saved locally. Free requests include up to 8 recent exchanges from the current conversation; Premium includes up to 40. Editing a user request updates its existing assistant response in place.
+
+**Web research.** Free accounts can use 3 searches per day (up to 3 results); Premium can use up to 30 searches per day (up to 8 results). The server enforces the allowance.
