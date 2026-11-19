@@ -1,30 +1,38 @@
 import { strFromU8, unzipSync } from 'fflate';
 
-export type AttachKind = 'image' | 'video' | 'audio' | 'pdf' | 'docx' | 'text';
+export type AttachKind = 'image' | 'video' | 'audio' | 'pdf' | 'docx' | 'text' | 'office' | 'archive' | 'binary';
 /** A file the person added with the + button. The bytes stay on the device until a request needs them. */
 export interface Attachment { id: string; name: string; mime: string; size: number; kind: AttachKind; blob: Blob; }
 /** What is kept in the saved chat (no bytes). */
 export interface AttachmentMeta { name: string; kind: AttachKind; size: number; }
 
 export const MAX_FILES = 10;
-export const MAX_TOTAL = 24 * 1_048_576; // base64 inflates by a third, and providers cap requests
+export const MAX_TOTAL = 100 * 1_048_576; // files are read on this device first, so only what a model must see itself is sent
 const MAX_TEXT_CHARS = 4_000_000; // a safety net only: far above what any model accepts, so nothing is cut in practice
 
 const TEXT_EXT = new Set(['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'env', 'log', 'html', 'htm', 'css', 'scss', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'php', 'java', 'kt', 'kts', 'swift', 'go', 'rs', 'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'sh', 'bash', 'zsh', 'ps1', 'sql', 'r', 'lua', 'dart', 'vue', 'svelte', 'tex', 'srt', 'vtt', 'rtf', 'gradle', 'properties', 'conf', 'cfg']);
+const OFFICE_EXT = new Set(['xlsx', 'xlsm', 'pptx', 'odt', 'ods', 'odp', 'epub', 'rtf']);
+const ARCHIVE_EXT = new Set(['zip', 'jar', 'war', 'apk', 'tar', 'gz', 'tgz', 'gzip', '7z', 'rar', 'bz2', 'xz', 'zst']);
+const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'heic', 'heif', 'avif', 'tif', 'tiff']);
+const VIDEO_EXT = new Set(['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp']);
+const AUDIO_EXT = new Set(['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'flac', 'opus']);
 const extOf = (name: string) => (name.split('.').pop() ?? '').toLowerCase();
 
-export function classify(f: { name: string; type: string }): AttachKind | null {
+export function classify(f: { name: string; type: string }): AttachKind {
   const t = f.type.toLowerCase(); const e = extOf(f.name);
   if (t.startsWith('image/') && t !== 'image/svg+xml') return 'image';
   if (t.startsWith('video/')) return 'video';
   if (t.startsWith('audio/')) return 'audio';
+  if (!t || t === 'application/octet-stream') { if (IMAGE_EXT.has(e)) return 'image'; if (VIDEO_EXT.has(e)) return 'video'; if (AUDIO_EXT.has(e)) return 'audio'; } // some pickers give no file type: go by the name
   if (t === 'application/pdf' || e === 'pdf') return 'pdf';
   if (e === 'docx' || t === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
-  if (t.startsWith('text/') || t === 'application/json' || t === 'application/xml' || t === 'image/svg+xml' || TEXT_EXT.has(e)) return 'text';
-  return null;
+  if (t.startsWith('text/') || t === 'application/json' || t === 'application/xml' || t === 'image/svg+xml' || TEXT_EXT.has(e) || e === 'ipynb') return 'text';
+  if (OFFICE_EXT.has(e)) return 'office';
+  if (ARCHIVE_EXT.has(e) || /zip|x-tar|gzip|x-7z|rar/.test(t)) return 'archive';
+  return 'binary'; // anything else is still read: the readable text inside it is recovered
 }
 
-export const kindLabel: Record<AttachKind, string> = { image: 'photo', video: 'video', audio: 'audio', pdf: 'PDF', docx: 'Word document', text: 'file' };
+export const kindLabel: Record<AttachKind, string> = { image: 'photo', video: 'video', audio: 'audio', pdf: 'PDF', docx: 'Word document', text: 'file', office: 'document', archive: 'archive', binary: 'file' };
 
 /** Turns picked files into attachments. Files that cannot be used come back in `skipped` with a friendly reason. */
 export function toAttachments(files: File[], have: Attachment[]): { added: Attachment[]; skipped: string[] } {
@@ -32,7 +40,6 @@ export function toAttachments(files: File[], have: Attachment[]): { added: Attac
   let total = have.reduce((n, a) => n + a.size, 0);
   for (const f of files) {
     const kind = classify(f);
-    if (!kind) { skipped.push(`${f.name} is a type of file I cannot read yet`); continue; }
     if (have.length + added.length >= MAX_FILES) { skipped.push(`${f.name} was left out (up to ${MAX_FILES} files per message)`); continue; }
     if (f.size === 0) { skipped.push(`${f.name} is empty`); continue; }
     if (total + f.size > MAX_TOTAL) { skipped.push(`${f.name} is too large to add (${Math.round(MAX_TOTAL / 1_048_576)} MB per message)`); continue; }
