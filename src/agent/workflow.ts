@@ -202,7 +202,6 @@ async function chunkLargeTextFiles(files: Attachment[], provider: ProviderId, se
   for (const file of files) {
     if (file.kind !== 'text' && file.kind !== 'docx') { prepared.push(file); continue; }
     const source = await textOf(file);
-    if (/\[(?:file|document) continues;/.test(source)) notes.push(`${file.name} exceeded the on-device text extraction cap; the remaining tail could not be processed.`);
     const chunks = splitTextIntoChunks(source);
     if (chunks.length === 1) { prepared.push(file); evidence.push(`Source ${file.name}:\n${source}`); continue; }
     log.step(`Processing ${file.name} in ${chunks.length} overlapping chunks…`);
@@ -218,9 +217,30 @@ async function chunkLargeTextFiles(files: Attachment[], provider: ProviderId, se
       summaries.push(`SEGMENT ${i + 1}/${chunks.length}\n${part.text}`);
       log.step(`${file.name}: verified segment ${i + 1} of ${chunks.length}`);
     }
-    evidence.push(`Chunked source ${file.name} (${source.length.toLocaleString()} characters):\n${summaries.join('\n\n')}`);
-    prepared.push({ ...file, kind: 'text', mime: 'text/plain', size: summaries.join('\n').length,
-      blob: new Blob([`Source: ${file.name}\n${summaries.join('\n\n')}`], { type: 'text/plain' }) });
+    // Hierarchical consolidation keeps every source segment in the review path without
+    // sending an unbounded pile of summaries into one provider context window.
+    let level = summaries;
+    let round = 0;
+    while (level.length > 1) {
+      const next: string[] = [];
+      for (let at = 0; at < level.length; at += 5) {
+        if (signal.aborted) throw new Error('Cancelled.');
+        const group = level.slice(at, at + 5);
+        const reduced = await generateText(provider, secret, {
+          model: model.id, history: [], files: [], signal,
+          system: 'You are consolidating source-analysis records. Preserve every distinct fact, exact number, date, name, requirement, decision, exception, contradiction, uncertainty, and source locator. Merge duplicates only when they are genuinely identical. Never discard a unique detail or invent missing facts. Organize compactly by topic and retain segment references.',
+          prompt: `File: ${file.name}\nConsolidation round ${round + 1}; group ${Math.floor(at / 5) + 1}\n\n${group.join('\n\n')}`,
+        });
+        next.push(reduced.text);
+        log.step(`${file.name}: consolidating source findings (${next.length} groups complete)`);
+      }
+      level = next; round++;
+    }
+    const consolidated = level[0] ?? 'No extractable text was returned by the analysis provider.';
+    const sourceEvidence = `Complete source processed: ${file.name} (${source.length.toLocaleString()} characters; ${chunks.length} overlapping segments).\nConsolidated segment findings (all segments were submitted):\n${consolidated}`;
+    evidence.push(sourceEvidence);
+    prepared.push({ ...file, kind: 'text', mime: 'text/plain', size: sourceEvidence.length,
+      blob: new Blob([sourceEvidence], { type: 'text/plain' }) });
   }
   return { files: prepared, evidence, notes };
 }

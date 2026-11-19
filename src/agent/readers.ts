@@ -6,10 +6,6 @@ import { classify, sizeLabel, textOf, type Attachment } from './attachments';
  * archives, notebooks and even unknown binaries are turned into plain text on this device, so any text model can read them.
  * Only things that genuinely need a model's own senses (photos, scanned PDFs, and video/audio on models that can take them) are passed on as they are.
  */
-const MAX_ENTRY = 25 * 1_048_576;
-const MAX_ENTRIES = 400;
-const MAX_DEPTH = 3;
-const ARCHIVE_BUDGET = 3_000_000;
 
 const ext = (n: string) => (n.split('.').pop() ?? '').toLowerCase();
 const num = (n: string) => Number(/(\d+)\.xml$/.exec(n)?.[1] ?? 0);
@@ -94,15 +90,15 @@ export function notebookText(raw: string): string {
 }
 
 // ---------------------------------------------------------------- unknown binaries: what the `strings` command would find
-export function stringsOf(u8: Uint8Array, min = 5, cap = 400_000): string {
-  const u = u8.length > 30 * 1_048_576 ? u8.subarray(0, 30 * 1_048_576) : u8;
+export function stringsOf(u8: Uint8Array, min = 5): string {
+  const u = u8;
   const runs: { at: number; s: string }[] = []; const ok = (c: number) => (c >= 32 && c < 127) || c === 9 || c === 10 || c === 13;
   const latin = new TextDecoder('latin1'); const wide = new TextDecoder('utf-16le');
   for (let i = 0; i < u.length;) { if (ok(u[i])) { let j = i; while (j < u.length && ok(u[j])) j++; if (j - i >= min) runs.push({ at: i, s: latin.decode(u.subarray(i, j)) }); i = j; } else i++; }
   for (let i = 0; i + 1 < u.length;) { if (ok(u[i]) && u[i + 1] === 0) { let j = i; while (j + 1 < u.length && ok(u[j]) && u[j + 1] === 0) j += 2; if ((j - i) / 2 >= min) runs.push({ at: i, s: wide.decode(u.subarray(i, j)) }); i = j; } else i++; }
   runs.sort((a, b) => a.at - b.at);
-  const out: string[] = []; let size = 0; let prev = '';
-  for (const r of runs) { const s = r.s.trim(); if (!/[A-Za-z]{3}/.test(s) || s === prev) continue; prev = s; out.push(s); size += s.length + 1; if (size > cap) break; }
+  const out: string[] = []; let prev = '';
+  for (const r of runs) { const s = r.s.trim(); if (!/[A-Za-z]{3}/.test(s) || s === prev) continue; prev = s; out.push(s); }
   return out.join('\n');
 }
 
@@ -123,17 +119,16 @@ async function entryText(path: string, data: Uint8Array, depth: number): Promise
   const kind = classify({ name: path, type: '' });
   if (kind === 'image' || kind === 'video' || kind === 'audio') return `[${kind} file, ${sizeLabel(data.length)}: not opened]`;
   if (kind === 'binary') return `[binary file, ${sizeLabel(data.length)}: not opened]`;
-  if (kind === 'archive' && depth >= MAX_DEPTH) return '[nested archive: not opened]';
   const blob = new Blob([data as BlobPart]);
   if (kind === 'pdf') { const t = await pdfText(blob); return t ? t.text : '[PDF with no readable text (scanned or locked)]'; }
   return (await readText({ id: path, name: path, mime: '', size: data.length, kind, blob }, depth + 1)).text;
 }
 
 async function archiveText(a: Attachment, depth: number): Promise<Readable> {
-  const bytes = new Uint8Array(await a.blob.arrayBuffer()); const notes: string[] = []; let entries: { path: string; data: Uint8Array }[] = []; let skipped = 0;
+  const bytes = new Uint8Array(await a.blob.arrayBuffer()); const notes: string[] = []; let entries: { path: string; data: Uint8Array }[] = [];
   const magic = (...m: number[]) => m.every((b, i) => bytes[i] === b);
   if (magic(0x50, 0x4b)) {
-    const files = unzipSync(bytes, { filter: (f) => { if (f.name.endsWith('/')) return false; if (f.originalSize > MAX_ENTRY) { skipped++; return false; } return true; } });
+    const files = unzipSync(bytes, { filter: (f) => !f.name.endsWith('/') });
     entries = Object.entries(files).map(([path, data]) => ({ path, data }));
   } else if (magic(0x1f, 0x8b)) {
     const inner = gunzipSync(bytes);
@@ -142,18 +137,13 @@ async function archiveText(a: Attachment, depth: number): Promise<Readable> {
   else if (magic(0x37, 0x7a, 0xbc, 0xaf) || magic(0x52, 0x61, 0x72, 0x21) || magic(0x42, 0x5a, 0x68) || magic(0xfd, 0x37, 0x7a, 0x58) || magic(0x28, 0xb5, 0x2f, 0xfd)) {
     return { text: `[${a.name} is a 7z, RAR, bzip2, xz or zstd archive. These cannot be opened on this device. Export it as a ZIP and attach that.]`, notes: [`I could not open ${a.name}: 7z, RAR and similar archives are not supported. Send it as a ZIP.`] };
   }
-  if (skipped) notes.push(`${skipped} very large file${skipped > 1 ? 's' : ''} inside ${a.name} (over 25 MB) ${skipped > 1 ? 'were' : 'was'} not opened.`);
   entries = entries.filter((e) => !/(^|\/)(__MACOSX|\.git|node_modules)\//.test(e.path) && !/(^|\/)\.DS_Store$/.test(e.path));
-  const shown = entries.slice(0, MAX_ENTRIES);
-  const lines = [`Archive ${a.name}: ${entries.length} file${entries.length === 1 ? '' : 's'}`, ...shown.map((e) => `- ${e.path} (${sizeLabel(e.data.length)})`)];
-  if (entries.length > shown.length) { lines.push(`…and ${entries.length - shown.length} more not opened`); notes.push(`${a.name} has ${entries.length} files; the first ${MAX_ENTRIES} were read.`); }
-  let used = 0; const body: string[] = [];
-  for (const e of shown) {
-    if (used > ARCHIVE_BUDGET) { body.push(`=== ${e.path} ===\n[not read: this archive is very large]`); continue; }
-    let t: string; try { t = await entryText(e.path, e.data, depth); } catch { t = '[could not be read]'; }
-    used += t.length; body.push(`=== ${e.path} ===\n${t}`);
+  const lines = [`Archive ${a.name}: ${entries.length} file${entries.length === 1 ? '' : 's'}`, ...entries.map((e) => `- ${e.path} (${sizeLabel(e.data.length)})`)];
+  const body: string[] = [];
+  for (const e of entries) {
+    let t: string; try { t = await entryText(e.path, e.data, depth); } catch (err) { t = `[could not be read: ${err instanceof Error ? err.message : 'unknown error'}]`; notes.push(`${e.path} inside ${a.name} could not be read.`); }
+    body.push(`=== ${e.path} ===\n${t}`);
   }
-  if (used > ARCHIVE_BUDGET) notes.push(`${a.name} is very large, so the later files in it were listed but not read.`);
   return { text: `${lines.join('\n')}\n\n${body.join('\n\n')}`, notes };
 }
 
