@@ -18,3 +18,15 @@ describe('large source chunking', () => {
     }
   });
 });
+
+
+describe('unbounded source extraction', () => {
+  it('does not truncate text sources beyond the former four-million-character cutoff', async () => {
+    const { textOf } = await import('./attachments');
+    const source = 'x'.repeat(4_000_123) + 'END-OF-SOURCE';
+    const blob = new Blob([source], { type: 'text/plain' });
+    const result = await textOf({ id: 'large', name: 'large.txt', mime: 'text/plain', size: blob.size, kind: 'text', blob });
+    expect(result.length).toBe(source.length);
+    expect(result.endsWith('END-OF-SOURCE')).toBe(true);
+  });
+});

@@ -6,9 +6,9 @@ export interface Attachment { id: string; name: string; mime: string; size: numb
 /** What is kept in the saved chat (no bytes). */
 export interface AttachmentMeta { name: string; kind: AttachKind; size: number; }
 
-export const MAX_FILES = 10;
-export const MAX_TOTAL = 100 * 1_048_576; // files are read on this device first, so only what a model must see itself is sent
-const MAX_TEXT_CHARS = 4_000_000; // a safety net only: far above what any model accepts, so nothing is cut in practice
+// Keep the picker itself uncapped: the plan-aware 10-per-5-hour free allowance is enforced
+// by quota/attachments.ts when files are staged and sent. Premium remains unlimited.
+export const MAX_FILES = Number.POSITIVE_INFINITY;
 
 const TEXT_EXT = new Set(['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'env', 'log', 'html', 'htm', 'css', 'scss', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'php', 'java', 'kt', 'kts', 'swift', 'go', 'rs', 'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'sh', 'bash', 'zsh', 'ps1', 'sql', 'r', 'lua', 'dart', 'vue', 'svelte', 'tex', 'srt', 'vtt', 'rtf', 'gradle', 'properties', 'conf', 'cfg']);
 const OFFICE_EXT = new Set(['xlsx', 'xlsm', 'pptx', 'odt', 'ods', 'odp', 'epub', 'rtf']);
@@ -37,13 +37,10 @@ export const kindLabel: Record<AttachKind, string> = { image: 'photo', video: 'v
 /** Turns picked files into attachments. Files that cannot be used come back in `skipped` with a friendly reason. */
 export function toAttachments(files: File[], have: Attachment[]): { added: Attachment[]; skipped: string[] } {
   const added: Attachment[] = []; const skipped: string[] = [];
-  let total = have.reduce((n, a) => n + a.size, 0);
   for (const f of files) {
     const kind = classify(f);
-    if (have.length + added.length >= MAX_FILES) { skipped.push(`${f.name} was left out (up to ${MAX_FILES} files per message)`); continue; }
     if (f.size === 0) { skipped.push(`${f.name} is empty`); continue; }
-    if (total + f.size > MAX_TOTAL) { skipped.push(`${f.name} is too large to add (${Math.round(MAX_TOTAL / 1_048_576)} MB per message)`); continue; }
-    total += f.size;
+
     added.push({ id: crypto.randomUUID(), name: f.name || 'file', mime: f.type || 'application/octet-stream', size: f.size, kind, blob: f });
   }
   return { added, skipped };
@@ -53,13 +50,13 @@ export const meta = (a: Attachment): AttachmentMeta => ({ name: a.name, kind: a.
 
 /** Readable text for files a text model cannot take natively (plain text, code, Word). PDFs, images, audio and video go to the provider as they are. */
 export async function textOf(a: Attachment): Promise<string> {
-  if (a.kind === 'text') { const t = await a.blob.text(); return t.length > MAX_TEXT_CHARS ? `${t.slice(0, MAX_TEXT_CHARS)}\n…[file continues; the rest was left out to fit]` : t; }
+  if (a.kind === 'text') return a.blob.text();
   if (a.kind === 'docx') {
     try {
       const xml = strFromU8(unzipSync(new Uint8Array(await a.blob.arrayBuffer()), { filter: (f) => f.name === 'word/document.xml' })['word/document.xml'] ?? new Uint8Array());
       const text = xml.replace(/<w:tab\/>/g, '\t').replace(/<\/w:p>/g, '\n').replace(/<w:br\/>/g, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
       if (!text) throw new Error('empty');
-      return text.length > MAX_TEXT_CHARS ? `${text.slice(0, MAX_TEXT_CHARS)}\n…[document continues; the rest was left out to fit]` : text;
+      return text;
     } catch { throw new Error(`I could not open ${a.name}. Save it again as a .docx or PDF and re-attach it.`); }
   }
   return '';

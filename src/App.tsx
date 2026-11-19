@@ -39,7 +39,7 @@ const secondary: Route[] = [
   { path: '/privacy', label: 'Privacy information', el: <Legal id="privacy" /> },
   { path: '/terms', label: 'Terms of service', el: <Legal id="terms" /> },
   { path: '/support', label: 'Support', el: <Support /> },
-  { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>Pothub, version 0.5.2. A local-first studio for AI chat, images and video. Your media never leaves this device unless you export it or send it to the AI provider you choose.</p></div></section> },
+  { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>Pothub, version 0.5.4. A local-first studio for AI chat, images and video. Your media never leaves this device unless you export it or send it to the AI provider you choose.</p></div></section> },
   { path: '/storage', label: 'Storage information', el: <Storage /> },
 ];
 const all = [...primary, ...secondary];
