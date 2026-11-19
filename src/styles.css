@@ -411,7 +411,7 @@ input[type='search'] { width: 100%; }
 .cc-tl { flex: none; position: relative; background: var(--cc-bg); border-top: 1px solid var(--cc-line); }
 .cc-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; touch-action: pan-x; }
 .cc-scroll::-webkit-scrollbar { display: none; }
-.cc-inner { position: relative; }
+.cc-inner { position: relative; min-height: 100%; }
 .cc-inner .ruler { position: relative; border: 0; cursor: pointer; touch-action: pan-x; }
 .cc-inner .ruler span { top: 5px; height: auto; border: 0; padding: 0; font-size: 11px; color: #8a8a90; transform: translateX(-50%); }
 .cc-inner .ruler i { position: absolute; top: 12px; width: 3px; height: 3px; border-radius: 50%; background: #55555b; transform: translateX(-50%); }
@@ -494,3 +494,12 @@ input[type='search'] { width: 100%; }
 .chat-top .usage-sub { display: block; width: 100%; font-size: 12.5px; }
 
 .offline-banner { position: sticky; top: 0; z-index: 30; padding: 8px 14px; background: #3a2f10; color: #f3d98b; border-bottom: 1px solid #6b5518; font-size: 13.5px; text-align: center; }
+
+/* Timeline controls: track tools live inside the horizontally scrolling timeline,
+   so mute/cover/text/audio controls stay aligned with their tracks while panning. */
+.cc-tl { min-height: 180px; max-height: 430px; }
+.cc-scroll { height: 100%; touch-action: pan-x pan-y; }
+.cc-inner .clip { touch-action: pan-x; }
+.cc-inner .clip.sel { touch-action: none; }
+.cc-rail { z-index: 6; }
+.cc-stage .cv { touch-action: none; }
