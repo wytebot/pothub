@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './ui/Icon';
+import { ChatHistory } from './ui/ChatHistory';
 import { Home } from './pages/Home';
 import { Projects } from './pages/Projects';
 import { Storage } from './pages/Storage';
@@ -16,6 +17,7 @@ import { ImageStudio } from './pages/ImageStudio';
 import { getStorageInfo } from './storage/quota';
 import { useMe } from './auth/session';
 import { startJobPoller } from './agent/jobs';
+import { applyUpdate, UPDATE_READY } from './version';
 
 type IconName = Parameters<typeof Icon>[0]['name'];
 interface Route { path: string; label: string; icon?: IconName; el: ReactNode; }
@@ -36,7 +38,7 @@ const secondary: Route[] = [
   { path: '/privacy', label: 'Privacy information', el: <Legal id="privacy" /> },
   { path: '/terms', label: 'Terms of service', el: <Legal id="terms" /> },
   { path: '/support', label: 'Support', el: <Support /> },
-  { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>Pothub, version 0.2.0. A local-first studio for AI images and video. Your media never leaves this device unless you export it or send it to the AI provider you choose.</p></div></section> },
+  { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>Pothub, version 0.4.1. A local-first studio for AI chat, images and video. Your media never leaves this device unless you export it or send it to the AI provider you choose.</p></div></section> },
   { path: '/storage', label: 'Storage information', el: <Storage /> },
 ];
 const all = [...primary, ...secondary];
@@ -55,11 +57,13 @@ export function App() {
   const [low, setLow] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [pull, setPull] = useState(0);
+  const [update, setUpdate] = useState('');
   const touch = useRef<{ y: number; on: boolean } | null>(null);
   const until = Number(localStorage.getItem('billing.entitledUntil') ?? 0) || Number(localStorage.getItem('billing.lastUntil') ?? 0);
   const route: Route = all.find((r) => r.path === path) ?? (path.startsWith('/editor/') ? { path: '/editor', label: 'Creative Editor', icon: 'editor' as IconName, el: <Editor projectId={path.slice(8)} /> } : path.startsWith('/legal/') ? { path: '/legal', label: 'Legal documents', el: <Legal id={path.slice(7)} /> } : primary[0]);
 
   useEffect(() => setDrawer(false), [path]);
+  useEffect(() => { const f = (e: Event) => setUpdate((e as CustomEvent<{ id: string }>).detail?.id ?? 'new'); window.addEventListener(UPDATE_READY, f); return () => window.removeEventListener(UPDATE_READY, f); }, []);
   useEffect(() => (me ? startJobPoller(8000) : undefined), [me]);
   useEffect(() => { document.title = `${route.label} · Pothub`; }, [route]);
   useEffect(() => { getStorageInfo().then((i) => setLow(i.supported && i.quota > 0 && i.usage / i.quota > 0.85)).catch(() => {}); }, [path]);
@@ -84,6 +88,7 @@ export function App() {
       <nav className={`sidebar${drawer ? ' open' : ''}`} aria-label="Main">
         <div className="brand desk">Pothub</div>
         <div className="nav-group">{primary.map(link)}</div>
+        <ChatHistory onPick={() => setDrawer(false)} />
         <div className="nav-group bottom">
           <button className="nav-link more-toggle" aria-expanded={more} aria-controls="more-nav" onClick={() => setMore((m) => { localStorage.setItem('ui.more', m ? '0' : '1'); return !m; })}>
             <span className={`chev${more ? ' up' : ''}`}><Icon name="chevron" size={16} /></span>More
@@ -96,6 +101,7 @@ export function App() {
         onTouchMove={(e) => { const t = touch.current; if (t?.on) setPull(Math.max(0, Math.min(100, e.touches[0].clientY - t.y))); }}
         onTouchEnd={() => { if (pull >= 80) setRefresh((n) => n + 1); setPull(0); touch.current = null; }}>
         {pull > 10 && <div className="ptr" style={{ height: pull / 2 }}>{pull >= 80 ? 'Release to refresh' : 'Pull to refresh'}</div>}
+        {update && <div className="notice" role="status">A new version of Pothub is ready. <button className="btn" onClick={() => void applyUpdate(update)}>Update now</button></div>}
         {until > 0 && until - Date.now() < 7 * 86_400_000 && <div className="notice warn" role="status">{until > Date.now() ? `Premium ends on ${new Date(until).toLocaleDateString()}. It does not renew automatically. ` : 'Premium has ended. '}<a href="#/billing">{until > Date.now() ? 'Add time' : 'Renew'}</a></div>}
         {low && <div className="notice warn" role="alert">Device storage is almost full. <a href="#/storage">Review storage</a> and export projects you want to keep.</div>}
         <div key={`${route.path}:${refresh}`} className="route">{route.el}</div>

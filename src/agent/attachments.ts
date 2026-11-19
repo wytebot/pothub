@@ -6,9 +6,9 @@ export interface Attachment { id: string; name: string; mime: string; size: numb
 /** What is kept in the saved chat (no bytes). */
 export interface AttachmentMeta { name: string; kind: AttachKind; size: number; }
 
-export const MAX_FILES = 6;
+export const MAX_FILES = 10;
 export const MAX_TOTAL = 24 * 1_048_576; // base64 inflates by a third, and providers cap requests
-const MAX_TEXT_CHARS = 150_000;
+const MAX_TEXT_CHARS = 4_000_000; // a safety net only: far above what any model accepts, so nothing is cut in practice
 
 const TEXT_EXT = new Set(['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'env', 'log', 'html', 'htm', 'css', 'scss', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'php', 'java', 'kt', 'kts', 'swift', 'go', 'rs', 'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'sh', 'bash', 'zsh', 'ps1', 'sql', 'r', 'lua', 'dart', 'vue', 'svelte', 'tex', 'srt', 'vtt', 'rtf', 'gradle', 'properties', 'conf', 'cfg']);
 const extOf = (name: string) => (name.split('.').pop() ?? '').toLowerCase();

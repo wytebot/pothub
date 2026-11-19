@@ -13,7 +13,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
-import { reserveUsage } from '../security/api';
+import { resultsBlock, webSearch } from './search';
 
 const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
@@ -81,13 +81,11 @@ export async function runInfo(rawPrompt: string, log: RunLog, signal: AbortSigna
   return true;
 }
 
-export async function runImage(o: { /** the caller already decided this is an image request */ routed?: boolean; /** photos added with the + button: they are edited or used as a reference */ refs?: Attachment[]; prompt: string; count: number; format: string; prefer: 'quality' | 'speed'; model: string; signal: AbortSignal; log: RunLog; left: number; limit: number; premium: boolean }): Promise<ImageResult> {
+export async function runImage(o: { /** the caller already decided this is an image request */ routed?: boolean; /** photos added with the + button: they are edited or used as a reference */ refs?: Attachment[]; prompt: string; count: number; format: string; prefer: 'quality' | 'speed'; model: string; signal: AbortSignal; log: RunLog}): Promise<ImageResult> {
   const { log, signal } = o;
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text) throw new Error('Describe the image first (commands alone are not a prompt).');
   const count = flags.count ?? o.count;
-  const allowance = await reserveUsage('image', count);
-  log.say('info', 'quota', allowance.premium ? 'server confirmed premium access' : `${allowance.remaining ?? 0} image(s) remaining today`);
   const prompt = wantEnhance(flags) ? await enhance(text, catalog, log, signal, 'image') : text;
   const refs = o.refs?.length ? await Promise.all(o.refs.slice(0, 4).map(async (a) => ({ mime: a.mime, data: await base64Of(a.blob) }))) : undefined;
   const tried = new Set<string>(); const skipKeys = new Set<string>(); const notes: string[] = []; let lastErr: unknown;
@@ -127,12 +125,10 @@ export async function runImage(o: { /** the caller already decided this is an im
 }
 
 export interface VideoStart { op: string; model: VideoModel; aspect: string; prompt: string; keyId: string; }
-export async function runVideoStart(o: { prompt: string; modelId: string; signal: AbortSignal; log: RunLog; left: number; limit: number; premium: boolean }): Promise<VideoStart> {
+export async function runVideoStart(o: { prompt: string; modelId: string; signal: AbortSignal; log: RunLog }): Promise<VideoStart> {
   const { log, signal } = o;
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text) throw new Error('Describe the video first (commands alone are not a prompt).');
-  const allowance = await reserveUsage('video', 1);
-  log.say('info', 'quota', allowance.premium ? 'server confirmed premium access' : `${allowance.remaining ?? 0} video(s) remaining today`);
   const prompt = wantEnhance(flags) ? await enhance(text, catalog, log, signal, 'video') : text;
   const wanted = flags.aspect ?? interpret(text).aspect; const tried = new Set<string>(); const skipKeys = new Set<string>(); let lastErr: unknown;
   const pref = flags.prefer ?? getSettings().priority;
@@ -180,17 +176,30 @@ const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', mon
  * Chat, writing, analysis, coding and documents. Picks the best ready text model for the files and the request,
  * streams the answer as it is written, falls back to another model or key if one fails, and builds a file when the person asked for one.
  */
-export async function runText(o: { prompt: string; files: Attachment[]; history: ChatTurn[]; prefer: 'quality' | 'speed'; signal: AbortSignal; log: RunLog; onText: (soFar: string) => void }): Promise<TextOutcome> {
+export async function runText(o: { prompt: string; files: Attachment[]; history: ChatTurn[]; prefer: 'quality' | 'speed'; signal: AbortSignal; log: RunLog; onText: (soFar: string) => void; /** free file analysis is used up: these files are NOT read, and the answer must say so */ blocked?: { names: string[]; back: string }; /** Premium: look things up on the web first */ web?: boolean }): Promise<TextOutcome> {
   const { log, signal } = o;
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
-  if (!text && !o.files.length) throw new Error('Type your question or request first (commands alone are not a prompt).');
-  const prompt = text || 'Describe and summarise the attached file(s) in detail.';
+  if (!text && !o.files.length && !o.blocked) throw new Error('Type your question or request first (commands alone are not a prompt).');
+  const prompt = text || (o.files.length ? 'Describe and summarise the attached file(s) in detail.' : 'The person attached file(s) but did not write a message.');
   const wanted = wantedOutput(prompt); const notes: string[] = [];
   if (wanted.note) notes.push(wanted.note);
+  if (o.blocked) notes.push(`File analysis limit reached: I could not read ${o.blocked.names.slice(0, 3).join(', ')}${o.blocked.names.length > 3 ? ` and ${o.blocked.names.length - 3} more` : ''}. Free file analysis returns at ${o.blocked.back}. Premium has no limit.`);
+  // Premium web search: look it up first and hand the results to the model with the question.
+  let sent = prompt;
+  if (o.web) {
+    log.step('Searching the web…');
+    try {
+      const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const hits = await webSearch(q);
+      if (hits.length) { sent = `${prompt}\n\n---\n${resultsBlock(q, hits, today())}`; notes.push('Searched the web.'); log.say('ok', 'web search', `${hits.length} result(s)`); }
+      else { notes.push('Web search found nothing useful, so this answer does not include live results.'); }
+    } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push('Web search was not available this time, so this answer does not include live results.'); }
+  }
   const pref = flags.prefer ?? o.prefer;
   const skipKeys = new Set<string>(); const tried = new Set<string>(); let lastErr: unknown; let partial = '';
+  // The whole conversation is sent. Only if a model says it cannot hold that much do the oldest turns step aside, and the person is told.
+  let history = o.history; let trimmed = false;
 
-  for (let attempt = 0, max = Math.min(10, 6 + defaultKeys('text').length); attempt < max; attempt++) {
+  for (let attempt = 0, max = Math.min(10, 6 + defaultKeys('text').length) + 6; attempt < max; attempt++) {
     log.step(attempt === 0 ? 'Choosing the best text model…' : 'Trying another model…');
     const live = new Set(defaultKeys('text', skipKeys).map((k) => k.provider));
     const usable = catalog.texts.filter((m) => live.has(m.provider) && !tried.has(m.id)); const cool = blockedNow();
@@ -213,10 +222,11 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
     log.step(o.files.length ? 'Reading your files and writing…' : wanted.file ? `Writing your ${wanted.format === 'docx' ? 'document' : 'file'}…` : 'Writing your answer…');
     const g = log.start('cmd', `${model.id} generate ${q(prompt, 40)}`); const t0 = Date.now(); partial = '';
     try {
-      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: o.files.length > 0 }), history: o.history, prompt, files: o.files, signal, onText: (t) => { partial = t; o.onText(t); } });
+      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: o.files.length > 0, blockedFiles: o.blocked?.names, web: !!o.web }), history, prompt: sent, files: o.files, signal, onText: (t) => { partial = t; o.onText(t); } });
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Add a Google Gemini key for Text & documents to include videos and audio.`);
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
+      if (trimmed) notes.push('This conversation is longer than the model can hold at once, so the oldest messages were left out of this reply.');
       let file: OutFile | null = null;
       if (wanted.file) {
         log.step(wanted.format === 'zip' ? 'Packing your files…' : 'Preparing your file…');
@@ -238,6 +248,10 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       // Most of the answer already arrived and then the connection dropped: keep what we have instead of starting over.
       if (partial.length > 400) { log.say('warn', 'kept the partial answer'); return { text: partial, model, file: null, notes: [...notes, 'The connection dropped near the end, so this answer may be cut short. Ask me to continue and I will pick up from here.'] }; }
       const status = (e as ProviderErr).status;
+      if (status === 400 && history.length > 2 && /token|context|too (long|large)|exceed|maximum|limit/i.test(msg(e))) {
+        history = history.slice(Math.max(2, Math.ceil(history.length / 2) & ~1)); trimmed = true; log.say('warn', 'conversation too long for this model', 'leaving out the oldest messages');
+        continue;
+      }
       if (status === 401 || status === 402 || status === 403) { skipKeys.add(key.id); if (status === 401) setStatus(key.id, 'invalid'); log.say('warn', `default key "${key.label}" failed`, 'trying the next default for Text'); log.step('That key did not work. Trying your next one…'); }
       else {
         // A quota or rate limit on one model (free keys often have none for the biggest models) says nothing about the key's smaller models: step down to them.

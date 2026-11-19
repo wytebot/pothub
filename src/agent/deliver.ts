@@ -47,7 +47,7 @@ export function wantedOutput(prompt: string): Wanted {
 export const FORMAT_LABEL: Record<OutFormat, string> = { chat: 'chat', md: 'Markdown', txt: 'text', csv: 'CSV', json: 'JSON', html: 'HTML', docx: 'Word', pdf: 'PDF', xlsx: 'Excel', pptx: 'PowerPoint', zip: 'ZIP', file: 'file' };
 
 /** What the text model is told. It is kept in one place so every provider receives the same standard. */
-export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean } = {}): string {
+export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean; blockedFiles?: string[]; web?: boolean } = {}): string {
   const base = [
     'You are the writing, analysis and coding engine inside Pothub. Do the job the person asked for, completely.',
     'Quality bar: be extensive, accurate, specific and well organised. Cover the topic in real depth, with concrete detail, examples, numbers, steps or reasoning where they help. Never pad, never repeat yourself, and never stop early or say that you will "continue later".',
@@ -55,6 +55,8 @@ export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean 
     'Structure: use Markdown. Start with the answer or a one-line summary, then use clear headings, short paragraphs, lists for steps and options, tables for comparisons, and fenced code blocks (with the language name) for all code, commands and config. Give complete working code, never fragments with "rest of code here".',
     'Honesty: if something is uncertain or you cannot know it, say so plainly. Do not invent sources, quotes, statistics or links. If the request is ambiguous, make the most sensible assumption, state it in one line, and carry on instead of asking questions.',
     'Never ask the person for an API key, model name, provider, framework or other setup detail that the task does not strictly need. Choose sensible defaults, state any assumption in one line, and deliver the result. When the person asks for code, an app or a project, deliver complete, working files.',
+    o.blockedFiles?.length ? `The person attached ${o.blockedFiles.length === 1 ? 'a file' : 'files'} (${o.blockedFiles.join(', ')}), but their free file-analysis allowance is used up for now, so you CANNOT see inside ${o.blockedFiles.length === 1 ? 'it' : 'them'}. Still help as well as you can from their message and the conversation. Begin your reply with one short, plain sentence saying you could not analyze the attached ${o.blockedFiles.length === 1 ? 'file' : 'files'} (name ${o.blockedFiles.length === 1 ? 'it' : 'them'}), and never claim, imply or guess that you read ${o.blockedFiles.length === 1 ? 'it' : 'them'}. If the request depends on the file, say what you would need and offer what you can do without it (general guidance, a template, the questions the file would answer).` : '',
+    o.web ? 'Web search results appear under "WEB RESULTS" at the end of the person\'s message. Prefer them for recent or factual claims, cite the pages you used as Markdown links [title](url), and say so plainly if the results do not answer the question. Never invent links.' : '',
     o.hasFiles ? 'The person attached files. Read them carefully and base your answer on their actual content; refer to them by name.' : '',
     o.today ? `Today's date is ${o.today}.` : '',
   ];

@@ -1,25 +1,9 @@
 import { createHash } from 'node:crypto';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { adminApp } from './adminApp';
-import { FREE_LIMITS, type UsageKind } from './securityPolicy';
 
 const db = () => getFirestore(adminApp());
-const day = () => new Date().toISOString().slice(0, 10);
 const digest = (s: string) => createHash('sha256').update(s).digest('hex');
-
-export async function reserveUsage(uid: string, kind: UsageKind, amount: number, premium: boolean) {
-  const ref = db().doc(`usageCounters/${digest(uid)}_${day()}`);
-  return db().runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const current = (snap.data() ?? { uidHash: digest(uid), day: day(), image: 0, video: 0 }) as Record<string, number | string>;
-    const used = Number(current[kind] ?? 0);
-    const limit = FREE_LIMITS[kind];
-    if (!premium && used + amount > limit) return { allowed: false as const, used, limit, remaining: Math.max(0, limit - used), resetsAt: new Date(`${day()}T24:00:00.000Z`).toISOString() };
-    tx.set(ref, { ...current, uidHash: digest(uid), day: day(), [kind]: used + amount, updatedAt: Timestamp.now(), expiresAt: Timestamp.fromMillis(Date.now() + 400 * 24 * 60 * 60_000) }, { merge: true });
-    return { allowed: true as const, used: used + amount, limit: premium ? null : limit, remaining: premium ? null : Math.max(0, limit - used - amount), premium };
-  });
-}
-
 
 export async function getAccountRole(uid: string, adminUids: ReadonlySet<string>): Promise<'admin' | 'user'> {
   const ref = db().doc(`accountRoles/${digest(uid)}`);
@@ -30,12 +14,6 @@ export async function getAccountRole(uid: string, adminUids: ReadonlySet<string>
     if (!snap.exists || snap.data()?.role !== role) tx.set(ref, { role, updatedAt: Timestamp.now() }, { merge: true });
     return role;
   });
-}
-
-export async function readUsage(uid: string) {
-  const snap = await db().doc(`usageCounters/${digest(uid)}_${day()}`).get();
-  const d = snap.data() ?? {};
-  return { image: Number(d.image ?? 0), video: Number(d.video ?? 0), day: day() };
 }
 
 export async function audit(uid: string | null, action: string, meta: Record<string, string | number | boolean | null> = {}) {
