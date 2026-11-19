@@ -4,7 +4,7 @@ import { entitled, luhn, memoryStore, ngnAmount, PRICE_USD, settleCharge, verify
 import { verifyIdToken } from './identity';
 import { audit, configuredAdmins, distributedLimit, getAccountRole } from './securityStore';
 import { validUsageRequest } from './securityPolicy';
-import { ddgSearch } from './search';
+import { ddgSearch, crawlPages } from './search';
 import { authorizeCharge, FlwError, getCharge, isLive, startCardCharge, toTx, type ChargeResult } from './flutterwave';
 
 const env = process.env; const PORT = Number(env.PORT ?? 8787);
@@ -12,6 +12,8 @@ const LICENSE_SECRET = env.LICENSE_SECRET ?? ''; const HASH = env.FLW_SECRET_HAS
 // Browser origin(s) plus the Android WebView origins (Capacitor serves the app from https://localhost).
 const ORIGINS = new Set([ORIGIN, 'https://localhost', 'capacitor://localhost', ...String(env.EXTRA_ORIGINS ?? '').split(',').map((x) => x.trim().replace(/\/$/, '')).filter(Boolean)].filter(Boolean));
 const STEP = Number(env.PRICE_ROUND_NGN ?? 10); const PENDING_TTL = 60 * 60_000;
+const PRO_OVERRIDE_EMAIL = 'ilemobayotolulope11092003@gmail.com';
+const isProOverride = (who: { email?: string; emailVerified?: boolean }) => who.emailVerified === true && (who.email ?? '').trim().toLowerCase() === PRO_OVERRIDE_EMAIL;
 const configured = () => !!(LICENSE_SECRET && HASH && ORIGIN && env.FLW_CLIENT_ID && env.FLW_CLIENT_SECRET && env.FLW_ENCRYPTION_KEY && (env.FIREBASE_SERVICE_ACCOUNT || env.GOOGLE_APPLICATION_CREDENTIALS));
 if (!configured()) console.warn('Checkout stays disabled until LICENSE_SECRET, FLW_SECRET_HASH, APP_ORIGIN, FLW_CLIENT_ID/SECRET, FLW_ENCRYPTION_KEY and Firebase credentials are all set.');
 if (!isLive()) console.warn('FLW_ENV is not "production": payments are not real.');
@@ -123,8 +125,8 @@ createServer(async (req, res) => {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
       if (await distributedLimit(`me:${who.uid}`, 90)) return send(429, { error: 'Too many requests.' });
       const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined;
-      const usage = { image: 0, video: 0, day: new Date().toISOString().slice(0, 10) }; const premium = entitled(sub);
-      return send(200, { uid: who.uid, email: who.email ?? null, role: await getAccountRole(who.uid, configuredAdmins()), plan: premium ? sub?.plan ?? null : null, entitled: premium, currentPeriodEnd: premium ? sub?.currentPeriodEnd ?? null : null, usage, limits: null });
+      const usage = { image: 0, video: 0, day: new Date().toISOString().slice(0, 10) }; const override = isProOverride(who); const premium = override || entitled(sub);
+      return send(200, { uid: who.uid, email: who.email ?? null, role: await getAccountRole(who.uid, configuredAdmins()), plan: override ? 'pro' : premium ? sub?.plan ?? null : null, entitled: premium, proOverride: override, currentPeriodEnd: premium ? sub?.currentPeriodEnd ?? (override ? '2100-01-01T00:00:00.000Z' : null) : null, usage, limits: null });
     }
     if (p === '/api/usage/reserve' && req.method === 'POST') {
       // Kept so older installed apps keep working: image and video creation are unlimited, so this only confirms the sign-in.
@@ -133,15 +135,18 @@ createServer(async (req, res) => {
       return send(200, { allowed: true, used: 0, limit: null, remaining: null, premium: true });
     }
     if (p === '/api/search' && req.method === 'GET') {
-      // Free accounts get a small daily allowance; Premium gets a larger allowance and deeper result sets.
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to use web search.' });
       if (await distributedLimit(`search-burst:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
-      const q = (url.searchParams.get('q') ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      const q = (url.searchParams.get('q') ?? '').replace(/\\s+/g, ' ').trim().slice(0, 300);
       if (q.length < 2) return send(400, { error: 'Type something to search for.' });
-      const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined; const premium = entitled(sub);
-      const day = new Date().toISOString().slice(0, 10);
-      if (await distributedLimit(`search-daily:${who.uid}:${day}`, premium ? 30 : 3, 24 * 60 * 60 * 1000)) return send(429, { error: premium ? 'Daily research limit reached.' : 'You have used your 3 free web searches for today. Premium includes deeper research.' });
-      try { return send(200, { results: (await ddgSearch(q, premium ? 8 : 3)).slice(0, premium ? 8 : 3) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
+      try { return send(200, { results: await ddgSearch(q, 8) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
+    }
+    if (p === '/api/crawl' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to crawl pages.' });
+      if (await distributedLimit(`crawl-burst:${who.uid}`, 12)) return send(429, { error: 'Too many crawl requests. Wait a moment.' });
+      const b = await json(12_000); const urls = Array.isArray(b.urls) ? b.urls.filter((x: unknown): x is string => typeof x === 'string').slice(0, 8) : [];
+      if (!urls.length) return send(400, { error: 'Provide at least one web URL to crawl.' });
+      return send(200, { pages: await crawlPages(urls, 5) });
     }
     if (p === '/api/account/link' && req.method === 'POST') {
       if (limited(`link:${ip}`, 20)) return send(429, { error: 'Too many attempts.' });
