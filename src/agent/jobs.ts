@@ -31,13 +31,16 @@ export async function pollJobs(): Promise<boolean> {
       if (r.state === 'failed') { lg.fail(ps.line, r.message); patchJob(j.id, { status: 'failed', error: r.message }); }
       else if (r.state === 'done') {
         lg.done(ps.line, `ready after ${ps.n} poll${ps.n > 1 ? 's' : ''}`); lg.step('Almost there, downloading your video…'); const dl = lg.start('cmd', 'download --retry 3');
-        const blob = await downloadVideo(provider, secret, r.uri); lg.done(dl, `${(blob.size / 1_048_576).toFixed(1)} MB`);
+        const blob = await downloadVideo(provider, secret, r.uri);
+        if (blob.size <= 0) throw new Error('The provider returned an empty video file. It was not added to your library.');
+        lg.step('Checking the downloaded video…');
+        lg.done(dl, `${(blob.size / 1_048_576).toFixed(1)} MB`);
         const mediaId = uid();
         await putMedia({ id: mediaId, projectId: null, kind: 'video', name: `${slug(j.prompt)}.mp4`, mime: blob.type || 'video/mp4', size: blob.size, createdAt: Date.now(), blob });
         lg.step('Saving it to your library…'); const sv = lg.start('cmd', 'library.save'); lg.done(sv, 'saved on this device'); lg.say('ok', 'done');
         patchJob(j.id, { status: 'done', mediaId }); saved = true; window.dispatchEvent(new Event('library:changed'));
       }
-    } catch (e) { /* transient errors: keep polling until timeout */ if (e instanceof Error && /removed|no longer stored/.test(e.message)) patchJob(j.id, { status: 'failed', error: e.message }); }
+    } catch (e) { /* transient errors: keep polling until timeout */ if (e instanceof Error && /removed|no longer stored|empty video file/.test(e.message)) patchJob(j.id, { status: 'failed', error: e.message }); }
     finally { polling.delete(j.id); }
   }
   return saved;
@@ -46,6 +49,7 @@ export async function pollJobs(): Promise<boolean> {
 /** Calls pollJobs now and every few seconds until stopped. */
 export function startJobPoller(everyMs = 8000): () => void {
   let stop = false; const tick = () => { if (!stop) void pollJobs(); };
-  tick(); const t = setInterval(tick, everyMs);
-  return () => { stop = true; clearInterval(t); };
+  const resume = () => { if (document.visibilityState === 'visible') tick(); };
+  tick(); const t = setInterval(tick, everyMs); document.addEventListener('visibilitychange', resume);
+  return () => { stop = true; clearInterval(t); document.removeEventListener('visibilitychange', resume); };
 }

@@ -17,9 +17,9 @@ export function friendlyNote(error: unknown, o: { task: TaskName; step?: string 
   if (/no .*model is available|add an api key|tick a .* key|needs a key|no default key|switched off|add a key/i.test(raw) || /AI Providers/.test(raw)) {
     const need = o.task === 'edit' ? 'Google Gemini image models' : o.task === 'text' ? 'a text model (Google Gemini, OpenAI or xAI)' : o.task === 'video' ? 'a video model (Google Gemini, OpenAI, Luma, Kling, fal.ai and others)' : 'an image model';
     const field = o.task === 'text' ? 'Text & documents' : o.task === 'video' ? 'Video' : 'Images';
-    return { text: `I would love to make ${w}, but none of your connected keys can do that yet. Add a key that gives access to ${need} in AI Providers and tick it for ${field}, then send this again.`, providers: true };
+    return { text: `Sorry, I couldn't produce ${w} because none of your connected keys can do that yet. Add a key that gives access to ${need} in AI Providers and tick it for ${field}, then send this again.`, providers: true };
   }
-  if (/couldn't check which models|could not check which models/i.test(raw)) return { text: `I could not check which models your key can use right now${where}. This is usually a short connection hiccup. Try again in a moment.` };
+  if (/couldn't check which models|could not check which models/i.test(raw)) return { text: `Sorry, I couldn't check which models your key can use right now${where}. This is usually a short connection hiccup. Try again in a moment.` };
   if (status === 401 || /rejected this key|invalid api key|incorrect api key/i.test(raw)) return { text: `Your provider did not accept the key${where}. Open AI Providers, check the key is correct and active, then try again.`, providers: true };
   if (status === 402 || /no credit left/i.test(raw)) return { text: `Your provider account has run out of credit${where}. Top it up with the provider, then send this again.`, providers: true };
   if (status === 429 || /rate limit|quota reached/i.test(raw)) return { text: `Your provider is asking for a short pause${where} (rate limit or quota). Wait a minute, or check your plan with the provider, then try again.` };
@@ -30,5 +30,5 @@ export function friendlyNote(error: unknown, o: { task: TaskName; step?: string 
   if (typeof status === 'number' && status >= 500 || /having problems right now/i.test(raw)) return { text: `The provider is having a rough moment${where}. Try again shortly, or tick another provider as a default in AI Providers.` };
   if (/empty answer|returned no (image|text)/i.test(raw)) return { text: `The model came back empty-handed${where}. Try once more, or add a little more detail to the request.` };
   if (/could not open|cannot read|too large|too short|describe the|attach the photo|type your question|editing a photo needs/i.test(raw) && !/AI Providers/.test(raw)) return { text: raw };
-  return { text: `Something did not go through${where}. ${raw && raw.length < 180 ? raw : `Please try again to get ${w}.`}`.replace(/\s+/g, ' ').trim() };
+  return { text: `Sorry, I couldn't deliver ${w} as expected${where}. ${raw && raw.length < 180 ? raw : `The provider or connection did not complete the job. Try a more specific prompt, for example: ${o.task === 'video' ? 'Create a 10-second 16:9 video of [subject], with [action], [camera movement] and [mood].' : o.task === 'image' || o.task === 'edit' ? 'Generate an image of [subject] in [style], with [composition] and [lighting].' : 'Please produce [content] in [format], using [source].'}`}`.replace(/\s+/g, ' ').trim() };
 }

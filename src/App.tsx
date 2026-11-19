@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './ui/Icon';
 import { ChatHistory } from './ui/ChatHistory';
 import { OfflineBanner } from './ui/OfflineBanner';
-import { CloudNotice } from './ui/CloudSync';
 import { Home } from './pages/Home';
 import { Projects } from './pages/Projects';
 import { Storage } from './pages/Storage';
@@ -40,7 +39,7 @@ const secondary: Route[] = [
   { path: '/privacy', label: 'Privacy information', el: <Legal id="privacy" /> },
   { path: '/terms', label: 'Terms of service', el: <Legal id="terms" /> },
   { path: '/support', label: 'Support', el: <Support /> },
-  { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>Pothub, version 0.5.0. A local-first studio for AI chat, images and video. Your media never leaves this device unless you export it or send it to the AI provider you choose.</p></div></section> },
+  { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>Pothub, version 0.5.2. A local-first studio for AI chat, images and video. Your media never leaves this device unless you export it or send it to the AI provider you choose.</p></div></section> },
   { path: '/storage', label: 'Storage information', el: <Storage /> },
 ];
 const all = [...primary, ...secondary];
@@ -66,7 +65,8 @@ export function App() {
 
   useEffect(() => setDrawer(false), [path]);
   useEffect(() => { const f = (e: Event) => setUpdate((e as CustomEvent<{ id: string }>).detail?.id ?? 'new'); window.addEventListener(UPDATE_READY, f); return () => window.removeEventListener(UPDATE_READY, f); }, []);
-  useEffect(() => (me ? startJobPoller(8000) : undefined), [me]);
+  // Persisted provider-side video jobs resume polling whenever the app is active again, even after sign-out.
+  useEffect(() => startJobPoller(8000), []);
   useEffect(() => { document.title = `${route.label} · Pothub`; }, [route]);
   useEffect(() => { getStorageInfo().then((i) => setLow(i.supported && i.quota > 0 && i.usage / i.quota > 0.85)).catch(() => {}); }, [path]);
   useEffect(() => { if (!drawer) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [drawer]);
@@ -104,7 +104,6 @@ export function App() {
         onTouchEnd={() => { if (pull >= 80) setRefresh((n) => n + 1); setPull(0); touch.current = null; }}>
         {pull > 10 && <div className="ptr" style={{ height: pull / 2 }}>{pull >= 80 ? 'Release to refresh' : 'Pull to refresh'}</div>}
         <OfflineBanner />
-        <CloudNotice />
         {update && <div className="notice" role="status">A new version of Pothub is ready. <button className="btn" onClick={() => void applyUpdate(update)}>Update now</button></div>}
         {until > 0 && until - Date.now() < 7 * 86_400_000 && <div className="notice warn" role="status">{until > Date.now() ? `Premium ends on ${new Date(until).toLocaleDateString()}. It does not renew automatically. ` : 'Premium has ended. '}<a href="#/billing">{until > Date.now() ? 'Add time' : 'Renew'}</a></div>}
         {low && <div className="notice warn" role="alert">Device storage is almost full. <a href="#/storage">Review storage</a> and export projects you want to keep.</div>}
