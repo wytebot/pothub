@@ -1,6 +1,7 @@
 // Pothub PWA shell cache. HTML and navigations are network-first so a deployment
 // becomes visible immediately; only static same-origin files are cached.
-const CACHE = 'pothub-static-v4';
+// __BUILD_ID__ is replaced at build time, so every deployment gets its own cache and the old one is deleted on activation.
+const CACHE = 'pothub-static-__BUILD_ID__';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -21,7 +22,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
   // Auth helpers and backend/API requests must never be intercepted or cached.
-  if (url.pathname.startsWith('/__/auth/') || url.pathname.startsWith('/__/firebase/') || url.pathname.startsWith('/api/')) return;
+  if (url.pathname === '/version.json' || url.pathname.startsWith('/__/auth/') || url.pathname.startsWith('/__/firebase/') || url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(

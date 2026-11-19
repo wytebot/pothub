@@ -2,8 +2,9 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { entitled, luhn, memoryStore, ngnAmount, PRICE_USD, settleCharge, verifySignature, type Plan, type Store } from './billing';
 import { verifyIdToken } from './identity';
-import { audit, configuredAdmins, distributedLimit, getAccountRole, readUsage, reserveUsage } from './securityStore';
-import { FREE_LIMITS, validUsageRequest } from './securityPolicy';
+import { audit, configuredAdmins, distributedLimit, getAccountRole } from './securityStore';
+import { validUsageRequest } from './securityPolicy';
+import { ddgSearch } from './search';
 import { authorizeCharge, FlwError, getCharge, isLive, startCardCharge, toTx, type ChargeResult } from './flutterwave';
 
 const env = process.env; const PORT = Number(env.PORT ?? 8787);
@@ -31,7 +32,7 @@ const licenseFor = (k: string) => `${k}.${sign(k)}`;
 const safeEq = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 function customerFromLicense(h?: string): string | null { const t = (h ?? '').replace(/^Bearer /, ''); const i = t.lastIndexOf('.'); if (i < 1 || !LICENSE_SECRET) return null; const k = t.slice(0, i); return safeEq(t.slice(i + 1), sign(k)) ? k : null; }
-const raw = (req: IncomingMessage) => new Promise<Buffer>((res, rej) => { const c: Buffer[] = []; let n = 0; req.on('data', (d: Buffer) => { n += d.length; if (n > 100_000) { rej(new Error('too large')); req.destroy(); } else c.push(d); }); req.on('end', () => res(Buffer.concat(c))); req.on('error', rej); });
+const raw = (req: IncomingMessage, max = 100_000) => new Promise<Buffer>((res, rej) => { const c: Buffer[] = []; let n = 0; req.on('data', (d: Buffer) => { n += d.length; if (n > max) { rej(new Error('too large')); req.destroy(); } else c.push(d); }); req.on('end', () => res(Buffer.concat(c))); req.on('error', rej); });
 const hits = new Map<string, number[]>();
 const limited = (key: string, max: number) => { const now = Date.now(); const h = (hits.get(key) ?? []).filter((t) => now - t < 60_000); h.push(now); hits.set(key, h); return h.length > max; };
 
@@ -40,7 +41,7 @@ createServer(async (req, res) => {
   const reqOrigin = String(req.headers.origin ?? '');
   const send = (code: number, body: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ORIGINS.has(reqOrigin) ? reqOrigin : ORIGIN, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
   const ip = (env.TRUST_PROXY === '1' ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') || req.socket.remoteAddress || 'x';
-  const json = async () => { try { return JSON.parse((await raw(req)).toString('utf8') || '{}') as Record<string, any>; } catch { throw new SyntaxError('bad json'); } };
+  const json = async (max?: number) => { try { return JSON.parse((await raw(req, max)).toString('utf8') || '{}') as Record<string, any>; } catch { throw new SyntaxError('bad json'); } };
   const logAudit = async (uid: string | null, action: string, meta: Record<string, string | number | boolean | null> = {}) => { try { await audit(uid, action, meta); } catch { console.error('security audit persistence failed'); } };
 
   /** Verifies the caller owns this payment, then maps a charge to what the app should show next. */
@@ -122,18 +123,24 @@ createServer(async (req, res) => {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
       if (await distributedLimit(`me:${who.uid}`, 90)) return send(429, { error: 'Too many requests.' });
       const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined;
-      const usage = await readUsage(who.uid); const premium = entitled(sub);
-      return send(200, { uid: who.uid, email: who.email ?? null, role: await getAccountRole(who.uid, configuredAdmins()), plan: premium ? sub?.plan ?? null : null, entitled: premium, currentPeriodEnd: premium ? sub?.currentPeriodEnd ?? null : null, usage, limits: premium ? null : FREE_LIMITS });
+      const usage = { image: 0, video: 0, day: new Date().toISOString().slice(0, 10) }; const premium = entitled(sub);
+      return send(200, { uid: who.uid, email: who.email ?? null, role: await getAccountRole(who.uid, configuredAdmins()), plan: premium ? sub?.plan ?? null : null, entitled: premium, currentPeriodEnd: premium ? sub?.currentPeriodEnd ?? null : null, usage, limits: null });
     }
     if (p === '/api/usage/reserve' && req.method === 'POST') {
+      // Kept so older installed apps keep working: image and video creation are unlimited, so this only confirms the sign-in.
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to use generation features.' });
-      if (await distributedLimit(`usage:${who.uid}`, 40)) return send(429, { error: 'Too many generation requests. Wait a moment.' });
-      const b = await json(); const kind = b.kind; const amount = Number(b.amount ?? 1);
-      if (!validUsageRequest(kind, amount)) return send(400, { error: 'Invalid usage request.' });
+      const b = await json(); if (!validUsageRequest(b.kind, Number(b.amount ?? 1))) return send(400, { error: 'Invalid usage request.' });
+      return send(200, { allowed: true, used: 0, limit: null, remaining: null, premium: true });
+    }
+    if (p === '/api/search' && req.method === 'GET') {
+      // Premium web search through DuckDuckGo. The server does the lookup because browsers cannot call DuckDuckGo directly.
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to use web search.' });
+      if (await distributedLimit(`search:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
       const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined;
-      const result = await reserveUsage(who.uid, kind, amount, entitled(sub));
-      if (!result.allowed) { await logAudit(who.uid, 'usage.limit_rejected', { kind, requested: amount }); return send(429, { error: `Daily ${kind} allowance reached. It resets at 00:00 UTC.`, ...result }); }
-      await logAudit(who.uid, 'usage.reserved', { kind, amount }); return send(200, result);
+      if (!entitled(sub)) return send(402, { error: 'Web search is part of Premium.' });
+      const q = (url.searchParams.get('q') ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      if (q.length < 2) return send(400, { error: 'Type something to search for.' });
+      try { return send(200, { results: await ddgSearch(q) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
     }
     if (p === '/api/account/link' && req.method === 'POST') {
       if (limited(`link:${ip}`, 20)) return send(429, { error: 'Too many attempts.' });

@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FREE_LIMITS, roleFor, validUsageRequest } from './securityPolicy.ts';
-
-test('free limits remain server-defined', () => {
-  assert.deepEqual(FREE_LIMITS, { image: 30, video: 10 });
-});
+import { roleFor, validUsageRequest } from './securityPolicy.ts';
 
 test('usage reservation validation rejects malformed and oversized values', () => {
   assert.equal(validUsageRequest('image', 4), true);
