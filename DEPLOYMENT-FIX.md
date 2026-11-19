@@ -37,3 +37,16 @@ Every build gets an id (the Vercel commit SHA, or a timestamp). The id is baked 
 - Image and video limits were removed; `/api/usage/reserve` now only confirms sign-in so older installed apps keep working.
 - New Premium-only route `GET /api/search?q=` looks the query up on DuckDuckGo (`server/src/search.ts`). DuckDuckGo has no official search API, so this reads its HTML results page and falls back to its Instant Answer API; if DuckDuckGo blocks or changes that page, the app tells the user web search was unavailable and still answers. Results are cached for 10 minutes in memory.
 - Redeploy the server together with the front end. Free limits (10 attachments and 10 file analyses per 5 hours) live on the device.
+
+
+## v0.5.0: Google Drive sync, offline mode, universal file reading
+
+**Google Drive sync (no Firestore).** Chats, projects and media are copied to each user's own hidden Drive app folder (`appDataFolder`, scope `drive.appdata`). Do these once in Google Cloud for project `pothub-ca2a1`:
+1. Enable the **Google Drive API** (APIs & Services -> Library).
+2. In **Google Auth Platform -> Data access**, add the scope `.../auth/drive.appdata` (a non-sensitive scope, so no Google review is needed).
+3. Optional, web only: set `VITE_GOOGLE_CLIENT_ID` (the web OAuth client Firebase uses for Google sign-in) so the browser renews its Drive token quietly instead of asking the user to reconnect each hour. The Vercel origin must be an authorised JavaScript origin on that client. Without it, web users tap "Connect Google Drive" after the hour is up. The Android app asks through its own Google sheet.
+New sign-ins ask for the Drive permission up front; people who were already signed in tap "Connect Google Drive" once in Account and Billing. I could not test against a real Drive here, so try it with two devices after deploying.
+
+**Offline.** The service worker now saves every built file at install (list injected by `vite.config.ts`), so the app opens offline after the first visit. Requests wait for the connection and resume by themselves: `src/models/online.ts`, `models/http.ts`, and `drive()` in `models/text.ts` (an answer that was streaming continues from where it stopped).
+
+**File reading.** `src/agent/readers.ts` turns documents, sheets, slides, e-books, archives (zip/tar/gz, nested), notebooks, RTF, PDFs (text layer, via `pdfjs-dist`, loaded only when a PDF is attached) and even unknown binaries (readable-strings scan) into text before any model is chosen. Only photos, scanned PDFs and (on Gemini) video/audio go to the provider as they are. Video is otherwise reduced to frames. 7z/RAR cannot be opened on-device. Run `npm install` to pick up `pdfjs-dist`.
