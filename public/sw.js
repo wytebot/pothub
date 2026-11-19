@@ -54,3 +54,14 @@ self.addEventListener('fetch', (event) => {
     }).catch(async () => (await caches.match(request)) || Response.error())
   );
 });
+
+// Tapping a "your job is ready" notification brings Pothub forward and opens the right page.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const route = event.notification.data && event.notification.data.route;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.startsWith(self.location.origin));
+    if (open) { open.postMessage({ type: 'notify-open', route }); return open.focus(); }
+    return self.clients.openWindow('/' + (route ? '#' + route : ''));
+  }));
+});
