@@ -6,6 +6,9 @@ export interface MediaRecord { id: string; projectId: string | null; kind: Media
 /** One saved conversation. */
 export interface ChatRecord { id: string; title: string; createdAt: number; updatedAt: number; messages: ChatMessage[]; }
 
+/** Tells the cloud sync that something on this device changed. */
+const touch = () => { try { window.dispatchEvent(new Event('data:changed')); } catch { /* not in a browser */ } };
+
 const DB_NAME = 'creative-studio';
 const DB_VERSION = 2;
 let dbp: Promise<IDBDatabase> | null = null;
@@ -48,7 +51,7 @@ export async function putBundle(project: ProjectRecord, media: MediaRecord[]): P
     const finished = done(t);
     t.objectStore('projects').put(project);
     for (const m of media) t.objectStore('media').put(m);
-    await finished;
+    await finished; touch();
   } catch (e) { throw friendly(e); }
 }
 
@@ -74,7 +77,7 @@ export async function listMedia(projectId: string): Promise<MediaRecord[]> {
   return req((await open()).transaction('media').objectStore('media').index('projectId').getAll(projectId));
 }
 export async function putMedia(m: MediaRecord): Promise<void> {
-  try { const t = (await open()).transaction('media', 'readwrite'); const f = done(t); t.objectStore('media').put(m); await f; } catch (e) { throw friendly(e); }
+  try { const t = (await open()).transaction('media', 'readwrite'); const f = done(t); t.objectStore('media').put(m); await f; touch(); } catch (e) { throw friendly(e); }
 }
 export async function mediaCount(): Promise<number> {
   return req((await open()).transaction('media').objectStore('media').count());
@@ -85,7 +88,7 @@ export async function deleteProject(id: string): Promise<void> {
   const keys = await req(t.objectStore('media').index('projectId').getAllKeys(id));
   for (const k of keys) t.objectStore('media').delete(k);
   t.objectStore('projects').delete(id);
-  await finished;
+  await finished; touch();
 }
 export async function duplicateProject(id: string): Promise<ProjectRecord> {
   const p = await getProject(id);
@@ -105,12 +108,12 @@ export async function listLibrary(): Promise<MediaRecord[]> {
   return (all as MediaRecord[]).filter((m) => m.projectId === null).sort((a, b) => b.createdAt - a.createdAt);
 }
 export async function deleteMedia(id: string): Promise<void> {
-  const t = (await open()).transaction('media', 'readwrite'); const f = done(t); t.objectStore('media').delete(id); await f;
+  const t = (await open()).transaction('media', 'readwrite'); const f = done(t); t.objectStore('media').delete(id); await f; touch();
 }
 
 // ---------------------------------------------------------------- chat history (IndexedDB, no size cap)
 export async function putChat(c: ChatRecord): Promise<void> {
-  try { const t = (await open()).transaction('chats', 'readwrite'); const f = done(t); t.objectStore('chats').put(c); await f; } catch (e) { throw friendly(e); }
+  try { const t = (await open()).transaction('chats', 'readwrite'); const f = done(t); t.objectStore('chats').put(c); await f; touch(); } catch (e) { throw friendly(e); }
 }
 export async function getChat(id: string): Promise<ChatRecord | undefined> {
   return req((await open()).transaction('chats').objectStore('chats').get(id));
@@ -125,7 +128,7 @@ export async function listChats(): Promise<ChatRecord[]> {
 }
 /** Removes a conversation from this device. */
 export async function deleteChat(id: string): Promise<void> {
-  const t = (await open()).transaction('chats', 'readwrite'); const f = done(t); t.objectStore('chats').delete(id); await f;
+  const t = (await open()).transaction('chats', 'readwrite'); const f = done(t); t.objectStore('chats').delete(id); await f; touch();
 }
 export async function getMeta<T>(key: string): Promise<T | undefined> {
   return req((await open()).transaction('meta').objectStore('meta').get(key)) as Promise<T | undefined>;
@@ -135,4 +138,25 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
 }
 export async function delMeta(key: string): Promise<void> {
   const t = (await open()).transaction('meta', 'readwrite'); const f = done(t); t.objectStore('meta').delete(key); await f;
+}
+
+// ---------------------------------------------------------------- helpers for syncing with the user's Google Drive
+export type MediaInfo = Omit<MediaRecord, 'blob'>;
+/** Every media record without its bytes, so a sync can compare lists without loading videos into memory. */
+export async function mediaIndex(): Promise<MediaInfo[]> {
+  const store = (await open()).transaction('media').objectStore('media');
+  return new Promise((res, rej) => {
+    const out: MediaInfo[] = []; const r = store.openCursor();
+    r.onsuccess = () => { const c = r.result; if (!c) return res(out); const { blob: _b, ...rest } = c.value as MediaRecord; void _b; out.push(rest); c.continue(); };
+    r.onerror = () => rej(r.error);
+  });
+}
+export async function getMedia(id: string): Promise<MediaRecord | undefined> {
+  return req((await open()).transaction('media').objectStore('media').get(id));
+}
+/** Empties chats, projects and media on this device (never the sync bookkeeping). */
+export async function clearLocalData(): Promise<void> {
+  const t = (await open()).transaction(['projects', 'media', 'chats'], 'readwrite'); const f = done(t);
+  for (const n of ['projects', 'media', 'chats']) t.objectStore(n).clear();
+  await f;
 }

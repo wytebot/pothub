@@ -492,3 +492,5 @@ input[type='search'] { width: 100%; }
 .web-button.on { background: #1d3b2a; border-color: #54c27d; color: #7be3a1; }
 .web-button .lock { position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-radius: 50%; background: #e0b34a; border: 2px solid #121212; box-sizing: content-box; }
 .chat-top .usage-sub { display: block; width: 100%; font-size: 12.5px; }
+
+.offline-banner { position: sticky; top: 0; z-index: 30; padding: 8px 14px; background: #3a2f10; color: #f3d98b; border-bottom: 1px solid #6b5518; font-size: 13.5px; text-align: center; }
