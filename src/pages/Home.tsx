@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { attachStatus, clockLabel, consume, costOf, useAttachStatus } from '../quota/attachments';
 import { AnalysisLimitDialog, AttachLimitDialog } from '../ui/AttachLimit';
 import { consumeAnalysis, analysisStatus } from '../quota/analysis';
-import { setWebWanted, webActive, webWanted, webRemaining, WEB_CHANGED } from '../agent/search';
+import { setWebWanted, webWanted, webRemaining, WEB_CHANGED } from '../agent/search';
 import { announceChats, CHAT_OPEN, currentChatId, openChat, setCurrentChatId, titleFrom } from '../chat/state';
 import type { ChatMessage as Msg } from '../chat/types';
 import { getChat, putChat } from '../storage/db';
