@@ -151,7 +151,7 @@ Pothub no longer applies an application-level character, aggregate attachment-si
 The large-file extraction/chunking change does **not** remove plan allowances. Free accounts retain 10 attachments per 5-hour window and 10 completed file-analysis requests per 5-hour window. Both windows begin with the first use and reset 5 hours later. A single analysis request can read multiple source files and counts as one analysis; generated files count when they are supplied as source inputs to a file-analysis request. Premium accounts have unlimited attachments and file analyses. The picker itself remains dynamically plan-aware rather than hard-coding a 10-file cap, so Premium is not accidentally capped.
 
 
-## v0.5.5 editor and research improvements
+## v0.5.6 editor and research improvements
 
 - Pinch with two fingers on the preview to resize the selected visual or text layer; the Position and Resize tools expose a precise size slider.
 - Long-press a timeline clip on touch screens to begin dragging it; move it across time or to another compatible track. Mouse drag and trim handles remain available.

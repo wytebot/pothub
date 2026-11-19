@@ -1,68 +1,19 @@
-# Pothub deployment and stale-site fix
+# Pothub v0.5.6 deployment correction
 
-## Active frontend entry points
+## Build-log fixes
+- `src/agent/attachments.ts`: the compatibility parameter is named `_have` so TypeScript's `noUnusedParameters` does not fail the build.
+- `src/models/text.ts`: removed the invalid `i--` in a non-indexed `for (;;)` retry loop. An empty interrupted round now waits for connectivity and retries the same round.
+- `src/cloud/sync.ts`: this file is not present in this source tree, and there are no imports referencing it. The previous Vercel commit contained an obsolete cloud-sync module importing a nonexistent `mediaIndex`. When deploying this full source tree, delete that stale file from Git if it remains tracked; do not restore Google Drive sync or add a fake `mediaIndex` export.
 
-Vercel builds this project from the repository root. `index.html` loads `/src/main.tsx`; that file mounts `src/App.tsx` and imports `src/styles.css`. The old duplicate root-level copies (`App.tsx`, `styles.css`, `pages/`, `agent/`, `models/`, `ui/`, `auth/`, `vault/`, `security/`) were removed in v0.3.0 so edits can only land in `src/`.
+## Web research policy
+Every text response now attempts a web search before generation, including stable, creative, and explanatory prompts. Existing plan allowances remain in force: Free retains its current daily search limit; Premium remains unlimited. If the Free allowance is exhausted or the search service fails, Pothub explains that fresh web results were unavailable rather than pretending a search succeeded. Search result URLs are passed to the model with instructions to cite them and distinguish verified information from uncertainty.
 
-## Vercel settings
+## Deploy
+1. Replace the repository contents with this complete source tree.
+2. Confirm the obsolete `src/cloud/sync.ts` is deleted if it exists in the repository.
+3. Deploy the frontend and server together so `/api/search` is available.
+4. Run `npm install` and `npm run build` in CI/Vercel.
+5. Review `npm audit` separately; do not run `npm audit fix --force` without reviewing breaking changes.
 
-- Root directory: `./` (repository root)
-- Framework preset: Vite
-- Install command: `npm install`
-- Build command: `npm run build`
-- Output directory: `dist`
-- Production branch: `main` (or the branch intentionally connected to Production)
-
-The build command now runs TypeScript validation before Vite emits `dist/`.
-
-## Updating from a ZIP
-
-Do not upload the ZIP itself as a single file and expect Vercel to unpack it. Extract the ZIP and commit its **contents** into the connected GitHub repository, preserving the root layout (`package.json`, `index.html`, `src/`, `public/`, and `vercel.json` must be at repository root). Push the commit to the branch configured for Vercel Production. Then verify that the Production deployment's commit SHA matches the new GitHub commit and that the build succeeds.
-
-## Cache behaviour
-
-The deployment sends no-store/no-cache headers for the HTML entry and service worker. The service worker was versioned to `pothub-static-v4`, uses network-first navigation, does not intercept Firebase auth or `/api/`, and checks for an updated worker when the page loads. If an installed PWA still displays an old shell after deployment, close it fully and reopen; if needed, clear the site's stored data/service worker once from browser site settings.
-
-## Verification limitation
-
-The source ZIP and JSON configuration were inspected. Dependency installation timed out in the execution environment, so a complete `npm run build` and live Vercel deployment could not be verified here. Vercel's deployment log remains the authoritative check for the actual production build.
-
-
-## Never serving an old version (v0.3.0)
-
-Every build gets an id (the Vercel commit SHA, or a timestamp). The id is baked into the app (`__BUILD_ID__`), into `dist/version.json`, and into the service worker's cache name (`pothub-static-<id>`), so each deployment changes `sw.js` and the browser installs it and deletes the old cache. The app checks `/version.json` (served no-store) when it opens, when you return to it and every 10 minutes: right after opening it reloads itself onto the new version, and mid-use it shows an "Update now" notice so a running answer is never cut off. It reloads at most once per version, so it cannot loop. The Android APK carries its own files and skips this check; rebuild the APK to ship changes there.
-
-## Server (billing service) changes in v0.4.0
-
-- Image and video limits were removed; `/api/usage/reserve` now only confirms sign-in so older installed apps keep working.
-- New Authenticated route `GET /api/search?q=` (3 daily searches for Free; up to 30 for Premium) looks the query up on DuckDuckGo (`server/src/search.ts`). DuckDuckGo has no official search API, so this reads its HTML results page and falls back to its Instant Answer API; if DuckDuckGo blocks or changes that page, the app tells the user web search was unavailable and still answers. Results are cached for 10 minutes in memory.
-- Redeploy the server together with the front end. Free limits (10 attachments and 10 file analyses per 5 hours) live on the device.
-
-
-## v0.5.2: backups, request routing, quality checks and memory
-
-**Offline.** The service worker caches the app shell. Network requests still require connectivity; provider generation is not guaranteed to finish if the browser or Android process is terminated.
-
-**File reading.** `src/agent/readers.ts` reads documents, sheets, slides, e-books, ZIP/TAR/GZIP archives, notebooks, RTF, PDFs (text layer), and attempts readable-string recovery for unknown binaries. 7z/RAR are not currently supported on-device. Unsupported or encrypted formats are reported rather than silently treated as fully read.
-
-## Full backup and restore
-
-The Storage page exports chat history, editing projects and saved media into a downloadable ZIP. Restore merges by stable record ID and timestamp: newer backup records update matching records, older versions do not overwrite newer local records, and unrelated local data is never cleared. Keep multiple copies of the ZIP outside the app.
-
-Google Drive syncing has been removed. Backups are user-managed downloads; no cloud copy is created by Pothub.
-
-
-**Request routing and QA.** Explicit image/video requests no longer fall back to a text answer when a media provider is unavailable. Text responses receive an independent request-compliance review; file-based answers are checked against extracted source evidence. Image/video outputs are checked for valid non-empty files before saving. This is structural QA, not a guarantee of semantic perfection.
-
-**Conversation context.** Full history remains saved locally. Free requests include up to 8 recent exchanges from the current conversation; Premium includes up to 40. Editing a user request updates its existing assistant response in place.
-
-**Web research.** Free accounts can use 3 searches per day (up to 3 results); Premium can use up to 30 searches per day (up to 8 results). The server enforces the allowance.
-
-
-## v0.5.3: complete extraction and unbounded continuation
-
-Removed the 4,000,000-character text/Word extraction truncation, 25 MB archive-entry skip, 400-entry archive cap, 3 MB archive text budget, 30 MB binary strings scan cap, and 400,000-character strings output cap. Removed application-level attachment count and aggregate size caps. All readable archive entries are extracted and passed through the existing chunk pipeline. Chunk summaries are hierarchically consolidated to keep each provider request within practical context sizes. Removed the fixed 400-round generation ceiling; provider length-limit continuations now continue until completion or an explicit provider/network/cancellation failure. Device/browser memory, provider file-size/context limits, network availability, quotas, and unsupported/encrypted formats remain unavoidable platform constraints and are reported instead of silently truncating content.
-
-
-## v0.5.4: restore/confirm Free and Premium file allowances
-The extraction-cap removal does not remove subscription allowances. Free remains limited to 10 attachments per 5-hour window and 10 completed file-analysis requests per 5-hour window. Premium remains unlimited for both. Attachment allowance counts distinct files submitted; analysis allowance counts one completed request that reads one or more source files. Generated files are included when attached/reintroduced as source inputs for analysis. The UI copy and policy text now state this explicitly, and regression tests cover the Free limits, 5-hour reset, duplicate attachment resends, and Premium unlimited status.
+## Verification note
+The source-level corrections are applied. A full TypeScript/Vite build could not be run in this environment because dependency installation timed out; CI must confirm the final build.
