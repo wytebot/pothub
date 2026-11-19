@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isPremium } from './daily';
 
-/** Free plan: 10 attachments, then they come back 5 hours after the first one of the batch was used. Premium has no limit. */
+/** Free plan: 10 uploaded/selected attachments per rolling usage window; all 10 return 5 hours after the first is consumed. Premium is unlimited. This quota is separate from extraction/chunking limits. */
 export const ATTACH_LIMIT = 10;
 export const ATTACH_WINDOW_MS = 5 * 3_600_000;
 const KEY = 'attach.window.v1';

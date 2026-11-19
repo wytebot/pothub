@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isPremium } from './daily';
 
-/** File analysis: a message that has files attached and is answered by reading them. Free: 10, which come back 5 hours after the first one of the batch. Premium: unlimited. */
+/** File analysis: one analysis is charged when a request actually reads one or more source files (user-attached or generated files supplied as inputs). Free: 10 analyses per 5-hour window; Premium: unlimited. This quota is separate from extraction/chunking limits. */
 export const ANALYSIS_LIMIT = 10;
 export const ANALYSIS_WINDOW_MS = 5 * 3_600_000;
 const KEY = 'analysis.window.v1';
@@ -26,7 +26,7 @@ export function analysisStatus(now = Date.now()): AnalysisStatus {
   return { unlimited: false, limit: ANALYSIS_LIMIT, used, left: Math.max(0, ANALYSIS_LIMIT - used), resetsAt: w ? w.start + ANALYSIS_WINDOW_MS : null };
 }
 
-/** Counts one analysis. Called only after the files were actually read and answered. The 5 hours start with the first one. */
+/** Counts one completed file-analysis request, regardless of how many source files it included. Call only after files were actually read and answered. The 5-hour window starts with the first completed analysis. */
 export function consumeAnalysis(now = Date.now()) {
   if (isPremium()) return;
   const w = read(now);
