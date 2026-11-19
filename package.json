@@ -1,15 +1,15 @@
 {
   "name": "pothub",
   "private": true,
-  "version": "0.5.7",
+  "version": "0.5.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/remove-obsolete-drive-sync.mjs && node scripts/check-public-env.mjs && tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "node scripts/remove-obsolete-drive-sync.mjs && tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "android:sync": "npm run build && cap sync android && node scripts/copy-google-services.mjs"
+    "android:sync": "npm run build && cap sync android && node scripts/copy-google-services.mjs && node scripts/copy-android-resources.mjs"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^8.0.2",
@@ -19,6 +19,7 @@
     "@capacitor/browser": "^6.0.1",
     "@capacitor/core": "^6.1.2",
     "@capacitor/filesystem": "^6.0.1",
+    "@capacitor/local-notifications": "^6.1.2",
     "@capacitor/share": "^6.0.2",
     "@capacitor/status-bar": "^6.0.1",
     "fflate": "^0.8.2",
