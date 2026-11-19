@@ -7,13 +7,13 @@ export const COLORS = [
   { name: 'Coral', value: '#ff927e' }, { name: 'Amber', value: '#f3c66b' },
   { name: 'Rose', value: '#f18bb5' }, { name: 'Lime', value: '#b5d879' },
 ];
-const shapes: Record<PotShape, string> = {
-  classic: '<path d="M7 9h10l-1.1 10H8.1L7 9Z"/><path d="M6 6h12v3H6z"/><path d="M9 6V4h6v2"/>',
-  round: '<path d="M6 9h12l-1.5 10h-9L6 9Z"/><path d="M5 6h14v3H5z"/>',
-  tall: '<path d="M8 8h8l-1 11H9L8 8Z"/><path d="M7 5h10v3H7z"/>',
-  wide: '<path d="M5 9h14l-1.5 10h-11L5 9Z"/><path d="M4 6h16v3H4z"/>',
-  fluted: '<path d="M7 9h10l-1.2 10H8.2L7 9Z"/><path d="M6 6h12v3H6z"/><path d="M9 10v8m3-8v8m3-8v8"/>',
-  handle: '<path d="M7 9h10l-1.1 10H8.1L7 9Z"/><path d="M6 6h12v3H6z"/><path d="M6 11H4v5h3m11-5h2v5h-3"/>',
+const shapes: Record<PotShape, { move: string; art: string }> = {
+  classic: { move: 'translate(0 3)', art: '<rect x="29.5" y="9" width="5" height="4" rx="2"/><path d="M17 21a15 8 0 0 1 30 0z"/><rect x="13" y="23" width="38" height="5" rx="2.5"/><path d="M16 28h32v16a6 6 0 0 1-6 6H22a6 6 0 0 1-6-6z"/><rect x="8" y="31" width="8" height="4" rx="2"/><rect x="48" y="31" width="8" height="4" rx="2"/>' },
+  round: { move: 'translate(0 2)', art: '<rect x="29" y="11" width="6" height="4" rx="2"/><path d="M16 24a16 9 0 0 1 32 0z"/><rect x="14" y="26" width="36" height="4" rx="2"/><path d="M15 30h34v6a17 14 0 0 1-34 0z"/><rect x="9" y="32" width="6" height="4" rx="2"/><rect x="49" y="32" width="6" height="4" rx="2"/>' },
+  tall: { move: 'translate(0 2)', art: '<rect x="29.5" y="8" width="5" height="4" rx="2"/><path d="M21 18a11 6 0 0 1 22 0z"/><rect x="19" y="20" width="26" height="4" rx="2"/><path d="M21 24h22v24a5 5 0 0 1-5 5H26a5 5 0 0 1-5-5z"/><rect x="14" y="28" width="7" height="4" rx="2"/><rect x="43" y="28" width="7" height="4" rx="2"/>' },
+  wide: { move: 'translate(0 0)', art: '<rect x="29" y="16" width="6" height="4" rx="2"/><path d="M13 28a19 8 0 0 1 38 0z"/><rect x="9" y="30" width="46" height="4" rx="2"/><path d="M11 34h42v6a8 8 0 0 1-8 8H19a8 8 0 0 1-8-8z"/><rect x="4" y="35" width="7" height="4" rx="2"/><rect x="53" y="35" width="7" height="4" rx="2"/>' },
+  fluted: { move: 'translate(0 3)', art: '<rect x="29.5" y="9" width="5" height="4" rx="2"/><path d="M17 21a15 8 0 0 1 30 0z"/><rect x="13" y="23" width="38" height="5" rx="2.5"/><path d="M16 28h32v16a6 6 0 0 1-6 6H22a6 6 0 0 1-6-6z"/><rect x="8" y="31" width="8" height="4" rx="2"/><rect x="48" y="31" width="8" height="4" rx="2"/><path d="M24 32v14M32 32v14M40 32v14" fill="none" stroke="{b}" stroke-width="2" stroke-linecap="round" opacity=".4"/>' },
+  handle: { move: 'translate(-4 3)', art: '<rect x="26.5" y="9" width="5" height="4" rx="2"/><path d="M15 21a14 7 0 0 1 28 0z"/><rect x="12" y="23" width="34" height="5" rx="2.5"/><path d="M14 28h30v16a6 6 0 0 1-6 6H20a6 6 0 0 1-6-6z"/><rect x="46" y="31" width="14" height="5" rx="2.5"/>' },
 };
 export const DEFAULT_APPEARANCE: Appearance = { pot: 'classic', color: '#f3f3f3' };
 export function getAppearance(): Appearance {
@@ -24,7 +24,8 @@ export function getAppearance(): Appearance {
   } catch { return DEFAULT_APPEARANCE; }
 }
 export function potSvg(pot: PotShape, color: string, bg = '#0d0d0d') {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="${bg}"/><g fill="none" stroke="${color}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">${shapes[pot]}<path d="M32 4v-1m-4 2 4-3 4 3"/></g></svg>`;
+  const { move, art } = shapes[pot];
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="${bg}"/><g transform="${move}" fill="${color}">${art.split('{b}').join(bg)}</g></svg>`;
 }
 const data = (s: string) => `data:image/svg+xml,${encodeURIComponent(s)}`;
 export function applyAppearance(a: Appearance) {

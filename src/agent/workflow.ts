@@ -15,6 +15,7 @@ import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
 import { resultsBlock, webSearch, webRemaining, shouldAutoWebSearch } from './search';
 import { readyFiles } from './readers';
+import { notifyDone } from '../notify';
 
 const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
@@ -115,6 +116,7 @@ export async function runImage(o: { /** the caller already decided this is an im
       log.step('Checking the generated image files…');
       const bytes = made.reduce((n, m) => n + m.blob.size, 0);
       log.done(g, `${made.length} image${made.length > 1 ? 's' : ''} · ${(bytes / 1_048_576).toFixed(1)} MB · ${secs(Date.now() - t0)}`);
+      void notifyDone({ kind: 'image', title: made.length > 1 ? 'Your images are ready' : 'Your image is ready', body: `${plan.model.name} finished “${q(prompt, 60).slice(1, -1)}”.`, route: '/image' });
       return { images: made, model: plan.model, aspect: plan.aspect, notes, prompt };
     } catch (e) {
       lastErr = e; log.fail(g, msg(e));
@@ -352,6 +354,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
         } catch { notes.push('The answer is above, but I could not build the file this time. You can copy it from the chat.'); }
       }
       saveGood(model.id);
+      void notifyDone({ kind: 'text', title: file ? 'Your answer and file are ready' : 'Your answer is ready', body: `${model.name} finished “${q(prompt, 60).slice(1, -1)}”.`, route: '/' });
       return { text: out.text, model, file, notes };
     } catch (e) {
       lastErr = e; log.fail(g, msg(e));
