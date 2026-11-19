@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { attachStatus, clockLabel, consume, costOf, useAttachStatus } from '../quota/attachments';
 import { AnalysisLimitDialog, AttachLimitDialog } from '../ui/AttachLimit';
 import { consumeAnalysis, analysisStatus } from '../quota/analysis';
-import { setWebWanted, webWanted, webRemaining, WEB_CHANGED } from '../agent/search';
+
 import { announceChats, CHAT_OPEN, currentChatId, openChat, setCurrentChatId, titleFrom } from '../chat/state';
 import type { ChatMessage as Msg } from '../chat/types';
 import { getChat, putChat } from '../storage/db';
@@ -133,7 +133,7 @@ export function Home() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [ready, setReady] = useState(false);
   const [limitDlg, setLimitDlg] = useState<null | 'over' | 'last' | 'analysis'>(null);
-  const [web, setWeb] = useState(webWanted);
+
   const idRef = useRef('');
   const created = useRef(0);
   const fromLoad = useRef<Msg[] | null>(null);
@@ -160,8 +160,7 @@ export function Home() {
   const prompts = useMemo(() => [...PROMPTS].sort(() => Math.random() - 0.5), []);
   const providerCount = new Set(FNS.flatMap((f) => defaultKeys(f).map((k) => k.provider))).size;
   const attach = useAttachStatus();
-  const webOn = web;
-  useEffect(() => { const f = () => setWeb(webWanted()); window.addEventListener(WEB_CHANGED, f); return () => window.removeEventListener(WEB_CHANGED, f); }, []);
+
   const staged = costOf(files.map((f) => f.id));
   const noRoom = !attach.unlimited && attach.left - staged <= 0;
   const closeMenu = useCallback(() => setMenu(false), []);
@@ -469,7 +468,6 @@ export function Home() {
               <input ref={fileIn} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
               <input ref={camIn} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
-            <button className={`web-button${webOn ? ' on' : ''}`} type="button" aria-label="Web search" aria-pressed={webOn} title={webOn ? `Web search is on (${Number.isFinite(webRemaining()) ? `${webRemaining()} free searches left today` : 'Premium research'})` : 'Search the web (free: 3 daily searches; Premium: deeper results)'} onClick={() => setWebWanted(!web)}><Icon name="globe" size={20} /></button>
             <textarea ref={input} value={idea} rows={1} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, or describe an image or video…'} aria-label="Message"
               onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
               onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
