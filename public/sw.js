@@ -2,10 +2,13 @@
 // becomes visible immediately; only static same-origin files are cached.
 // __BUILD_ID__ is replaced at build time, so every deployment gets its own cache and the old one is deleted on activation.
 const CACHE = 'pothub-static-__BUILD_ID__';
+// The build fills this with every file the app needs (see vite.config.ts), so the whole app opens offline right after the first visit.
+const PRECACHE = /*__PRECACHE__*/[];
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
+  // One missing file must never stop the rest from being saved.
+  event.waitUntil(caches.open(CACHE).then((cache) => Promise.all([...APP_SHELL, ...PRECACHE].map((u) => cache.add(u).catch(() => undefined)))));
   self.skipWaiting();
 });
 
@@ -34,8 +37,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Vite's fingerprinted /assets files are immutable; other static files use
-  // stale-while-revalidate with a fresh response preferred whenever online.
+  // Vite's fingerprinted /assets files never change, so the saved copy is used first (fast, and works offline).
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(caches.match(request).then((hit) => hit || fetch(request).then((response) => {
+      if (response.ok) caches.open(CACHE).then((cache) => cache.put(request, response.clone()));
+      return response;
+    })));
+    return;
+  }
+
+  // Other static files: a fresh copy whenever online, the saved one otherwise.
   event.respondWith(
     fetch(request).then((response) => {
       if (response.ok) caches.open(CACHE).then((cache) => cache.put(request, response.clone()));
