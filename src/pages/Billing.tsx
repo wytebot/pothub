@@ -3,6 +3,7 @@ import { apiConfigured, clearLicense, getConfig, getRates, hasPendingPayment, hi
 import { isPremium } from '../quota/daily';
 import { Dialog } from '../ui/Dialog';
 import { AccountPanel } from '../ui/Account';
+import { CloudSyncPanel } from '../ui/CloudSync';
 import { ngnFor, usdToNgn, type Fx } from '../billing/fx';
 
 const naira = (n: number) => `₦${n.toLocaleString('en-NG')}`;
@@ -100,10 +101,10 @@ export function Billing() {
         <div className="panel stack" key={p.id}><h2>{p.name}</h2>
           <div className="stat">${p.usd}<span className="muted small"> / {p.per}</span></div>
           {price(p.id) || fx ? <div className="stat naira">{price(p.id) ? naira(price(p.id)!) : `≈ ${naira(ngnFor(p.usd, fx!.rate))}`}<span className="muted small"> {price(p.id) ? 'once' : 'estimate'}</span></div> : <p className="muted small">Loading the naira price…</p>}
-          <p className="muted small">{price(p.id) ? `Charged once in naira at ₦${rates!.usdNgn.toFixed(2)} per US$1 (${new Date(rates!.asOf).toLocaleDateString()}), rounded up to the nearest ₦${rates!.roundedUpToNearest ?? 10}.` : fx ? `About ₦${fx.rate.toFixed(2)} per US$1${fx.live ? '' : ' (last known rate)'}. The exact naira amount is shown before you pay.` : 'The naira amount is shown before you pay.'}</p>
           <button className="btn primary" disabled={!cfg?.checkoutEnabled || !price(p.id)} onClick={() => setPay(p.id)}>{isPremium() ? 'Add time' : 'Buy'} {p.name.toLowerCase()}</button></div>))}</div>
       <div className="panel"><h2>Premium includes</h2><ul className="plain-list"><li><strong>Unlimited file analysis.</strong> Free accounts get 10 every 5 hours.</li><li><strong>Web search.</strong> A switch beside the message box makes Pothub look things up on the web before it answers.</li><li><strong>No attachment limit.</strong> Free accounts get 10 attachments every 5 hours.</li></ul><p className="muted small">Image and video creation are unlimited for everyone. You still pay your AI providers directly, and their limits still apply.</p>
         <p className="muted small">Read the <a href="#/legal/billing">Subscription and Billing Policy</a>, <a href="#/legal/refunds">Cancellation and Refund Policy</a> and <a href="#/legal/terms">Terms</a> first.</p></div>
+      <CloudSyncPanel />
       {hasPendingPayment() && <div className="panel stack"><h2>Payment waiting</h2><p className="muted">Finished paying? Check it.</p><div className="row"><button className="btn primary" disabled={busy} onClick={async () => { setBusy(true); try { const s = await payStatus(); if (s?.state === 'paid') { await loadAccount(storedLicense()); setMsg({ text: 'Payment confirmed. Premium is active.' }); } else setMsg({ text: s?.state === 'pending' ? 'Still waiting for the bank.' : 'That payment was not completed.', error: s?.state === 'failed' }); } catch (e) { setMsg({ text: e instanceof Error ? e.message : 'Could not check.', error: true }); } finally { setBusy(false); tick((n) => n + 1); } }}>Check payment</button></div></div>}
       {pays.length > 0 && <div className="panel"><h2>Billing history</h2><ul className="list flush">{pays.map((x) => <li key={x.reference} className="item"><span className="grow small">{x.at ? new Date(x.at).toLocaleDateString() : ''}</span><span>{x.currency === 'NGN' ? naira(x.amount) : `${x.amount} ${x.currency}`}</span></li>)}</ul></div>}
       <div className="panel stack"><h2>Verify or restore premium</h2>

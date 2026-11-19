@@ -1,4 +1,5 @@
 import type { ProviderId } from '../vault/vault';
+import { isOnline, waitOnline } from './online';
 import { base64Of, textOf, type AttachKind, type Attachment } from '../agent/attachments';
 import { call, canStream, failure, perr, type ProviderErr } from './http';
 
@@ -133,15 +134,19 @@ const MAX_ROUNDS = 400; // a safety stop only; a long answer simply keeps going 
 const MAX_DROPS = 4;
 
 /** Runs one round after another until the model finishes. A round that stops at its length limit, or whose connection drops part-way, is continued from exactly where it stopped. Returns true if it still ended unfinished. */
-async function drive(once: (take: (t: string) => void) => Promise<Round>, carryOn: (written: string) => void, push: (t: string) => void): Promise<boolean> {
+async function drive(once: (take: (t: string) => void) => Promise<Round>, carryOn: (written: string) => void, push: (t: string) => void, signal?: AbortSignal): Promise<boolean> {
   let unfinished = false; let drops = 0;
   for (let i = 0; i < MAX_ROUNDS; i++) {
     let got = ''; const take = (t: string) => { got += t; push(t); };
     let round: Round;
     try { round = await once(take); }
     catch (e) {
-      const status = (e as ProviderErr).status;
-      if (got && !status && !(e instanceof Error && e.message === 'Cancelled.') && drops < MAX_DROPS) { drops++; round = { text: got, truncated: true }; } else throw e;
+      const status = (e as ProviderErr).status; const net = !status && !(e instanceof Error && e.message === 'Cancelled.');
+      if (net && !isOnline()) {
+        // Offline mid-answer: pause, then carry on from exactly where it stopped (or start the round again if nothing had arrived).
+        await waitOnline(signal);
+        if (got) round = { text: got, truncated: true }; else { i--; continue; }
+      } else if (got && net && drops < MAX_DROPS) { drops++; round = { text: got, truncated: true }; } else throw e;
     }
     unfinished = round.truncated;
     if (!round.truncated || !round.text.trim()) break;
@@ -161,7 +166,7 @@ export async function generateText(p: ProviderId, secret: string, r: TextRequest
 
   if (p === 'gemini') {
     const contents: unknown[] = [...r.history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.text }] })), { role: 'user', parts: await geminiParts(r, r.prompt, skip) }];
-    truncated = await drive((take) => geminiRound(secret, r, contents, stream, take), (text) => { contents.push({ role: 'model', parts: [{ text }] }, { role: 'user', parts: [{ text: CONTINUE }] }); }, push);
+    truncated = await drive((take) => geminiRound(secret, r, contents, stream, take), (text) => { contents.push({ role: 'model', parts: [{ text }] }, { role: 'user', parts: [{ text: CONTINUE }] }); }, push, r.signal);
   } else {
     const content: unknown[] = [];
     for (const f of r.files) {
@@ -172,7 +177,7 @@ export async function generateText(p: ProviderId, secret: string, r: TextRequest
     }
     content.push({ type: 'text', text: r.prompt });
     const messages: unknown[] = [{ role: 'system', content: r.system }, ...r.history.map((h) => ({ role: h.role, content: h.text })), { role: 'user', content: content.length === 1 ? r.prompt : content }];
-    truncated = await drive((take) => compatRound(p, secret, r, messages, stream, take), (text) => { messages.push({ role: 'assistant', content: text }, { role: 'user', content: CONTINUE }); }, push);
+    truncated = await drive((take) => compatRound(p, secret, r, messages, stream, take), (text) => { messages.push({ role: 'assistant', content: text }, { role: 'user', content: CONTINUE }); }, push, r.signal);
   }
   if (!soFar.trim()) throw perr('The model sent back an empty answer. Try again, or try a different model.');
   return { text: soFar.trim(), truncated, unread: skip.map((f) => f.name) };
