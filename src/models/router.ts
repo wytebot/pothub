@@ -6,6 +6,8 @@ export interface Intent { task: Task; aspect?: string; /** true when the wording
 
 const MEDIA_NOUN = 'image|images|picture|pictures|photo|photos|photograph|illustration|drawing|painting|poster|logo|icon|wallpaper|portrait|artwork|art|sketch|thumbnail|banner|avatar|sticker|cartoon|render|rendering|mockup|video|videos|clip|animation|reel|footage|advert|advertisement|commercial';
 const MEDIA_ASK = new RegExp(`\\b(generate|create|make|draw|render|produce|design|paint|illustrate|animate|imagine|show me)\\b[^.?!\\n]{0,48}\\b(${MEDIA_NOUN})\\b`, 'i');
+/** Longer than this and the message is a brief or an instruction list, not "make me a poster of X". */
+const MEDIA_MAX_WORDS = 60;
 const VIDEO_WORD = /\b(video|videos|animate|animation|moving|clip|film|reel|footage|advertisement|advert|commercial)\b|\b\d+[- ]?seconds?\b/i;
 const TEXT_START = /^(please\s+|kindly\s+|hey\s+|hi\s+)?(can|could|would|will)?\s*(you\s+)?(please\s+)?(help me( to)?\s+)?(i (need|want|would like) (you )?to\s+)?(write|draft|compose|explain|summari[sz]e|translate|rewrite|proofread|paraphrase|fix|debug|refactor|review|analy[sz]e|compare|list|outline|brainstorm|suggest|recommend|define|solve|calculate|convert|extract|plan|teach|tell me|give me|what|whats|what's|why|how|who|when|where|which|is|are|do|does|did|should|can|could|would|find|check|correct|improve|continue|expand|shorten|format|organi[sz]e|prepare|build|code|implement|answer|quiz|test me|research|create (a |an |the )?(report|essay|plan|outline|summary|document|spreadsheet|table|script|schedule|checklist|cv|resume|letter|email|proposal|presentation|lesson|story|poem|article|post|caption|function|class|app|website|program|sql|query))\b/i;
 const DOC_WORDS = /\b(essay|report|article|email|e-mail|letter|cv|resume|proposal|summary|summarise|summarize|code|script|function|spreadsheet|csv|json|markdown|pdf|docx|word document|presentation|slides|poem|story|lyrics|blog|lesson plan|business plan|study plan|meal plan|table|outline|checklist|cover letter|speech|press release|contract|policy|essay|translation|worksheet|notes|minutes|agenda|itinerary|recipe|schema|database|api|algorithm|query|sql|regex|strategy|guide|tutorial|curriculum|syllabus|pitch|dataset|sample data|template|readme|documentation|brief|memo|newsletter|caption|slogan|tagline|jingle)\b/i;
@@ -33,8 +35,12 @@ export function interpret(text: string, o: { hasFiles?: boolean; hasImageFile?: 
   const words = t.split(/\s+/).filter(Boolean).length;
   const question = /^(how|what|whats|what's|why|who|when|where|which|is|are|do|does|did|should)\b/.test(t) || /\?\s*$/.test(t);
   const writeFirst = /^(write|draft|compose|explain|summari[sz]e|translate|rewrite|proofread|paraphrase)\b/.test(t);
-  const mediaNoDoc = MEDIA_ASK.test(t) && !DOC_WORDS.test(t.replace(new RegExp(`\\b(${MEDIA_NOUN})\\b`, 'gi'), ''));
-  const drawFirst = /^(draw|paint|sketch|illustrate|imagine|animate)\b/.test(t);
+  // A picture/video request is stated up front and is short. Judge only the opening sentence, and only for short messages, so a long
+  // brief that merely mentions "video" or "produce" further down ("...so it doesn't produce texts instead of video") stays a text job.
+  const lead = t.split(/[?!\n]|\.\s/)[0] ?? t;
+  const mediaOk = words <= MEDIA_MAX_WORDS && !(o.hasFiles && !o.hasImageFile); // a zip/pdf/doc attached means the work is on that file
+  const mediaNoDoc = mediaOk && MEDIA_ASK.test(lead) && !DOC_WORDS.test(lead.replace(new RegExp(`\\b(${MEDIA_NOUN})\\b`, 'gi'), ''));
+  const drawFirst = mediaOk && /^(draw|paint|sketch|illustrate|imagine|animate)\b/.test(t);
   // A question or a "write ..." request is for a text model even when it mentions a video or a picture ("write a script for a video").
   if (o.hasImageFile && EDIT_ASK.test(t)) return { task: 'edit', aspect, explicit: true };
   if (!question && !writeFirst && (mediaNoDoc || drawFirst)) return VIDEO_WORD.test(t) || /^animate\b/.test(t) ? { task: 'video', aspect, explicit: true } : { task: 'image', aspect, explicit: true };
@@ -44,7 +50,7 @@ export function interpret(text: string, o: { hasFiles?: boolean; hasImageFile?: 
   if (o.hasFiles) return { task: 'text', explicit: false };
   if (question || writeFirst || TEXT_START.test(t)) return { task: 'text', explicit: true };
   if (DOC_WORDS.test(t)) return { task: 'text', explicit: false };
-  if (VIDEO_WORD.test(t)) return { task: 'video', aspect, explicit: false };
+  if (VIDEO_WORD.test(t) && words <= MEDIA_MAX_WORDS) return { task: 'video', aspect, explicit: false };
   if (words > 45) return { task: 'text', explicit: false };
   return { task: 'image', aspect, explicit: false };
 }
