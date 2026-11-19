@@ -1,4 +1,5 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { isOnline, waitOnline } from './online';
 
 export type ProviderErr = Error & { status?: number };
 export const perr = (m: string, status?: number): ProviderErr => Object.assign(new Error(m), { status });
@@ -48,10 +49,22 @@ export async function imageFromBlob(b: Blob): Promise<{ blob: Blob; mime: string
 }
 
 export async function call(url: string, init: RequestInit, secret: string): Promise<Response> {
-  try {
-    if (useNative(url)) return await nativeFetch(url, init);
-    return await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(120_000) });
-  } catch (e) {
+  // Offline: wait for the connection (the person can still cancel), then send. If the connection drops during the request, send it again once it is back.
+  for (;;) {
+    await waitOnline(init.signal ?? undefined);
+    try {
+      if (useNative(url)) return await nativeFetch(url, init);
+      return await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(120_000) });
+    } catch (e) {
+      const stopped = e instanceof DOMException && (e.name === 'AbortError' || e.name === 'TimeoutError');
+      if (!stopped && !isOnline()) continue;
+      return fail(e, url, secret);
+    }
+  }
+}
+
+function fail(e: unknown, url: string, secret: string): never {
+  {
     if (e instanceof DOMException && e.name === 'AbortError') throw new Error('Cancelled.');
     if (e instanceof DOMException && e.name === 'TimeoutError') throw new Error('The provider took too long to respond. Try again.');
     if (!Capacitor.isNativePlatform() && !BROWSER_OK.has(hostOf(url))) throw new Error('Could not reach the provider. If you are online, this provider may not allow requests from a web browser. It works in the Pothub Android app.');

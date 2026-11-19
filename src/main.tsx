@@ -4,6 +4,7 @@ import { App } from './App';
 import { platform } from './platform';
 import { startAnalytics } from './firebase';
 import { startAccountSync } from './auth/sync';
+import { startCloudSync } from './cloud/sync';
 import { watchForNewVersion } from './version';
 import './styles.css';
 import { applyAppearance, getAppearance } from './appearance';
@@ -19,6 +20,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 }
 startAnalytics();
 startAccountSync();
+startCloudSync();
 watchForNewVersion();
 // After a bank (3-D Secure) page, send the customer back to Billing to confirm the payment.
 if (location.search && localStorage.getItem('billing.pending')) location.hash = '/billing';

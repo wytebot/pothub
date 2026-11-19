@@ -14,6 +14,7 @@ import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
 import { resultsBlock, webSearch } from './search';
+import { readyFiles } from './readers';
 
 const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
 const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
@@ -194,6 +195,13 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       else { notes.push('Web search found nothing useful, so this answer does not include live results.'); }
     } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push('Web search was not available this time, so this answer does not include live results.'); }
   }
+  // Every file is made readable on this device first (documents, sheets, slides, archives, unknown formats...), before any provider is chosen.
+  let files = o.files;
+  if (files.length) {
+    log.step('Reading your files…');
+    const ready = await readyFiles(files, { nativeMedia: defaultKeys('text').some((k) => k.provider === 'gemini'), step: (s) => log.step(s) });
+    files = ready.files; notes.push(...ready.notes);
+  }
   const pref = flags.prefer ?? o.prefer;
   const skipKeys = new Set<string>(); const tried = new Set<string>(); let lastErr: unknown; let partial = '';
   // The whole conversation is sent. Only if a model says it cannot hold that much do the oldest turns step aside, and the person is told.
@@ -204,8 +212,8 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
     const live = new Set(defaultKeys('text', skipKeys).map((k) => k.provider));
     const usable = catalog.texts.filter((m) => live.has(m.provider) && !tried.has(m.id)); const cool = blockedNow();
     const pool = usable.filter((m) => !cool.has(m.id)).length ? usable.filter((m) => !cool.has(m.id)) : usable;
-    const r = log.start('cmd', `pothub route --task text --prefer ${pref}${o.files.length ? ` --files ${o.files.length}` : ''}`);
-    const ranked = rankText(pool, pref, { kinds: o.files.map((f) => f.kind) });
+    const r = log.start('cmd', `pothub route --task text --prefer ${pref}${files.length ? ` --files ${files.length}` : ''}`);
+    const ranked = rankText(pool, pref, { kinds: files.map((f) => f.kind) });
     const want = flags.model ?? (getSettings().textModel !== 'auto' ? getSettings().textModel : undefined);
     const forced = want ? ranked.find((m) => m.id === want) : undefined;
     const model = forced ?? ranked.find((m) => m.id === goodModel()) ?? ranked[0];
@@ -219,10 +227,10 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
     const key = usableKey(model.provider, 'text', skipKeys); if (!key) { tried.add(model.id); continue; }
     let secret: string; try { secret = await getSecret(key.id); } catch (e) { skipKeys.add(key.id); lastErr = e; log.say('warn', `skipping "${key.label}"`, 'its secret could not be opened'); continue; }
 
-    log.step(o.files.length ? 'Reading your files and writing…' : wanted.file ? `Writing your ${wanted.format === 'docx' ? 'document' : 'file'}…` : 'Writing your answer…');
+    log.step(files.length ? 'Reading your files and writing…' : wanted.file ? `Writing your ${wanted.format === 'docx' ? 'document' : 'file'}…` : 'Writing your answer…');
     const g = log.start('cmd', `${model.id} generate ${q(prompt, 40)}`); const t0 = Date.now(); partial = '';
     try {
-      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: o.files.length > 0, blockedFiles: o.blocked?.names, web: !!o.web }), history, prompt: sent, files: o.files, signal, onText: (t) => { partial = t; o.onText(t); } });
+      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, blockedFiles: o.blocked?.names, web: !!o.web }), history, prompt: sent, files, signal, onText: (t) => { partial = t; o.onText(t); } });
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Add a Google Gemini key for Text & documents to include videos and audio.`);
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
