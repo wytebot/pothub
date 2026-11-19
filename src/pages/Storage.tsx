@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { fmtBytes, getStorageInfo, requestPersistence, type StorageInfo } from '../storage/quota';
-import { mediaCount, listProjects } from '../storage/db';
+import { mediaCount, listProjects, allChats } from '../storage/db';
+import { createBackup, restoreBackup } from '../storage/backup';
+import { platform } from '../platform';
 
 export function Storage() {
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [counts, setCounts] = useState<{ projects: number; media: number } | null>(null);
   const [note, setNote] = useState('');
-  const load = async () => { setInfo(await getStorageInfo()); setCounts({ projects: (await listProjects()).length, media: await mediaCount() }); };
+  const [busy, setBusy] = useState(false);
+  const [backupCounts, setBackupCounts] = useState<{ chats: number; projects: number; media: number } | null>(null);
+  const load = async () => { setInfo(await getStorageInfo()); setCounts({ projects: (await listProjects()).length, media: await mediaCount() }); setBackupCounts({ chats: (await allChats()).length, projects: (await listProjects()).length, media: await mediaCount() }); };
   useEffect(() => { void load().catch(() => setNote('Storage details are not available in this browser.')); }, []);
   const pct = info && info.quota ? Math.min(100, (info.usage / info.quota) * 100) : 0;
 
@@ -14,7 +18,15 @@ export function Storage() {
     <section className="page">
       <h1>Storage</h1>
       <div className="notice warn" role="note">
-        Your projects and media are stored only on this device. Uninstalling the app, clearing browser data, resetting the device or running a storage cleaner can permanently delete them. There is no cloud backup. Export projects as ZIP files to keep them safe.
+        Your projects, media and chat history are stored on this device. Download a full backup regularly. Uninstalling the app, clearing browser data or resetting the device can permanently delete local data.
+      </div>
+      <div className="panel stack">
+        <h2>Download backup</h2>
+        <p>Save your chat history, editing projects, project media and generated media library into one ZIP file. Keep it somewhere safe and make a new backup regularly.</p>
+        <p className="muted small">{backupCounts ? `${backupCounts.chats} chats · ${backupCounts.projects} projects · ${backupCounts.media} media files` : 'Counting your saved work…'}</p>
+        <div className="row"><button className="btn primary" disabled={busy} onClick={async () => { setBusy(true); setNote('Preparing your backup…'); try { const b = await createBackup(); const saved = await platform.saveFile(b.blob, b.name); setNote(saved === 'saved' ? `Backup ready: ${b.counts.chats} chats, ${b.counts.projects} projects and ${b.counts.media} media files.` : 'Backup download cancelled. Your local data is unchanged.'); } catch (e) { setNote(e instanceof Error ? e.message : 'Could not create backup.'); } finally { setBusy(false); } }}>{busy ? 'Working…' : 'Download full backup'}</button>
+        <label className="btn" style={{ cursor: busy ? 'wait' : 'pointer' }}>Restore backup<input type="file" accept=".zip,application/zip" disabled={busy} style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!window.confirm('Restore this backup? Existing chats, projects and media will NOT be deleted. Matching items are updated only when the backup has a newer timestamp.')) return; setBusy(true); setNote('Checking backup and merging your saved work…'); try { const r = await restoreBackup(f); setNote(`Restore complete. Chats: ${r.chatsAdded} added, ${r.chatsUpdated} updated. Projects: ${r.projectsAdded} added, ${r.projectsUpdated} updated. Media: ${r.mediaAdded} added, ${r.mediaUpdated} updated.${r.skipped ? ` ${r.skipped} missing media files skipped.` : ''} Existing unrelated data was kept.`); await load(); } catch (err) { setNote(err instanceof Error ? err.message : 'Could not restore backup.'); } finally { setBusy(false); } }} /></label></div>
+        {note && <p className="muted small" role="status">{note}</p>}
       </div>
       <div className="panel">
         {info?.supported ? (<>

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { attachStatus, clockLabel, consume, costOf, useAttachStatus } from '../quota/attachments';
 import { AnalysisLimitDialog, AttachLimitDialog } from '../ui/AttachLimit';
-import { Dialog } from '../ui/Dialog';
 import { consumeAnalysis, analysisStatus } from '../quota/analysis';
-import { setWebWanted, webActive, webWanted, WEB_CHANGED } from '../agent/search';
+import { setWebWanted, webActive, webWanted, webRemaining, WEB_CHANGED } from '../agent/search';
 import { announceChats, CHAT_OPEN, currentChatId, openChat, setCurrentChatId, titleFrom } from '../chat/state';
 import type { ChatMessage as Msg } from '../chat/types';
 import { getChat, putChat } from '../storage/db';
@@ -20,6 +19,7 @@ import { parseCommands } from '../agent/commands';
 import { interpret } from '../models/router';
 import { addJob, readJobs } from '../agent/jobs';
 import { friendlyNote, type TaskName } from '../agent/friendly';
+import { isPremium } from '../quota/daily';
 import { MAX_FILES, meta, sizeLabel, toAttachments, type Attachment } from '../agent/attachments';
 import type { OutFile } from '../agent/deliver';
 import type { ChatTurn } from '../models/text';
@@ -81,10 +81,11 @@ function historyOf(ms: Msg[]): ChatTurn[] {
   const turns: ChatTurn[] = [];
   for (let i = 1; i < ms.length; i++) {
     const a = ms[i]; const u = ms[i - 1];
-    if (a.role === 'assistant' && a.kind === 'text' && a.state === 'done' && a.text && u.role === 'user' && u.text) turns.push({ role: 'user', text: u.text }, { role: 'assistant', text: a.text });
+    if (a.role === 'assistant' && a.state === 'done' && a.text && u.role === 'user' && u.text) turns.push({ role: 'user', text: u.text }, { role: 'assistant', text: a.text });
   }
-  const kept = turns; // the whole conversation is sent; nothing is trimmed here
-  return kept;
+  // Keep all history in IndexedDB; send only a plan-aware recent window to the provider.
+  const maxPairs = isPremium() ? 40 : 8;
+  return turns.slice(-maxPairs * 2);
 }
 
 function Media({ ids }: { ids: string[] }) {
@@ -132,7 +133,6 @@ export function Home() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [ready, setReady] = useState(false);
   const [limitDlg, setLimitDlg] = useState<null | 'over' | 'last' | 'analysis'>(null);
-  const [premDlg, setPremDlg] = useState(false);
   const [web, setWeb] = useState(webWanted);
   const idRef = useRef('');
   const created = useRef(0);
@@ -141,6 +141,7 @@ export function Home() {
   const [idea, setIdea] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [fileNote, setFileNote] = useState('');
+  const [editing, setEditing] = useState<{ userId: string; assistantId: string; before: Msg[] } | null>(null);
   const [menu, setMenu] = useState(false);
   const [drag, setDrag] = useState(false);
   const [picker, setPicker] = useState<{ extra: MediaRecord[]; preselect: string[] } | null>(null);
@@ -159,7 +160,7 @@ export function Home() {
   const prompts = useMemo(() => [...PROMPTS].sort(() => Math.random() - 0.5), []);
   const providerCount = new Set(FNS.flatMap((f) => defaultKeys(f).map((k) => k.provider))).size;
   const attach = useAttachStatus();
-  const webOn = web && attach.unlimited;
+  const webOn = web;
   useEffect(() => { const f = () => setWeb(webWanted()); window.addEventListener(WEB_CHANGED, f); return () => window.removeEventListener(WEB_CHANGED, f); }, []);
   const staged = costOf(files.map((f) => f.id));
   const noRoom = !attach.unlimited && attach.left - staged <= 0;
@@ -293,8 +294,7 @@ export function Home() {
       const photos = atts.filter((a) => a.kind === 'image');
       const intent = interpret(text, { hasFiles: atts.length > 0, hasImageFile: photos.length > 0 });
       task = flags.task ?? intent.task;
-      // A guess (not a clear request) falls back to the kind of model that is actually connected.
-      if (!flags.task && !intent.explicit && (task === 'image' || task === 'video') && !defaultKeys(task).length && defaultKeys('text').length) task = 'text';
+      // Never silently turn an image/video request into a text answer when the media provider is unavailable.
 
       if (task === 'text') {
         let last = 0;
@@ -335,10 +335,13 @@ export function Home() {
   };
 
   /** Starts a request. With `replace`, the answer to an earlier message is redone in place instead of adding a new exchange. */
-  const begin = (prompt: string, atts: Attachment[], replace?: { id: string; before: Msg[] }) => {
+  const begin = (prompt: string, atts: Attachment[], replace?: { id: string; before: Msg[]; userId?: string }) => {
     const id = replace?.id ?? uid(); const log = new RunLog(); logs.set(id, log); outFiles.delete(id);
     const history = historyOf(replace ? replace.before : messages);
-    if (replace) setMessages((ms) => ms.map((m) => (m.id === id ? { id, role: 'assistant', text: '', state: 'working' } : m)));
+    if (replace) {
+      if (replace.userId) { sent.set(replace.userId, atts); setMessages((ms) => ms.map((m) => m.id === replace.userId ? { ...m, text: prompt, files: atts.map(meta) } : m.id === id ? { id, role: 'assistant', text: '', state: 'working' } : m)); }
+      else setMessages((ms) => ms.map((m) => (m.id === id ? { id, role: 'assistant', text: '', state: 'working' } : m)));
+    }
     else { if (!idRef.current) { idRef.current = uid(); created.current = Date.now(); setCurrentChatId(idRef.current); } const userId = uid(); sent.set(userId, atts); setMessages((ms) => [...ms, { id: userId, role: 'user', text: prompt, files: atts.map(meta) }, { id, role: 'assistant', text: '', state: 'working' }]); }
     setActive(true); void run(id, prompt, log, atts, history);
   };
@@ -346,7 +349,8 @@ export function Home() {
     const prompt = value.trim(); if ((!prompt && !files.length) || active) return;
     const atts = files; const ids = atts.map((a) => a.id); const cost = costOf(ids);
     if (atts.length && !consume(ids)) { setLimitDlg('over'); return; }
-    begin(prompt, atts);
+    if (editing) { begin(prompt, atts, { id: editing.assistantId, before: editing.before, userId: editing.userId }); setEditing(null); }
+    else begin(prompt, atts);
     setIdea(''); setFiles([]); setFileNote(''); setMenu(false);
     if (cost > 0) { const st = attachStatus(); if (!st.unlimited && st.left === 0) setLimitDlg('last'); }
   };
@@ -406,7 +410,7 @@ export function Home() {
             </div>
             <div className="msg-actions">
               {m.text && <button className="ia" aria-label="Copy" title="Copy" onClick={() => copyText(m.id, m.text)}><Icon name={copied === m.id ? 'check' : 'copy'} size={16} /></button>}
-              {m.text && <button className="ia" aria-label="Edit message" title="Edit" onClick={() => { setIdea(m.text); setFiles(sent.get(m.id) ?? []); input.current?.focus(); }}><Icon name="pencil" size={16} /></button>}
+              {m.text && <button className="ia" aria-label="Edit message" title="Edit" onClick={() => { const i = messages.findIndex((x) => x.id === m.id); const next = messages[i + 1]; if (next?.role === 'assistant') setEditing({ userId: m.id, assistantId: next.id, before: messages.slice(0, i) }); setIdea(m.text); setFiles(sent.get(m.id) ?? []); input.current?.focus(); }}><Icon name="pencil" size={16} /></button>}
               <button className="ia" aria-label="Send again" title="Send again" disabled={active} onClick={() => { const i = messages.findIndex((x) => x.id === m.id); if (messages[i + 1]) redo(messages[i + 1].id); }}><Icon name="refresh" size={16} /></button>
               {(sent.get(m.id) ?? []).some((a) => recOf(a)) && <button className="ia" aria-label="Edit in Editor" title="Edit in Editor" onClick={() => { const extra = (sent.get(m.id) ?? []).map(recOf).filter((r): r is MediaRecord => !!r); setPicker({ extra, preselect: extra.map((r) => r.id) }); }}><Icon name="editor" size={16} /></button>}
             </div>
@@ -442,6 +446,7 @@ export function Home() {
             </div>
           </div>
         )}
+        {editing && <div className="notice" role="status">Editing this request. Sending will update its existing reply instead of adding a new conversation entry. <button className="btn" onClick={() => { setEditing(null); setIdea(''); setFiles([]); }}>Cancel edit</button></div>}
         {fileNote && <p className="attach-note" role="status">{fileNote}</p>}
         <div className="chat-composer">
           {files.length > 0 && (
@@ -464,7 +469,7 @@ export function Home() {
               <input ref={fileIn} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
               <input ref={camIn} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
-            <button className={`web-button${webOn ? ' on' : ''}`} type="button" aria-label="Web search" aria-pressed={webOn} title={attach.unlimited ? (webOn ? 'Web search is on' : 'Search the web') : 'Web search (Premium)'} onClick={() => { if (!attach.unlimited) setPremDlg(true); else setWebWanted(!web); }}><Icon name="globe" size={20} />{!attach.unlimited && <i className="lock" aria-hidden="true" />}</button>
+            <button className={`web-button${webOn ? ' on' : ''}`} type="button" aria-label="Web search" aria-pressed={webOn} title={webOn ? `Web search is on (${Number.isFinite(webRemaining()) ? `${webRemaining()} free searches left today` : 'Premium research'})` : 'Search the web (free: 3 daily searches; Premium: deeper results)'} onClick={() => setWebWanted(!web)}><Icon name="globe" size={20} /></button>
             <textarea ref={input} value={idea} rows={1} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, or describe an image or video…'} aria-label="Message"
               onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
               onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
@@ -475,7 +480,6 @@ export function Home() {
           </div>
         </div>
       </div>
-      {premDlg && <Dialog title="Web search is part of Premium" onClose={() => setPremDlg(false)} actions={<><a className="btn" href="#/billing" onClick={() => setPremDlg(false)}>See Premium</a><button className="btn primary" onClick={() => setPremDlg(false)}>Got it</button></>}><p>Turn on the globe and Pothub looks things up on the web before it answers, so replies can use recent information and link to their sources.</p></Dialog>}
       {limitDlg === 'analysis' ? <AnalysisLimitDialog onClose={() => setLimitDlg(null)} /> : limitDlg && <AttachLimitDialog lastOne={limitDlg === 'last'} onClose={() => setLimitDlg(null)} />}
       {picker && <MediaPicker extra={picker.extra} preselect={picker.preselect} onClose={() => setPicker(null)} />}
     </section>

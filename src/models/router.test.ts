@@ -7,6 +7,16 @@ describe('router', () => {
     expect(interpret('Make this photograph look cinematic').task).toBe('edit');
     expect(interpret('a luxury apartment').task).toBe('image');
   });
+  it('keeps long instruction briefs and file jobs as text even when they mention video or image', () => {
+    const brief = "Remove the drive syncing feature, use download backup instead, ensure agents can read all file formats and produce all file formats as well.\nEnsure app understands prompt more, so it doesn't produce texts instead of video or instead of image, boost memory, drop the corrected zip";
+    expect(interpret(brief, { hasFiles: true }).task).toBe('text');
+    expect(interpret(brief).task).toBe('text');
+    expect(interpret('make it so the app does not produce texts instead of video', { hasFiles: true }).task).toBe('text');
+  });
+  it('still sends short, direct media requests to image or video', () => {
+    expect(interpret('make a video of waves crashing').task).toBe('video');
+    expect(interpret('Generate an image of a red fox. Make it vertical').task).toBe('image');
+  });
   it('maps vertical to 9:16 and picks a model that supports it', () => {
     const p = planImage({ prompt: 'vertical poster of a lighthouse', prefer: 'quality', connected: new Set(['openai', 'gemini']) });
     expect(p.kind === 'ready' && p.aspect).toBe('9:16');
