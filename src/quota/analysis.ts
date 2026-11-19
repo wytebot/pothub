@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isPremium } from './daily';
+import { scheduleQuotaReset } from './resetNotification';
 
 /** File analysis: one analysis is charged when a request actually reads one or more source files (user-attached or generated files supplied as inputs). Free: 10 analyses per 5-hour window; Premium: unlimited. This quota is separate from extraction/chunking limits. */
 export const ANALYSIS_LIMIT = 10;
@@ -32,6 +33,7 @@ export function consumeAnalysis(now = Date.now()) {
   const w = read(now);
   try { localStorage.setItem(KEY, JSON.stringify({ start: w?.start ?? now, used: (w?.used ?? 0) + 1 })); } catch { /* storage blocked */ }
   window.dispatchEvent(new Event(ANALYSIS_CHANGED));
+  if ((w?.used ?? 0) + 1 >= ANALYSIS_LIMIT) void scheduleQuotaReset('analysis', (w?.start ?? now) + ANALYSIS_WINDOW_MS);
 }
 
 /** Live status for screens: refreshes after each analysis, when premium changes, and every 20 seconds so the countdown stays true. */

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isPremium } from './daily';
+import { scheduleQuotaReset } from './resetNotification';
 
 /** Free plan: 10 uploaded/selected attachments per rolling usage window; all 10 return 5 hours after the first is consumed. Premium is unlimited. This quota is separate from extraction/chunking limits. */
 export const ATTACH_LIMIT = 10;
@@ -40,6 +41,7 @@ export function consume(ids: string[], now = Date.now()): boolean {
   if ((w?.ids.length ?? 0) + fresh.length > ATTACH_LIMIT) return false;
   try { localStorage.setItem(KEY, JSON.stringify({ start: w?.start ?? now, ids: [...(w?.ids ?? []), ...fresh] })); } catch { /* storage blocked: the limit simply is not remembered */ }
   window.dispatchEvent(new Event(ATTACH_CHANGED));
+  if ((w?.ids.length ?? 0) + fresh.length >= ATTACH_LIMIT) void scheduleQuotaReset('attachments', (w?.start ?? now) + ATTACH_WINDOW_MS);
   return true;
 }
 
