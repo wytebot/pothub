@@ -6,7 +6,7 @@ export interface MediaRecord { id: string; projectId: string | null; kind: Media
 /** One saved conversation. */
 export interface ChatRecord { id: string; title: string; createdAt: number; updatedAt: number; messages: ChatMessage[]; }
 
-/** Tells the cloud sync that something on this device changed. */
+/** Announces a local data change to interested UI components. */
 const touch = () => { try { window.dispatchEvent(new Event('data:changed')); } catch { /* not in a browser */ } };
 
 const DB_NAME = 'creative-studio';
@@ -140,17 +140,6 @@ export async function delMeta(key: string): Promise<void> {
   const t = (await open()).transaction('meta', 'readwrite'); const f = done(t); t.objectStore('meta').delete(key); await f;
 }
 
-// ---------------------------------------------------------------- helpers for syncing with the user's Google Drive
-export type MediaInfo = Omit<MediaRecord, 'blob'>;
-/** Every media record without its bytes, so a sync can compare lists without loading videos into memory. */
-export async function mediaIndex(): Promise<MediaInfo[]> {
-  const store = (await open()).transaction('media').objectStore('media');
-  return new Promise((res, rej) => {
-    const out: MediaInfo[] = []; const r = store.openCursor();
-    r.onsuccess = () => { const c = r.result; if (!c) return res(out); const { blob: _b, ...rest } = c.value as MediaRecord; void _b; out.push(rest); c.continue(); };
-    r.onerror = () => rej(r.error);
-  });
-}
 export async function getMedia(id: string): Promise<MediaRecord | undefined> {
   return req((await open()).transaction('media').objectStore('media').get(id));
 }

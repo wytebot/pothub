@@ -480,7 +480,7 @@ input[type='search'] { width: 100%; }
 .attach-back { font-size: 22px; margin: 6px 0 10px; }
 .attach-back strong { font-weight: 650; }
 
-/* Premium: cloud sync */
+/* Premium account features */
 .sync-state { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .sync-state .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
 .sync-state .dot.on { background: #54c27d; }
