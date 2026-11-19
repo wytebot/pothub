@@ -298,7 +298,7 @@ export function Home() {
 
       if (task === 'text') {
         let last = 0;
-        // Free file analysis: when it is used up the files are NOT read, but the question is still answered and the answer says so.
+        // Free file analysis: every request that reads source files consumes one analysis, whether those inputs are user attachments or generated files re-attached as inputs. Multiple files in one request count as one analysis. When exhausted, files are not read, but the question is still answered with an explicit notice.
         const an = analysisStatus(); const analyzing = atts.length > 0;
         const blockedUntil = analyzing && !an.unlimited && an.left <= 0 ? an.resetsAt : null;
         const out = await runText({ prompt, files: blockedUntil !== null ? [] : atts, blocked: blockedUntil !== null ? { names: atts.map((a) => a.name), back: clockLabel(blockedUntil) } : undefined, web: webActive(), history, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {

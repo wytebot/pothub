@@ -130,13 +130,12 @@ async function compatRound(p: 'openai' | 'xai', secret: string, r: TextRequest, 
 }
 
 const CONTINUE = 'Continue exactly where you stopped. Do not repeat anything already written, do not add an introduction, and keep the same structure and format.';
-const MAX_ROUNDS = 400; // a safety stop only; a long answer simply keeps going until the model says it is finished
 const MAX_DROPS = 4;
 
 /** Runs one round after another until the model finishes. A round that stops at its length limit, or whose connection drops part-way, is continued from exactly where it stopped. Returns true if it still ended unfinished. */
 async function drive(once: (take: (t: string) => void) => Promise<Round>, carryOn: (written: string) => void, push: (t: string) => void, signal?: AbortSignal): Promise<boolean> {
   let unfinished = false; let drops = 0;
-  for (let i = 0; i < MAX_ROUNDS; i++) {
+  for (;;) {
     let got = ''; const take = (t: string) => { got += t; push(t); };
     let round: Round;
     try { round = await once(take); }
@@ -149,7 +148,8 @@ async function drive(once: (take: (t: string) => void) => Promise<Round>, carryO
       } else if (got && net && drops < MAX_DROPS) { drops++; round = { text: got, truncated: true }; } else throw e;
     }
     unfinished = round.truncated;
-    if (!round.truncated || !round.text.trim()) break;
+    if (!round.truncated) break;
+    if (!round.text.trim()) throw perr('The provider stopped before completing the answer and returned no continuation text. Try another model or continue the request.');
     carryOn(round.text);
   }
   return unfinished;
