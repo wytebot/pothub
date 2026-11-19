@@ -79,6 +79,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(60);
+  const [timelineHeight, setTimelineHeight] = useState(250);
   const [pad, setPad] = useState(180);
   const [snap, setSnap] = useState(true);
   const [guide, setGuide] = useState<number | null>(null);
@@ -98,7 +99,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
   const timeRef = useRef(0); const past = useRef<Clip[][]>([]); const future = useRef<Clip[][]>([]); const lastKey = useRef({ k: '', t: 0 });
   const canvas = useRef<HTMLCanvasElement>(null); const stage = useRef<HTMLDivElement>(null); const els = useRef(new Map<string, El>()); const urls = useRef(new Map<string, string>());
   const mediaMap = useRef(new Map<string, MediaRecord>()); const raf = useRef(0); const cancelExport = useRef(false);
-  const boxes = useRef<Box[]>([]); const tlScroll = useRef<HTMLDivElement>(null); const rowEls = useRef(new Map<number, HTMLElement>());
+  const boxes = useRef<Box[]>([]); const longPress = useRef<{ timer: number; x: number; y: number } | null>(null); const canvasPts = useRef(new Map<number, { x: number; y: number }>()); const canvasPinch = useRef<{ distance: number; scale: number; id: string } | null>(null); const tlScroll = useRef<HTMLDivElement>(null); const rowEls = useRef(new Map<number, HTMLElement>());
   const busyMedia = useRef(new Set<string>()); const peakCtx = useRef<AudioContext | null>(null);
   const audio = useRef<{ ac: AudioContext; dest: MediaStreamAudioDestinationNode; mon: GainNode; srcs: Map<El, MediaElementAudioSourceNode> } | null>(null);
   const dur = totalDuration(data.clips);
@@ -313,8 +314,8 @@ function Workspace({ project }: { project: ProjectRecord }) {
   });
 
   // dragging on the timeline: move, trim, snap, change layer ---------------------------------
-  const startDrag = (e: React.PointerEvent, c: Clip, mode: 'move' | 'l' | 'r') => {
-    e.stopPropagation(); setSel(c.id); const el = e.currentTarget as HTMLElement; el.setPointerCapture(e.pointerId);
+  const startDrag = (e: React.PointerEvent, c: Clip, mode: 'move' | 'l' | 'r', targetEl?: HTMLElement) => {
+    e.stopPropagation(); setSel(c.id); const el = targetEl ?? e.currentTarget as HTMLElement; try { el.setPointerCapture(e.pointerId); } catch { /* pointer may have ended */ }
     const x0 = e.clientX; const base = dataRef.current.clips; const snapC = c; let moved = false;
     const targets = [...snapPoints(base, c.id), timeRef.current]; const within = 9 / zoom; const media = c.kind === 'video' || c.kind === 'audio';
     const mv = (ev: PointerEvent) => {
@@ -355,12 +356,35 @@ function Workspace({ project }: { project: ProjectRecord }) {
   };
   const onCanvasDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const el = e.currentTarget; const rect = el.getBoundingClientRect();
+    canvasPts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const already = canvasPinch.current;
+    if (canvasPts.current.size === 2) {
+      const id = selRef.current; const clip = dataRef.current.clips.find((x) => x.id === id);
+      if (clip && clip.kind !== 'audio') {
+        const [a, b] = [...canvasPts.current.values()]; canvasPinch.current = { distance: Math.max(1, Math.hypot(a.x-b.x, a.y-b.y)), scale: clip.scale, id: clip.id };
+        e.preventDefault(); return;
+      }
+    }
+    if (already) return;
     const id = hitTest((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height, rect); setSel(id); if (!id) { setPanel(''); return; }
     const base = dataRef.current.clips.find((x) => x.id === id); if (!base) return; el.setPointerCapture(e.pointerId); const x0 = e.clientX; const y0 = e.clientY;
-    const mv = (ev: PointerEvent) => { let nx = base.x + (ev.clientX - x0) / rect.width; let ny = base.y + (ev.clientY - y0) / rect.height; if (snap) { if (Math.abs(nx) < 0.02) nx = 0; if (Math.abs(ny) < 0.02) ny = 0; } update(id, { x: nx, y: ny }, 'pos'); };
-    const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); };
+    const mv = (ev: PointerEvent) => {
+      if (canvasPinch.current) return;
+      let nx = base.x + (ev.clientX - x0) / rect.width; let ny = base.y + (ev.clientY - y0) / rect.height;
+      if (snap) { if (Math.abs(nx) < 0.02) nx = 0; if (Math.abs(ny) < 0.02) ny = 0; }
+      update(id, { x: nx, y: ny }, 'pos');
+    };
+    const up = (ev: PointerEvent) => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); canvasPts.current.delete(ev.pointerId); if (canvasPts.current.size < 2) canvasPinch.current = null; };
     el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up);
   };
+  const onCanvasMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!canvasPts.current.has(e.pointerId)) return;
+    canvasPts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const p = canvasPinch.current; if (!p || canvasPts.current.size < 2) return;
+    const [a, b] = [...canvasPts.current.values()]; const d = Math.max(1, Math.hypot(a.x-b.x, a.y-b.y));
+    update(p.id, { scale: clamp(p.scale * d / p.distance, 0.1, 8) }, 'scale');
+  };
+  const onCanvasUp = (e: React.PointerEvent<HTMLCanvasElement>) => { canvasPts.current.delete(e.pointerId); if (canvasPts.current.size < 2) canvasPinch.current = null; };
 
   const pts = useRef(new Map<number, { x: number; y: number }>()); const pinch = useRef(0);
   const onTlDown = (ev: React.PointerEvent) => { if (playingRef.current) pause(); pts.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); pinch.current = 0; };
@@ -377,6 +401,18 @@ function Workspace({ project }: { project: ProjectRecord }) {
   const num = (label: string, key: 'start' | 'duration' | 'trimIn') => c && (
     <label className="cc-num">{label}<input type="number" step="0.1" min={0} value={Number(c[key].toFixed(2))} onChange={(e) => { const v = Math.max(key === 'duration' ? 0.2 : 0, Number(e.target.value)); update(c.id, { [key]: key === 'duration' ? Math.min(v, maxDuration(c)) : v } as Partial<Clip>, key); }} /><i>s</i></label>);
   const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+  const freezeFrame = async () => {
+    const c = target(); if (!c || c.kind !== 'video') { setMsg({ text: 'Select a video clip to freeze its current frame.' }); return; }
+    const { w, h } = canvasSize(dataRef.current.aspect, 720); const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    render(cv.getContext('2d')!, w, h, timeRef.current);
+    const blob = await new Promise<Blob | null>((resolve) => cv.toBlob(resolve, 'image/png'));
+    if (!blob) { setMsg({ text: 'Could not capture the freeze frame.', error: true }); return; }
+    const rec: MediaRecord = { id: uid(), projectId: project.id, kind: 'image', name: `Freeze ${clock(timeRef.current)}.png`, mime: 'image/png', size: blob.size, createdAt: Date.now(), blob };
+    await putMedia(rec); mediaMap.current.set(rec.id, rec); await refreshAssets();
+    const frozen = makeClip({ id: uid(), kind: 'image', name: rec.name, mediaId: rec.id, start: timeRef.current, duration: 2, track: c.track, scale: c.scale, x: c.x, y: c.y, rotate: c.rotate, opacity: c.opacity });
+    commit([...dataRef.current.clips, frozen]); setSel(frozen.id); setMsg({ text: 'Freeze frame added for 2 seconds. Adjust its duration on the timeline.' });
+  };
 
   // toolbars -----------------------------------------------------------------------------------
   const pick = (id: Panel) => () => setPanel(id);
@@ -395,12 +431,12 @@ function Workspace({ project }: { project: ProjectRecord }) {
     const common: Tool[] = [{ id: 'dup', icon: 'duplicate', label: 'Duplicate', run: dup }, { id: 'del', icon: 'trash', label: 'Delete', run: del, danger: true }, { id: 'ripple', icon: 'ripple', label: 'Ripple', run: ripple, off: c.kind === 'audio' }];
     const split_: Tool = { id: 'split', icon: 'scissors', label: 'Split', run: split };
     const trimS: Tool = { id: 'trims', icon: 'crop', label: 'Trim start', run: () => trim('start') }; const trimE: Tool = { id: 'trime', icon: 'crop', label: 'Trim end', run: () => trim('end') };
-    const look: Tool[] = [{ id: 'fx', icon: 'star', label: 'Effects', run: pick('fx') }, { id: 'adjust', icon: 'sliders', label: 'Adjust', run: pick('adjust') }, { id: 'transform', icon: 'move', label: 'Position', run: pick('transform') }, { id: 'flip', icon: 'flip', label: 'Flip', run: () => update(c.id, { flipX: !c.flipX }) }, { id: 'rot', icon: 'rotate', label: 'Rotate', run: () => update(c.id, { rotate: ((c.rotate + 90 + 180) % 360) - 180 }) }];
+    const look: Tool[] = [{ id: 'fx', icon: 'star', label: 'Effects', run: pick('fx') }, { id: 'adjust', icon: 'sliders', label: 'Adjust', run: pick('adjust') }, { id: 'transform', icon: 'move', label: 'Position', run: pick('transform') }, { id: 'resize', icon: 'maximize', label: 'Resize', run: pick('transform') }, { id: 'flip', icon: 'flip', label: 'Flip', run: () => update(c.id, { flipX: !c.flipX }) }, { id: 'rot', icon: 'rotate', label: 'Rotate', run: () => update(c.id, { rotate: ((c.rotate + 90 + 180) % 360) - 180 }) }];
     const fade: Tool = { id: 'fade', icon: 'fade', label: 'Fade', run: pick('fade') };
-    if (c.kind === 'text') return [back, { id: 'text', icon: 'text', label: 'Text', run: pick('text') }, { id: 'transform', icon: 'move', label: 'Position', run: pick('transform') }, { id: 'length', icon: 'clock', label: 'Timing', run: pick('length') }, fade, split_, ...common];
+    if (c.kind === 'text') return [back, { id: 'text', icon: 'text', label: 'Text', run: pick('text') }, { id: 'transform', icon: 'move', label: 'Position', run: pick('transform') }, { id: 'resize', icon: 'maximize', label: 'Resize', run: pick('transform') }, { id: 'length', icon: 'clock', label: 'Timing', run: pick('length') }, fade, split_, ...common];
     if (c.kind === 'image') return [back, split_, { id: 'length', icon: 'clock', label: 'Timing', run: pick('length') }, ...look, { id: 'fill', icon: 'maximize', label: 'Fill', run: fillFrame }, fade, ...common];
     if (c.kind === 'audio') return [back, split_, trimS, trimE, { id: 'volume', icon: c.volume > 0 ? 'volume' : 'mute', label: 'Volume', run: pick('volume') }, { id: 'speed', icon: 'gauge', label: 'Speed', run: pick('speed') }, fade, ...common];
-    return [back, split_, trimS, trimE, { id: 'speed', icon: 'gauge', label: 'Speed', run: pick('speed') }, { id: 'volume', icon: c.volume > 0 ? 'volume' : 'mute', label: 'Volume', run: pick('volume') }, ...look, { id: 'fill', icon: 'maximize', label: 'Fill', run: fillFrame }, fade, ...common];
+    return [back, split_, trimS, trimE, { id: 'freeze', icon: 'camera', label: 'Freeze', run: freezeFrame }, { id: 'speed', icon: 'gauge', label: 'Speed', run: pick('speed') }, { id: 'volume', icon: c.volume > 0 ? 'volume' : 'mute', label: 'Volume', run: pick('volume') }, ...look, { id: 'fill', icon: 'maximize', label: 'Fill', run: fillFrame }, fade, ...common];
   };
   const tools = c ? clipTools() : mainTools;
 
@@ -450,7 +486,7 @@ function Workspace({ project }: { project: ProjectRecord }) {
       </header>
       {msg && <div className={`cc-toast${msg.error ? ' error' : ''}`} role={msg.error ? 'alert' : 'status'}>{msg.text}</div>}
 
-      <div className="cc-stage" ref={stage}><canvas ref={canvas} className="cv" onPointerDown={onCanvasDown} aria-label="Preview. Tap a layer to select it, drag to move it." /></div>
+      <div className="cc-stage" ref={stage}><canvas ref={canvas} className="cv" onPointerDown={onCanvasDown} onPointerMove={onCanvasMove} onPointerUp={onCanvasUp} onPointerCancel={onCanvasUp} aria-label="Preview. Tap a layer to select it, drag to move it." /></div>
 
       <div className="cc-ctl">
         <button className="cc-icon" aria-label="Full screen preview" onClick={fullscreen}><Icon name="maximize" size={22} /></button>
@@ -462,10 +498,10 @@ function Workspace({ project }: { project: ProjectRecord }) {
         <span className="cc-grow" />
         <button className={`cc-icon${snap ? ' on' : ''}`} aria-label={snap ? 'Snapping on' : 'Snapping off'} aria-pressed={snap} title="Snap to cuts and the playhead" onClick={() => setSnap(!snap)}><Icon name="magnet" size={21} /></button>
         <button className="cc-icon" aria-label="Undo" disabled={!past.current.length} onClick={undo}><Icon name="undo" size={21} /></button>
-        <button className="cc-icon" aria-label="Redo" disabled={!future.current.length} onClick={redo}><Icon name="redo" size={21} /></button>
+        <button className="cc-icon" aria-label="Redo" disabled={!future.current.length} onClick={redo}><Icon name="redo" size={21} /></button><button className="cc-icon" aria-label="Zoom timeline out" onClick={() => setZoom((z) => clamp(z / 1.2, 10, 300))}>−</button><button className="cc-icon" aria-label="Zoom timeline in" onClick={() => setZoom((z) => clamp(z * 1.2, 10, 300))}>＋</button><button className="cc-icon" aria-label="Expand timeline" onClick={() => setTimelineHeight((h) => clamp(h + 60, 180, 430))}>↕</button><button className="cc-icon" aria-label="Shrink timeline" onClick={() => setTimelineHeight((h) => clamp(h - 60, 180, 430))}>↕</button>
       </div>
 
-      <div className="cc-tl">
+      <div className="cc-tl" style={{ height: timelineHeight }}>
         <div ref={tlScroll} className="cc-scroll" onScroll={onTlScroll} onPointerDown={onTlDown} onPointerMove={onTlMove} onPointerUp={onTlUp} onPointerCancel={onTlUp} onWheel={(ev) => { if (playingRef.current) pause(); if (ev.ctrlKey) { ev.preventDefault(); setZoom((z) => clamp(z * (ev.deltaY < 0 ? 1.1 : 0.9), 10, 300)); } }}>
           <div className="cc-inner" style={{ width: innerW }}>
             <div className="ruler" style={{ height: H_RULER }} onClick={rulerTap}>{ticks.map((t) => <span key={t} style={{ left: pad + t * zoom }}>{clock(t)}</span>)}{ticks.map((t) => <i key={`d${t}`} style={{ left: pad + (t + tickStep / 2) * zoom }} />)}</div>
@@ -476,16 +512,13 @@ function Workspace({ project }: { project: ProjectRecord }) {
                   const th = x.mediaId && x.kind !== 'audio' && x.kind !== 'text' ? thumbs[x.mediaId] : undefined; const pk = x.kind === 'audio' && x.mediaId ? peaks[x.mediaId] : undefined; const sp = speedOf(x); const on = x.id === sel;
                   return (
                     <div key={x.id} className={`clip ${x.kind}${on ? ' sel' : ''}${th ? ' has-thumb' : ''}${r.track === 0 ? ' main' : ''}`} style={{ left: pad + x.start * zoom, width: Math.max(10, x.duration * zoom), ...(th ? { backgroundImage: `url(${th})` } : {}) }}
-                      onPointerDown={(e) => { if (e.pointerType === 'mouse' || on) startDrag(e, x, 'move'); }} onClick={() => setSel(x.id)} role="button" tabIndex={0} aria-label={`${x.name}, ${x.kind} clip`} aria-pressed={on} onKeyDown={(e) => { if (e.key === 'Enter') setSel(x.id); }}>
+                      onPointerDown={(e) => { if (e.pointerType === 'mouse' || on) startDrag(e, x, 'move'); else { setSel(x.id); const target = e.currentTarget; const ev = e; longPress.current = { x: e.clientX, y: e.clientY, timer: window.setTimeout(() => startDrag(ev, x, 'move', target), 420) }; } }} onPointerMove={(e) => { const lp = longPress.current; if (lp && Math.hypot(e.clientX-lp.x, e.clientY-lp.y) > 9) { clearTimeout(lp.timer); longPress.current = null; } }} onPointerUp={() => { if (longPress.current) { clearTimeout(longPress.current.timer); longPress.current = null; } }} onPointerCancel={() => { if (longPress.current) { clearTimeout(longPress.current.timer); longPress.current = null; } }} onClick={() => setSel(x.id)} role="button" tabIndex={0} aria-label={`${x.name}, ${x.kind} clip`} aria-pressed={on} onKeyDown={(e) => { if (e.key === 'Enter') setSel(x.id); }}>
                       {pk && <Wave peaks={pk.p} a={Math.round(clamp(x.trimIn / pk.d, 0, 1) * 1000) / 1000} b={Math.round(clamp((x.trimIn + x.duration * sp) / pk.d, 0, 1) * 1000) / 1000} />}
                       {on && <i className="h l" onPointerDown={(e) => startDrag(e, x, 'l')} />}<span>{x.kind === 'text' ? x.text : x.kind === 'video' || x.kind === 'audio' ? `${x.volume === 0 ? '🔇 ' : ''}${sp !== 1 ? `${Number(sp.toFixed(2))}× ` : ''}${x.kind === 'audio' ? x.name : ''}` : ''}</span>{on && <i className="h r" onPointerDown={(e) => startDrag(e, x, 'r')} />}
                     </div>);
                 })}
                 {r.track === 0 && <button className="cc-add" style={{ left: pad + mainEnd() * zoom + 10 }} aria-label="Add media" onClick={() => setMedia('visual')}><Icon name="plus" size={24} /></button>}
               </div>))}
-            {guide !== null && <div className="guide" style={{ left: pad + guide * zoom }} />}
-          </div>
-        </div>
         <div className="cc-rail" aria-hidden={false}>
           <div style={{ height: H_RULER }} />
           {rows.map((r) => (
@@ -494,6 +527,10 @@ function Workspace({ project }: { project: ProjectRecord }) {
               {r.track === AUDIO_TRACK && <button className="cc-rail-mini" aria-label="Add audio" onClick={() => setMedia('audio')}><Icon name="music" size={16} /></button>}
               {r.track === 1 && <button className="cc-rail-mini" aria-label="Add text" onClick={() => addText()}><Icon name="text" size={16} /></button>}
             </div>))}
+        </div>
+
+            {guide !== null && <div className="guide" style={{ left: pad + guide * zoom }} />}
+          </div>
         </div>
         <div className="cc-playhead" />
         {data.clips.length === 0 && <p className="cc-hint muted small">Tap + to add photos or videos</p>}

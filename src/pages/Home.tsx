@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { attachStatus, clockLabel, consume, costOf, useAttachStatus } from '../quota/attachments';
 import { AnalysisLimitDialog, AttachLimitDialog } from '../ui/AttachLimit';
 import { consumeAnalysis, analysisStatus } from '../quota/analysis';
-import { setWebWanted, webActive, webWanted, webRemaining, WEB_CHANGED } from '../agent/search';
+import { setWebWanted, webActive, webWanted, webRemaining, WEB_CHANGED, shouldAutoWebSearch } from '../agent/search';
 import { announceChats, CHAT_OPEN, currentChatId, openChat, setCurrentChatId, titleFrom } from '../chat/state';
 import type { ChatMessage as Msg } from '../chat/types';
 import { getChat, putChat } from '../storage/db';
@@ -301,7 +301,7 @@ export function Home() {
         // Free file analysis: every request that reads source files consumes one analysis, whether those inputs are user attachments or generated files re-attached as inputs. Multiple files in one request count as one analysis. When exhausted, files are not read, but the question is still answered with an explicit notice.
         const an = analysisStatus(); const analyzing = atts.length > 0;
         const blockedUntil = analyzing && !an.unlimited && an.left <= 0 ? an.resetsAt : null;
-        const out = await runText({ prompt, files: blockedUntil !== null ? [] : atts, blocked: blockedUntil !== null ? { names: atts.map((a) => a.name), back: clockLabel(blockedUntil) } : undefined, web: webActive(), history, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
+        const out = await runText({ prompt, files: blockedUntil !== null ? [] : atts, blocked: blockedUntil !== null ? { names: atts.map((a) => a.name), back: clockLabel(blockedUntil) } : undefined, web: webActive() || shouldAutoWebSearch(prompt), history, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
           partial = t; const now = Date.now(); if (now - last < 90) return; last = now; patch(id, { kind: 'text', text: t });
         } });
         if (analyzing && blockedUntil === null) { consumeAnalysis(); const left = analysisStatus(); if (!left.unlimited && left.left === 0) setLimitDlg('analysis'); } // told once, at the moment the free analyses run out
