@@ -133,14 +133,15 @@ createServer(async (req, res) => {
       return send(200, { allowed: true, used: 0, limit: null, remaining: null, premium: true });
     }
     if (p === '/api/search' && req.method === 'GET') {
-      // Premium web search through DuckDuckGo. The server does the lookup because browsers cannot call DuckDuckGo directly.
+      // Free accounts get a small daily allowance; Premium gets a larger allowance and deeper result sets.
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to use web search.' });
-      if (await distributedLimit(`search:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
-      const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined;
-      if (!entitled(sub)) return send(402, { error: 'Web search is part of Premium.' });
+      if (await distributedLimit(`search-burst:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
       const q = (url.searchParams.get('q') ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
       if (q.length < 2) return send(400, { error: 'Type something to search for.' });
-      try { return send(200, { results: await ddgSearch(q) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
+      const customerKey = await store.getLink(who.uid); const sub = customerKey ? await store.getSub(customerKey) : undefined; const premium = entitled(sub);
+      const day = new Date().toISOString().slice(0, 10);
+      if (await distributedLimit(`search-daily:${who.uid}:${day}`, premium ? 30 : 3, 24 * 60 * 60 * 1000)) return send(429, { error: premium ? 'Daily research limit reached.' : 'You have used your 3 free web searches for today. Premium includes deeper research.' });
+      try { return send(200, { results: (await ddgSearch(q, premium ? 8 : 3)).slice(0, premium ? 8 : 3) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
     }
     if (p === '/api/account/link' && req.method === 'POST') {
       if (limited(`link:${ip}`, 20)) return send(429, { error: 'Too many attempts.' });
