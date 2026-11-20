@@ -182,6 +182,8 @@ export async function pdfText(blob: Blob): Promise<{ text: string; pages: number
   } catch { return null; }
 }
 
+const asText = (a: Attachment, text: string): Attachment => { const blob = new Blob([text], { type: 'text/plain' }); return { ...a, kind: 'text', mime: 'text/plain', blob, size: blob.size }; };
+
 /** Text-only reader: extracts text from supported documents on-device and never forwards media bytes. */
 export async function readyFiles(files: Attachment[], opts: { step?: (s: string) => void }): Promise<{ files: Attachment[]; notes: string[] }> {
   const out: Attachment[] = []; const notes: string[] = [];

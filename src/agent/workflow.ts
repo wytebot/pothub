@@ -11,7 +11,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
-import { resultsBlock, webResearch, webRemaining, shouldAutoWebSearch, type WebSource } from './search';
+import { resultsBlock, webResearch, shouldAutoWebSearch, type WebSource } from './search';
 import { readyFiles } from './readers';
 import { notifyDone } from '../notify';
 import { budgetFor, groupByBudget, mapLimit, splitTextIntoChunks, withRetry } from './chunking';

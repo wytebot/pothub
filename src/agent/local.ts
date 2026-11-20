@@ -137,6 +137,18 @@ async function toFormat(src: { md: string; rows?: string[][] }, to: LocalFormat,
   }
 }
 
+const an = (label: string) => `${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${label}`;
+async function mergePdfs(files: Attachment[]): Promise<Blob> {
+  const { PDFDocument } = await import('pdf-lib');
+  const out = await PDFDocument.create();
+  for (const f of files) {
+    if (f.kind !== 'pdf') throw new Error(`${f.name} is not a PDF, so it cannot be merged.`);
+    let src; try { src = await PDFDocument.load(await f.blob.arrayBuffer()); } catch { throw new Error(`${f.name} could not be opened (it may be locked or damaged).`); }
+    for (const p of await out.copyPages(src, src.getPageIndices())) out.addPage(p);
+  }
+  return new Blob([await out.save()], { type: 'application/pdf' });
+}
+
 export async function runLocal(plan: LocalPlan, files: Attachment[]): Promise<LocalResult> {
   const notes: string[] = []; let blob: Blob; let name: string; let did: string;
   if (plan.kind === 'zip') {
