@@ -44,7 +44,7 @@ export function ImageStudio() {
     setMsg(null); log.clear(); setBusy(true); abort.current = new AbortController(); const signal = abort.current.signal;
     try {
       if (await runInfo(prompt, log, signal)) return;
-      const res = await runImage({ prompt, count: Number(count), format, prefer, model, signal, log });
+      const res = await runImage({ prompt, count: Number(count), format, prefer, model, signal, log, routed: true }); // this page only makes pictures: never re-judge the wording as "writing"
       const sv = log.start('cmd', 'library.save');
       for (const m of res.images) await putMedia({ id: uid(), projectId: null, kind: 'image', name: `${slug(res.prompt)}.png`, mime: m.mime, size: m.blob.size, createdAt: Date.now(), blob: m.blob }); // saved locally immediately
       log.done(sv, `${res.images.length} saved on this device`); log.say('ok', 'done');

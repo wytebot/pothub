@@ -32,6 +32,9 @@ const TAIL = /[\s,]*(?:for me|please|pls|plz|now|asap|thanks|thank you|thx|again
 
 const PRON = '(?:it|this|that|them|these|those|everything|all|all of (?:it|them|that|this)|the whole thing|the rest|things|stuff|all that|the lot|up)';
 const NON_CODE = /\b(?:typos?|grammar|spelling|sentences?|paragraphs?|essay|wording|punctuation|resume|cv|cover letter|letter|email|speech|poem|story|translation|caption|schedule|sleep|diet|tap|sink|car|bike|tyre|tire|phone screen|relationship|marriage|habit|muscle|confidence|brand|business|career|team|house|hair|skin|credit|score|budget|taxes?)\b/i;
+/** A picture, video or logo is the subject: not code work unless code words are there too ("fix the image upload bug"). */
+const MEDIA_WORD = /\b(?:photos?|photograph|pictures?|images?|selfie|portrait|logo|poster|video|videos|drawing|illustration|artwork|wallpaper|thumbnail|avatar|sticker)\b/i;
+const CODE_STRONG = /\b(?:code|codebase|bugs?|errors?|function|script|component|api|backend|frontend|build|project|repo|repository|server|database|css|html|react|typescript|javascript|python|upload|endpoint)\b/i;
 const MEDIA_AFTER = /\b(?:app|application|website|site)\s+(?:icon|logo|poster|image|picture|photo|video|banner|mockup|illustration|wallpaper|sticker|screenshot|name|idea)\b|\b(?:icon|logo|poster|image|picture|photo|video|banner)\b/i;
 const NAMES_CODE = /\b(?:code|codes|codebase|source(?: code)?|app|apps|application|applications|project|projects|repo|repository|website|web ?site|site|web ?app|bug|bugs|error|errors|issue|issues|crash|crashes|build|script|scripts|function|functions|component|components|module|modules|api|apis|backend|frontend|front-end|back-end|server|database|db|auth|authentication|login|signup|ui|ux|css|html|file|files|program|software|plugin|extension|bot|game|dashboard|config|routes?|endpoints?|handlers?|hooks?|tests?|pipeline|page|pages|screen|screens|form|forms|layout|navbar|menu|button|buttons|pothub|wybuild)\b/i;
 const BUILD_OBJECT = /\b(?:app|apps|application|applications|project|projects|website|web ?site|site|web ?app|software|platform|system|dashboard|game|bot|chatbot|backend|frontend|front-end|back-end|api|codebase|repo|repository|saas|portal|store|shop|extension|plugin|program|tool|whole thing|full thing|entire thing)\b/i;
@@ -67,6 +70,7 @@ export function detectCodeWork(prompt: string, ctx: CodeCtx = {}): CodeWork | nu
     if (/^(?:how|what|whats|what(?:'|’)?s|why|who|when|where|which|is|are|do|does|did|should|explain|describe|tell me|show me how|teach|walk me|can i|could i|may i|will it|would it)\b/i.test(low)) continue;
     if (APPLY.test(low)) { if (hasCode) return { task: 'fix', via: 'confirm' }; continue; }
     if (NON_CODE.test(low) && !/\b(?:code|app|project|bug|api|function|component|script)\b/i.test(low)) continue;
+    if (MEDIA_WORD.test(low) && !CODE_STRONG.test(low)) continue;
 
     const rest = (re: RegExp) => core.replace(re, '').replace(/^\s*(?:up|out|over|through)\b/i, '').trim();
     const pronoun = (r: string) => new RegExp(`^${PRON}\\b`, 'i').test(r) || r === '';
