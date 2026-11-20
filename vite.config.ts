@@ -5,6 +5,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 // One id per build (the Vercel commit when there is one). The page, the service worker and /version.json all carry it,
 // so a device that still holds an older copy notices at once and replaces it.
 const BUILD_ID = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 10) || String(Date.now());
+const APP_VERSION: string = JSON.parse(readFileSync('package.json', 'utf8')).version;
 const versioning = () => ({
   name: 'pothub-versioning',
   apply: 'build' as const,
@@ -43,6 +44,6 @@ const publicEnvGuard = () => ({
 
 export default defineConfig({
   plugins: [react(), publicEnvGuard(), versioning()],
-  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID), __APP_VERSION__: JSON.stringify(APP_VERSION) },
   test: { environment: 'node' },
 });
