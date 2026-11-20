@@ -1,20 +1,29 @@
 import { request } from '../security/api';
+import { applyCrawl, buildSources, mergeHits, queryVariants, resultsBlock, type CrawledPage, type WebHit, type WebResearch, type WebUpdate } from './research';
 
-export interface WebHit { title: string; url: string; snippet: string; }
+export type { WebHit, WebResearch, WebSource, WebUpdate } from './research';
+export { resultsBlock };
+
 /** Every answer may use web research; Pothub automatically searches when it can improve relevance. */
 export function shouldAutoWebSearch(_prompt: string): boolean { return true; }
 export const WEB_CHANGED = 'web:changed';
 export const webRemaining = () => Infinity;
-export async function webSearch(query: string): Promise<WebHit[]> {
-  const r = await request<{ results: WebHit[] }>(`/api/search?q=${encodeURIComponent(query)}`, undefined, 20_000);
-  const hits = Array.isArray(r.results) ? r.results.slice(0, 8) : [];
-  // Free web search for every account; crawl relevant pages for deeper answer context.
+
+/**
+ * Searches (a past-month search too when the question is about something recent, both at once), then crawls the
+ * best results: their page text and dates, a few relevant pages from the same sites, and each site's newest feed items.
+ * `sources` lists the sites that contributed, for showing under the answer. Throws only if every search failed.
+ */
+export async function webResearch(query: string): Promise<WebResearch> {
+  const runs = await Promise.allSettled(queryVariants(query).map((v) => request<{ results: WebHit[] }>(`/api/search?q=${encodeURIComponent(v.q)}${v.fresh ? `&fresh=${v.fresh}` : ''}`, undefined, 20_000)));
+  if (runs.every((r) => r.status === 'rejected')) throw (runs[0] as PromiseRejectedResult).reason;
+  const hits = mergeHits(runs.map((r) => (r.status === 'fulfilled' && Array.isArray(r.value.results) ? r.value.results : [])), 10, 2);
+  if (!hits.length) return { hits: [], updates: [], sources: [] };
+  let pages: CrawledPage[] = []; let updates: WebUpdate[] = [];
   try {
-    const crawled = await request<{ pages: { url: string; title: string; text: string }[] }>('/api/crawl', { urls: hits.slice(0, 5).map(h => h.url) }, 35_000);
-    const pages = new Map((crawled.pages ?? []).map(p => [p.url, p]));
-    return hits.map(h => { const p = pages.get(h.url); return p ? { ...h, snippet: `${h.snippet}\n\nCRAWLED PAGE CONTENT: ${p.text.slice(0, 2800)}` } : h; });
-  } catch { return hits; }
-}
-export function resultsBlock(query: string, hits: WebHit[], today: string): string {
-  return [`WEB RESULTS for "${query}" (searched ${today}):`, ...hits.map((h, i) => `${i + 1}. ${h.title}\n   [🌐](${h.url})\n   ${h.snippet}`)].join('\n');
+    const c = await request<{ pages?: CrawledPage[]; updates?: WebUpdate[] }>('/api/crawl', { urls: hits.slice(0, 6).map((h) => h.url), query, depth: 2 }, 30_000);
+    pages = Array.isArray(c.pages) ? c.pages : []; updates = Array.isArray(c.updates) ? c.updates : [];
+  } catch { /* the search results still stand without page text */ }
+  const all = applyCrawl(hits, pages);
+  return { hits: all, updates, sources: buildSources(all) };
 }

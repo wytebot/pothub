@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
-    "test": "tsx --test src/securityPolicy.test.ts",
+    "test": "tsx --test src/securityPolicy.test.ts src/search.test.ts src/crawl.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

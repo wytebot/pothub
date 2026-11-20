@@ -37,7 +37,7 @@ export function classify(f: { name: string; type: string }): AttachKind {
 export const kindLabel: Record<AttachKind, string> = { image: 'photo', video: 'video', audio: 'audio', pdf: 'PDF', docx: 'Word document', text: 'file', office: 'document', archive: 'archive', binary: 'file' };
 
 /** Turns picked files into attachments. Files that cannot be used come back in `skipped` with a friendly reason. */
-export function toAttachments(files: File[], _have: Attachment[]): { added: Attachment[]; skipped: string[] } {
+export function toAttachments(files: File[], have: Attachment[]): { added: Attachment[]; skipped: string[] } {
   const added: Attachment[] = []; const skipped: string[] = [];
   let batchBytes = have.reduce((n, a) => n + a.size, 0);
   for (const f of files) {

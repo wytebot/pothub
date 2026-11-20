@@ -4,7 +4,8 @@ import { entitled, luhn, memoryStore, ngnAmount, PRICE_USD, settleCharge, verify
 import { verifyIdToken } from './identity';
 import { audit, configuredAdmins, distributedLimit, getAccountRole } from './securityStore';
 import { validUsageRequest } from './securityPolicy';
-import { ddgSearch, crawlPages } from './search';
+import { ddgSearch, parseFresh } from './search';
+import { crawlSites } from './crawl';
 import { authorizeCharge, FlwError, getCharge, isLive, startCardCharge, toTx, type ChargeResult } from './flutterwave';
 
 const env = process.env; const PORT = Number(env.PORT ?? 8787);
@@ -139,14 +140,16 @@ createServer(async (req, res) => {
       if (await distributedLimit(`search-burst:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
       const q = (url.searchParams.get('q') ?? '').replace(/\\s+/g, ' ').trim().slice(0, 300);
       if (q.length < 2) return send(400, { error: 'Type something to search for.' });
-      try { return send(200, { results: await ddgSearch(q, 8) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
+      try { return send(200, { results: await ddgSearch(q, 8, parseFresh(url.searchParams.get('fresh'))) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
     }
     if (p === '/api/crawl' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to crawl pages.' });
       if (await distributedLimit(`crawl-burst:${who.uid}`, 12)) return send(429, { error: 'Too many crawl requests. Wait a moment.' });
       const b = await json(12_000); const urls = Array.isArray(b.urls) ? b.urls.filter((x: unknown): x is string => typeof x === 'string').slice(0, 8) : [];
       if (!urls.length) return send(400, { error: 'Provide at least one web URL to crawl.' });
-      return send(200, { pages: await crawlPages(urls, 5) });
+      const query = typeof b.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+      // Top results, then a few relevant pages from the same sites and each site's newest feed items, all within one time budget.
+      return send(200, await crawlSites(urls, { query, depth: b.depth === 1 ? 1 : 2, maxPages: 11 }));
     }
     if (p === '/api/account/link' && req.method === 'POST') {
       if (limited(`link:${ip}`, 20)) return send(429, { error: 'Too many attempts.' });

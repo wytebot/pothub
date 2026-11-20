@@ -501,3 +501,10 @@ input[type='search'] { width: 100%; }
 
 /* Compact website favicon citations for researched answers */
 .citation-favicon{width:16px;height:16px;vertical-align:-3px;border-radius:3px;display:inline-block;margin:0 2px;}
+
+/* Source sites under a web-researched answer: each is a web icon with the site name, in a rounded chip */
+.web-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
+.web-source { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 10px 5px 8px; border: 1px solid #2f2f2f; border-radius: 999px; background: #1b1b1b; color: #b9cfee; font-size: 12.5px; line-height: 1; text-decoration: none; }
+.web-source svg { flex: none; }
+.web-source span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.web-source:hover, .web-source:focus-visible { border-color: #4a6a9a; color: #dbe8ff; }

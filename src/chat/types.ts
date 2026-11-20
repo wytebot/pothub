@@ -1,4 +1,5 @@
 import type { AttachmentMeta } from '../agent/attachments';
+import type { WebSource } from '../agent/research';
 
 export interface ChatMessage {
   id: string; role: 'user' | 'assistant'; text: string; state?: 'working' | 'done' | 'error';
@@ -9,4 +10,6 @@ export interface ChatMessage {
   note?: string; providers?: boolean; notes?: string[];
   /** assistant messages: a file that was built for the person (only lives while the app is open) */
   fileOut?: { name: string; size: number };
+  /** assistant messages: the sites the web research drew on, shown under the reply. Only set when web results were used. */
+  sources?: WebSource[];
 }

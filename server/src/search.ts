@@ -28,15 +28,18 @@ export function parseDdg(html: string, max = 8): Hit[] {
 }
 
 const cache = new Map<string, { at: number; hits: Hit[] }>();
+/** Optional recency filter: past day, week, month or year. */
+export type Fresh = 'd' | 'w' | 'm' | 'y';
+export const parseFresh = (v: string | null | undefined): Fresh | undefined => (v === 'd' || v === 'w' || v === 'm' || v === 'y' ? v : undefined);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-export async function ddgSearch(query: string, max = 6): Promise<Hit[]> {
-  const key = query.toLowerCase(); const hit = cache.get(key);
+export async function ddgSearch(query: string, max = 6, fresh?: Fresh): Promise<Hit[]> {
+  const key = `${fresh ?? ''}|${query.toLowerCase()}`; const hit = cache.get(key);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.hits.slice(0, max);
   if (cache.size > 300) cache.clear();
   let hits: Hit[] = [];
   try {
-    const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9', Accept: 'text/html' }, signal: AbortSignal.timeout(9_000) });
+    const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}${fresh ? `&df=${fresh}` : ''}`, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9', Accept: 'text/html' }, signal: AbortSignal.timeout(9_000) });
     if (r.ok) hits = parseDdg(await r.text());
   } catch { /* try the fallback below */ }
   if (!hits.length) {
@@ -50,24 +53,3 @@ export async function ddgSearch(query: string, max = 6): Promise<Hit[]> {
   return hits.slice(0, max);
 }
 
-
-/** Fetch and extract readable page text for a bounded research crawl. */
-export async function crawlPages(urls: string[], maxPages = 5): Promise<{ url: string; title: string; text: string }[]> {
-  const out: { url: string; title: string; text: string }[] = [];
-  for (const raw of [...new Set(urls)].slice(0, Math.max(1, Math.min(8, maxPages)))) {
-    try {
-      const u = new URL(raw);
-      if (!['https:', 'http:'].includes(u.protocol) || !u.hostname || /localhost|\.local$/i.test(u.hostname) ||
-          /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname)) continue;
-      const r = await fetch(u.toString(), { headers: { 'User-Agent': 'PothubResearch/1.0 (+https://pothub.app)', Accept: 'text/html,application/xhtml+xml' }, redirect: 'manual', signal: AbortSignal.timeout(7000) });
-      if (!r.ok || r.status >= 300 || !/text\/html|application\/xhtml/i.test(r.headers.get('content-type') ?? '')) continue;
-      const html = (await r.text()).slice(0, 500_000);
-      const title = text(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? u.hostname).slice(0, 180);
-      const body = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<nav[\s\S]*?<\/nav>|<footer[\s\S]*?<\/footer>|<header[\s\S]*?<\/header>/gi, ' ')
-        .replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-        .replace(/\s+/g, ' ').trim().slice(0, 9000);
-      if (body.length > 200) out.push({ url: u.toString(), title, text: body });
-    } catch { /* bad URL, blocked site, or timeout */ }
-  }
-  return out;
-}

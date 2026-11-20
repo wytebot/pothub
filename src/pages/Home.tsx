@@ -11,6 +11,7 @@ import { FNS } from '../models/providerInfo';
 import { listLibrary, putMedia, uid, type MediaRecord } from '../storage/db';
 import { RunLog, logFor } from '../agent/log';
 import { FadeStatus } from '../ui/FadeStatus';
+import { Sources } from '../ui/Sources';
 import { Markdown } from '../ui/Markdown';
 import { MediaPicker } from '../ui/MediaPicker';
 import { useOutside } from '../ui/useOutside';
@@ -122,6 +123,7 @@ function Reply({ m }: { m: Msg }) {
       {isText ? <Markdown text={m.text} /> : m.text && <p className="reply">{m.text}</p>}
       {m.notes?.map((n, i) => <p key={i} className="reply-note">{n}</p>)}
       {m.note && <div className={`friendly-note${m.state === 'error' ? '' : ' soft'}`} role="status"><p>{m.note}</p>{m.providers && <a href="#/providers">Open AI Providers</a>}</div>}
+      <Sources sources={m.sources} />
     </>
   );
 }
@@ -306,7 +308,7 @@ export function Home() {
         if (analyzing && blockedUntil === null) { consumeAnalysis(); const left = analysisStatus(); if (!left.unlimited && left.left === 0) setLimitDlg('analysis'); } // told once, at the moment the free analyses run out
         if (out.file) outFiles.set(id, out.file);
         log.say('ok', 'done');
-        patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size } : undefined });
+        patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, sources: out.sources?.length ? out.sources : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size } : undefined });
         return;
       }
 
