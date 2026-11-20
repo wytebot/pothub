@@ -1,0 +1,397 @@
+diff -u -N --label a --label b -r a b
+--- a
++++ b
+@@ -37,7 +37,7 @@
+ export const kindLabel: Record<AttachKind, string> = { image: 'photo', video: 'video', audio: 'audio', pdf: 'PDF', docx: 'Word document', text: 'file', office: 'document', archive: 'archive', binary: 'file' };
+ 
+ /** Turns picked files into attachments. Files that cannot be used come back in `skipped` with a friendly reason. */
+-export function toAttachments(files: File[], _have: Attachment[]): { added: Attachment[]; skipped: string[] } {
++export function toAttachments(files: File[], have: Attachment[]): { added: Attachment[]; skipped: string[] } {
+   const added: Attachment[] = []; const skipped: string[] = [];
+   let batchBytes = have.reduce((n, a) => n + a.size, 0);
+   for (const f of files) {
+diff -u -N --label a --label b -r a b
+--- a
++++ b
+@@ -1,24 +1,119 @@
+ import { describe, expect, it } from 'vitest';
+-import { splitTextIntoChunks } from './workflow';
++import { budgetFor, groupByBudget, mapLimit, splitTextIntoChunks, withRetry } from './chunking';
++import { splitTextIntoChunks as fromWorkflow } from './workflow';
+ 
+ describe('large source chunking', () => {
+   it('keeps short content in one unchanged segment', () => {
+     expect(splitTextIntoChunks('small source')).toEqual(['small source']);
+   });
+ 
++  it('is still exported from workflow for existing callers', () => {
++    expect(fromWorkflow).toBe(splitTextIntoChunks);
++  });
++
+   it('covers the full source with overlapping segments', () => {
+     const source = Array.from({ length: 120_000 }, (_, i) => `line ${i}: important source detail`).join('\n');
+-    const chunks = splitTextIntoChunks(source);
++    const chunks = splitTextIntoChunks(source, 28_000, 900);
+     expect(chunks.length).toBeGreaterThan(1);
+     expect(chunks[0].length).toBeLessThanOrEqual(28_000);
+     expect(chunks[0]).toContain('line 0:');
+-    expect(chunks[chunks.length - 1]).toContain(`line 119999:`);
++    expect(chunks[chunks.length - 1]).toContain('line 119999:');
+     for (let i = 1; i < chunks.length; i++) {
+       expect(chunks[i - 1].slice(-900)).toBe(chunks[i].slice(0, 900));
+     }
+   });
++
++  it('uses far fewer, larger segments with the provider budgets', () => {
++    const source = Array.from({ length: 120_000 }, (_, i) => `line ${i}: important source detail`).join('\n'); // ~3.9M characters
++    const old = splitTextIntoChunks(source, 28_000, 900).length;
++    const b = budgetFor('gemini');
++    const now = splitTextIntoChunks(source, b.chunk, b.overlap);
++    expect(now.length).toBeLessThan(old / 6);
++    expect(now[0].length).toBeLessThanOrEqual(b.chunk);
++    expect(now[now.length - 1]).toContain('line 119999:');
++  });
++
++  it('never loses a character: every line of the source appears in some segment', () => {
++    const lines = Array.from({ length: 5_000 }, (_, i) => `row ${i} ${'x'.repeat(i % 37)}`);
++    const chunks = splitTextIntoChunks(lines.join('\n'), 10_000, 500);
++    const seen = new Set<string>(); for (const c of chunks) for (const l of c.split('\n')) seen.add(l);
++    expect(lines.filter((l) => !seen.has(l)).length).toBeLessThanOrEqual(chunks.length * 2); // only a line cut by a boundary may appear in halves
++    expect(chunks.join('')).toContain('row 4999 ');
++  });
++
++  it('prefers to cut at an archive file marker so a file stays whole', () => {
++    const file = (n: number) => `=== src/f${n}.ts ===\n${'const a = 1;\n'.repeat(400)}`;
++    const source = Array.from({ length: 12 }, (_, i) => file(i)).join('\n');
++    const chunks = splitTextIntoChunks(source, 20_000, 300);
++    expect(chunks.length).toBeGreaterThan(1);
++    for (const c of chunks.slice(0, -1)) expect(c.endsWith('\n')).toBe(true);
++    expect(chunks[1].slice(300)).toMatch(/^=== src\/f\d+\.ts ===/);
++  });
++
++  it('terminates even when the overlap is larger than the segment', () => {
++    const chunks = splitTextIntoChunks('word '.repeat(5_000), 1_000, 5_000);
++    expect(chunks.length).toBeGreaterThan(1);
++    expect(chunks.length).toBeLessThan(200);
++  });
++});
++
++describe('provider budgets', () => {
++  it('gives every provider a direct budget at least as big as one segment and a bigger one than the old 28k cut', () => {
++    for (const p of ['gemini', 'openai', 'xai', 'something-new']) {
++      const b = budgetFor(p);
++      expect(b.direct).toBeGreaterThanOrEqual(b.chunk);
++      expect(b.chunk).toBeGreaterThan(28_000);
++      expect(b.parallel).toBeGreaterThanOrEqual(2);
++    }
++  });
++});
++
++describe('mapLimit', () => {
++  it('keeps input order and never runs more than the limit at once', async () => {
++    let running = 0; let peak = 0;
++    const out = await mapLimit([1, 2, 3, 4, 5, 6, 7, 8], 3, async (n) => {
++      running++; peak = Math.max(peak, running);
++      await new Promise((r) => setTimeout(r, 10 - n));
++      running--; return n * 2;
++    });
++    expect(out).toEqual([2, 4, 6, 8, 10, 12, 14, 16]);
++    expect(peak).toBeLessThanOrEqual(3);
++    expect(peak).toBeGreaterThan(1);
++  });
++
++  it('stops starting new work after a failure and rethrows the first error', async () => {
++    const started: number[] = [];
++    await expect(mapLimit([1, 2, 3, 4, 5, 6], 2, async (n) => { started.push(n); if (n === 2) throw new Error('boom'); await new Promise((r) => setTimeout(r, 5)); return n; })).rejects.toThrow('boom');
++    expect(started.length).toBeLessThan(6);
++  });
++
++  it('handles an empty list', async () => {
++    expect(await mapLimit([], 4, async (x: number) => x)).toEqual([]);
++  });
+ });
+ 
++describe('groupByBudget', () => {
++  it('packs consecutive items by size, keeping order, and never drops an oversized item', () => {
++    const items = ['a'.repeat(40), 'b'.repeat(40), 'c'.repeat(40), 'd'.repeat(500), 'e'.repeat(10)];
++    const groups = groupByBudget(items, 100);
++    expect(groups.flat()).toEqual(items);
++    expect(groups.map((g) => g.length)).toEqual([2, 1, 1, 1]);
++  });
++});
++
++describe('withRetry', () => {
++  it('retries temporary failures with a growing pause, then succeeds', async () => {
++    let n = 0; const pauses: number[] = [];
++    const v = await withRetry(async () => { if (++n < 3) throw Object.assign(new Error('rate'), { status: 429 }); return 'ok'; }, (e) => (e as { status?: number }).status === 429, { pauseMs: 100, sleep: async (ms) => { pauses.push(ms); } });
++    expect(v).toBe('ok'); expect(n).toBe(3); expect(pauses).toEqual([100, 200]);
++  });
++
++  it('does not retry a permanent failure', async () => {
++    let n = 0;
++    await expect(withRetry(async () => { n++; throw Object.assign(new Error('bad key'), { status: 401 }); }, (e) => (e as { status?: number }).status === 429, { sleep: async () => {} })).rejects.toThrow('bad key');
++    expect(n).toBe(1);
++  });
++});
+ 
+ describe('unbounded source extraction', () => {
+   it('does not truncate text sources beyond the former four-million-character cutoff', async () => {
+diff -u -N --label a --label b -r a b
+--- a
++++ b
+@@ -0,0 +1,92 @@
++// Large-source handling, kept free of imports so it is cheap to test and safe to reuse.
++//
++// Strategy (fastest first):
++//   1. READ WHOLE   - a source that fits the provider's context goes in as one piece: no extra requests at all.
++//   2. MAP IN PARALLEL - only a source that does not fit is split into big, file-boundary-aware segments,
++//                        and the segments are analysed several at a time (order is preserved).
++//   3. MERGE ONLY IF NEEDED - segment findings are concatenated; they are condensed further only when they
++//                        still would not fit, and then in parallel groups packed by size, not by a fixed count.
++
++export interface Budget {
++  /** Characters of source text that may be sent to the model in a single request (all files together). */
++  direct: number;
++  /** Characters per segment when a source has to be split. */
++  chunk: number;
++  /** Characters repeated at each segment boundary so nothing is lost between segments. */
++  overlap: number;
++  /** Segments analysed at the same time. */
++  parallel: number;
++}
++
++// Characters, not tokens: code and prose average roughly 3 to 4 characters per token, so these stay well
++// inside the 128k-token context that the smallest supported chat models have, and far inside Gemini's 1M.
++// They are deliberately below the provider maximum: free keys have per-minute token limits, and the answer,
++// the conversation and the review pass need room too.
++const BUDGETS: Record<string, Budget> = {
++  gemini: { direct: 400_000, chunk: 200_000, overlap: 2_000, parallel: 4 },
++  openai: { direct: 240_000, chunk: 120_000, overlap: 2_000, parallel: 3 },
++  xai: { direct: 240_000, chunk: 120_000, overlap: 2_000, parallel: 3 },
++};
++const FALLBACK: Budget = { direct: 200_000, chunk: 100_000, overlap: 2_000, parallel: 2 };
++
++export const budgetFor = (provider: string): Budget => BUDGETS[provider] ?? FALLBACK;
++
++/**
++ * Splits text into ordered, overlapping segments no longer than `size`. Prefers to cut where an archive's
++ * "=== path ===" file marker starts (so a file stays whole), then at a line, sentence or word boundary.
++ * Every character of the source appears in at least one segment.
++ */
++export function splitTextIntoChunks(text: string, size = FALLBACK.chunk, overlap = FALLBACK.overlap): string[] {
++  if (text.length <= size) return [text];
++  const ov = Math.max(0, Math.min(overlap, Math.floor(size / 4)));
++  const chunks: string[] = []; let start = 0;
++  while (start < text.length) {
++    let end = Math.min(text.length, start + size);
++    if (end < text.length) {
++      const floor = start + size * 0.65;
++      const marker = text.lastIndexOf('\n=== ', end);
++      const boundary = marker > floor ? marker : Math.max(text.lastIndexOf('\n', end), text.lastIndexOf('. ', end), text.lastIndexOf(' ', end - 500));
++      if (boundary > floor) end = boundary + 1;
++    }
++    chunks.push(text.slice(start, end));
++    if (end >= text.length) break;
++    start = Math.max(start + 1, end - ov);
++  }
++  return chunks;
++}
++
++/** Packs consecutive items into groups of at most `budget` characters (an oversized item gets its own group). Order is kept. */
++export function groupByBudget(items: string[], budget: number): string[][] {
++  const groups: string[][] = []; let cur: string[] = []; let len = 0;
++  for (const it of items) {
++    if (cur.length && len + it.length > budget) { groups.push(cur); cur = []; len = 0; }
++    cur.push(it); len += it.length;
++  }
++  if (cur.length) groups.push(cur);
++  return groups;
++}
++
++/**
++ * Like Promise.all(items.map(fn)) but with at most `limit` running at once. Results keep the input order.
++ * After the first failure nothing new is started; work already running is allowed to finish, then the error is thrown.
++ */
++export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
++  const out = new Array<R>(items.length); let next = 0; let failed = false; let error: unknown;
++  const worker = async () => {
++    while (!failed) {
++      const i = next++; if (i >= items.length) return;
++      try { out[i] = await fn(items[i], i); } catch (e) { if (!failed) { failed = true; error = e; } return; }
++    }
++  };
++  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
++  if (failed) throw error;
++  return out;
++}
++
++/** Runs `fn`, retrying a few times (with a growing pause) while `retryable(error)` says the failure is temporary. */
++export async function withRetry<T>(fn: () => Promise<T>, retryable: (e: unknown) => boolean, opts: { tries?: number; pauseMs?: number; sleep?: (ms: number) => Promise<void> } = {}): Promise<T> {
++  const tries = opts.tries ?? 3; const pause = opts.pauseMs ?? 1500; const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
++  for (let n = 1; ; n++) {
++    try { return await fn(); } catch (e) { if (n >= tries || !retryable(e)) throw e; await sleep(pause * n); }
++  }
++}
+diff -u -N --label a --label b -r a b
+--- a
++++ b
+@@ -16,6 +16,7 @@
+ import { resultsBlock, webSearch, webRemaining, shouldAutoWebSearch } from './search';
+ import { readyFiles } from './readers';
+ import { notifyDone } from '../notify';
++import { budgetFor, groupByBudget, mapLimit, splitTextIntoChunks, withRetry } from './chunking';
+ 
+ const q = (s: string, n = 64) => { const t = s.replace(/\s+/g, ' ').trim(); return `"${t.length > n ? `${t.slice(0, n - 1)}…` : t}"`; };
+ const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
+@@ -178,69 +179,60 @@
+ const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+ 
+ 
+-// Provider context limits vary. Keep each extracted-text segment comfortably below common
+-// request limits, overlap boundaries so sentences are not lost, and process every segment.
+-const CHUNK_CHARS = 28_000;
+-const CHUNK_OVERLAP = 900;
+-export function splitTextIntoChunks(text: string): string[] {
+-  if (text.length <= CHUNK_CHARS) return [text];
+-  const chunks: string[] = []; let start = 0;
+-  while (start < text.length) {
+-    let end = Math.min(text.length, start + CHUNK_CHARS);
+-    if (end < text.length) {
+-      const boundary = Math.max(text.lastIndexOf('\n', end), text.lastIndexOf('. ', end), text.lastIndexOf(' ', end - 500));
+-      if (boundary > start + CHUNK_CHARS * 0.65) end = boundary + 1;
+-    }
+-    chunks.push(text.slice(start, end));
+-    if (end >= text.length) break;
+-    start = Math.max(start + 1, end - CHUNK_OVERLAP);
+-  }
+-  return chunks;
+-}
++// Large sources (see chunking.ts). A source that fits the provider's context is read WHOLE, with no extra requests.
++// Only a source that does not fit is split into big segments, analysed several at a time, and merged only if the
++// findings still would not fit. Every segment is always read; nothing is skipped or truncated.
++export { splitTextIntoChunks };
++const CONTEXT_ERR = /token|context|too (long|large)|exceed|maximum|limit/i;
++const temporary = (e: unknown) => { const s = (e as ProviderErr).status; return s === 429 || s === 500 || s === 502 || s === 503 || s === 504; };
+ 
+ async function chunkLargeTextFiles(files: Attachment[], provider: ProviderId, secret: string, model: TextModel,
+-  signal: AbortSignal, log: RunLog): Promise<{ files: Attachment[]; evidence: string[]; notes: string[] }> {
++  signal: AbortSignal, log: RunLog, forceSplit = false): Promise<{ files: Attachment[]; evidence: string[]; notes: string[] }> {
+   const prepared: Attachment[] = []; const evidence: string[] = []; const notes: string[] = [];
++  const b = budgetFor(provider);
++  // Total characters that may travel whole. After a "too large" refusal from the provider, drop to one segment's worth.
++  const limit = forceSplit ? b.chunk : b.direct; let whole = 0;
+   for (const file of files) {
+     if (file.kind !== 'text' && file.kind !== 'docx') { prepared.push(file); continue; }
+     const source = await textOf(file);
+-    const chunks = splitTextIntoChunks(source);
+-    if (chunks.length === 1) { prepared.push(file); evidence.push(`Source ${file.name}:\n${source}`); continue; }
+-    log.step(`Processing ${file.name} in ${chunks.length} overlapping chunks…`);
+-    const summaries: string[] = [];
+-    for (let i = 0; i < chunks.length; i++) {
++    if (whole + source.length <= limit) { whole += source.length; prepared.push(file); evidence.push(`Source ${file.name}:\n${source}`); continue; }
++    const chunks = splitTextIntoChunks(source, b.chunk, b.overlap);
++    log.step(`${file.name} is larger than one request can hold: reading all ${chunks.length} part${chunks.length === 1 ? '' : 's'}, ${Math.min(b.parallel, chunks.length)} at a time…`);
++    let done = 0;
++    const summaries = await mapLimit(chunks, b.parallel, async (part, i) => {
+       if (signal.aborted) throw new Error('Cancelled.');
+-      const part = await generateText(provider, secret, {
++      const r = await withRetry(() => generateText(provider, secret, {
+         model: model.id,
+-        system: 'You are a careful source-analysis agent. Extract all relevant facts, figures, names, dates, requirements, decisions, and caveats from this source segment. Preserve exact values and distinguish explicit facts from uncertainty. Do not invent missing context. Include a short segment locator.',
+-        history: [], prompt: `File: ${file.name}\nSegment ${i + 1} of ${chunks.length}\n\n${chunks[i]}`,
++        system: 'You are a careful source-analysis agent. Extract all relevant facts, figures, names, dates, requirements, decisions, and caveats from this source segment. Preserve exact values, file paths, identifiers, and any code that would be needed to edit or reproduce the source. Distinguish explicit facts from uncertainty. Do not invent missing context. Include a short segment locator.',
++        history: [], prompt: `File: ${file.name}\nSegment ${i + 1} of ${chunks.length}\n\n${part}`,
+         files: [], signal,
+-      });
+-      summaries.push(`SEGMENT ${i + 1}/${chunks.length}\n${part.text}`);
+-      log.step(`${file.name}: verified segment ${i + 1} of ${chunks.length}`);
+-    }
+-    // Hierarchical consolidation keeps every source segment in the review path without
+-    // sending an unbounded pile of summaries into one provider context window.
+-    let level = summaries;
+-    let round = 0;
+-    while (level.length > 1) {
+-      const next: string[] = [];
+-      for (let at = 0; at < level.length; at += 5) {
++      }), temporary);
++      log.step(`${file.name}: part ${++done} of ${chunks.length} read`);
++      return `SEGMENT ${i + 1}/${chunks.length}\n${r.text}`;
++    });
++    // Merge only while the findings still would not fit in one segment's worth of text. Groups are packed by size
++    // and condensed in parallel; a group of one is passed through untouched (no request).
++    let level = summaries; let round = 0;
++    while (level.length > 1 && level.join('\n\n').length > b.chunk && round < 4) {
++      const groups = groupByBudget(level, b.chunk);
++      if (groups.length >= level.length) break; // nothing can be packed together any further
++      level = await mapLimit(groups, b.parallel, async (group, gi) => {
++        if (group.length === 1) return group[0];
+         if (signal.aborted) throw new Error('Cancelled.');
+-        const group = level.slice(at, at + 5);
+-        const reduced = await generateText(provider, secret, {
++        const reduced = await withRetry(() => generateText(provider, secret, {
+           model: model.id, history: [], files: [], signal,
+           system: 'You are consolidating source-analysis records. Preserve every distinct fact, exact number, date, name, requirement, decision, exception, contradiction, uncertainty, and source locator. Merge duplicates only when they are genuinely identical. Never discard a unique detail or invent missing facts. Organize compactly by topic and retain segment references.',
+-          prompt: `File: ${file.name}\nConsolidation round ${round + 1}; group ${Math.floor(at / 5) + 1}\n\n${group.join('\n\n')}`,
+-        });
+-        next.push(reduced.text);
+-        log.step(`${file.name}: consolidating source findings (${next.length} groups complete)`);
+-      }
+-      level = next; round++;
++          prompt: `File: ${file.name}\nConsolidation round ${round + 1}; group ${gi + 1} of ${groups.length}\n\n${group.join('\n\n')}`,
++        }), temporary);
++        log.step(`${file.name}: condensing findings (round ${round + 1}, group ${gi + 1} of ${groups.length})`);
++        return reduced.text;
++      });
++      round++;
+     }
+-    const consolidated = level[0] ?? 'No extractable text was returned by the analysis provider.';
++    const consolidated = level.join('\n\n').trim() || 'No extractable text was returned by the analysis provider.';
+     const sourceEvidence = `Complete source processed: ${file.name} (${source.length.toLocaleString()} characters; ${chunks.length} overlapping segments).\nConsolidated segment findings (all segments were submitted):\n${consolidated}`;
+-    evidence.push(sourceEvidence);
++    evidence.push(sourceEvidence); whole += sourceEvidence.length;
++    notes.push(`${file.name} was too large to send in one request, so I read all of it in ${chunks.length} large part${chunks.length === 1 ? '' : 's'} and worked from detailed notes on each. Exact wording may be condensed.`);
+     prepared.push({ ...file, kind: 'text', mime: 'text/plain', size: sourceEvidence.length,
+       blob: new Blob([sourceEvidence], { type: 'text/plain' }) });
+   }
+@@ -286,6 +278,8 @@
+   const skipKeys = new Set<string>(); const tried = new Set<string>(); let lastErr: unknown; let partial = '';
+   // The whole conversation is sent. Only if a model says it cannot hold that much do the oldest turns step aside, and the person is told.
+   let history = o.history; let trimmed = false;
++  // Set when a provider refuses a request as too large: from then on big files are read in parts instead of whole.
++  let forceSplit = false;
+ 
+   for (let attempt = 0, max = Math.min(10, 6 + defaultKeys('text').length) + 6; attempt < max; attempt++) {
+     log.step(attempt === 0 ? 'Choosing the best text model…' : 'Trying another model…');
+@@ -310,9 +304,9 @@
+     log.step(files.length ? (/\.(zip|tar|tgz|gz)$/i.test(o.files.map((f) => f.name).join(' ')) && /\b(fix|debug|repair|update|edit|amend|refactor|wire|implement|change|remove|add)\b/i.test(prompt) ? 'Applying the fixes and amending other affected files…' : 'Preparing your files and solution…') : wanted.file ? `Writing your ${wanted.format === 'docx' ? 'document' : 'file'}…` : 'Writing your answer…');
+     const g = log.start('cmd', `${model.id} generate ${q(prompt, 40)}`); const t0 = Date.now(); partial = '';
+     try {
+-      // Large text documents are summarized in ordered, overlapping provider-sized chunks;
+-      // the final writer receives the complete set of segment findings, not a truncated prefix.
+-      const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log) : { files, evidence: [] as string[], notes: [] as string[] };
++      // Sources that fit the provider are read whole; larger ones are analysed in big parallel parts, and the
++      // final writer receives the complete set of findings, not a truncated prefix.
++      const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log, forceSplit) : { files, evidence: [] as string[], notes: [] as string[] };
+       notes.push(...chunked.notes);
+       const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, blockedFiles: o.blocked?.names, web: !!o.web }), history, prompt: sent, files: chunked.files, signal, onText: (t) => { partial = t; o.onText(t); } });
+       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
+@@ -327,7 +321,8 @@
+             : `You are an independent quality-assurance agent. Compare the draft with the exact user request. Check that it performs the requested task, uses the requested output format and language, follows constraints, is complete, internally consistent, and does not drift into unrelated material. Review factual claims for obvious errors and unsupported certainty; do not invent external verification. Correct problems while preserving useful content. ${wanted.format === 'zip' ? 'For ZIP deliverables, preserve every === FILE: path === and === END FILE === marker exactly, preserve paths, and do not omit or shorten file contents.' : ''} Return the complete improved draft only.`,
+           history: [],
+           prompt: `User request: ${prompt}\n\nSOURCE EVIDENCE:\n${files.length ? evidence || '[Some source formats could not be read; state limitations rather than inventing verification.]' : '[No source files were supplied. Do not claim external fact-checking.]'}\n\nDRAFT TO CHECK:\n${out.text}`,
+-          files: chunked.files, signal,
++          // Text sources already travel inside the prompt as SOURCE EVIDENCE; sending them again as files doubled the input.
++          files: chunked.files.filter((f) => f.kind !== 'text' && f.kind !== 'docx'), signal,
+         });
+         if (!review.text.trim()) throw new Error('The reviewer returned an empty result.');
+         out.text = review.text; partial = review.text; o.onText(review.text);
+@@ -366,6 +361,9 @@
+         history = history.slice(Math.max(2, Math.ceil(history.length / 2) & ~1)); trimmed = true; log.say('warn', 'conversation too long for this model', 'leaving out the oldest messages');
+         continue;
+       }
++      if (status === 400 && !forceSplit && CONTEXT_ERR.test(msg(e)) && files.reduce((n, f) => n + (f.kind === 'text' || f.kind === 'docx' ? f.size : 0), 0) > budgetFor(model.provider).chunk) {
++        forceSplit = true; log.say('warn', 'files too large to send whole', 'reading them in parts instead'); continue;
++      }
+       if (status === 401 || status === 402 || status === 403) { skipKeys.add(key.id); if (status === 401) setStatus(key.id, 'invalid'); log.say('warn', `default key "${key.label}" failed`, 'trying the next default for Text'); log.step('That key did not work. Trying your next one…'); }
+       else {
+         // A quota or rate limit on one model (free keys often have none for the biggest models) says nothing about the key's smaller models: step down to them.

@@ -13,7 +13,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
-import { resultsBlock, webResearch, webRemaining, shouldAutoWebSearch, type WebSource } from './search';
+import { resultsBlock, webSearch, webRemaining, shouldAutoWebSearch } from './search';
 import { readyFiles } from './readers';
 import { notifyDone } from '../notify';
 import { budgetFor, groupByBudget, mapLimit, splitTextIntoChunks, withRetry } from './chunking';
@@ -168,7 +168,7 @@ export async function runVideoStart(o: { prompt: string; modelId: string; signal
   throw lastErr instanceof Error ? lastErr : new Error('Could not start the video.');
 }
 
-export interface TextOutcome { text: string; model: TextModel; file: OutFile | null; notes: string[]; /** sites the web research drew on; only present when web results were actually used */ sources?: WebSource[]; }
+export interface TextOutcome { text: string; model: TextModel; file: OutFile | null; notes: string[]; }
 /** Text models that answered last time, and ones that hit a quota recently, so the next request starts with what works. */
 const GOOD = 'agent.text.good.v1'; const BLOCKED = 'agent.text.blocked.v1'; const BLOCK_MS = 45 * 60_000;
 const readJson = <T,>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? '') as T; } catch { return d; } };
@@ -250,22 +250,17 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   const prompt = text || (o.files.length ? 'Describe and summarise the attached file(s) in detail.' : 'The person attached file(s) but did not write a message.');
   const wanted = wantedOutput(prompt); const notes: string[] = [];
   if (wanted.note) notes.push(wanted.note);
+  if (webRemaining() <= 0) notes.push('You have used today’s free web-search allowance. This response cannot include fresh web results until the allowance resets; Premium includes unlimited web research.');
   if (o.blocked) notes.push(`File analysis limit reached: I could not read ${o.blocked.names.slice(0, 3).join(', ')}${o.blocked.names.length > 3 ? ` and ${o.blocked.names.length - 3} more` : ''}. Free file analysis returns at ${o.blocked.back}. Premium has no limit.`);
-  // Mandatory web research: search and crawl first, then hand the findings to the model with the question.
-  // Nothing about the search is added to the reply text. When it was used, the source sites are shown under the
-  // answer (`sources`); when it was not (nothing found, or it failed), the answer is simply written without it.
-  let sent = prompt; let webBlock = ''; let webSources: WebSource[] = [];
+  // Mandatory web research: look it up first and hand the results to the model with the question.
+  let sent = prompt;
   if (shouldAutoWebSearch(prompt) && webRemaining() > 0) {
     log.step('Searching the web…');
     try {
-      const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const found = await webResearch(q);
-      if (found.hits.length) {
-        webBlock = resultsBlock(q, found, today()); webSources = found.sources;
-        sent = `${prompt}\n\nFor this web-researched answer, give a thorough, well-structured response that directly answers the request. Prefer the newest information and say when a page was published or updated if it matters. Separate verified facts from estimates or uncertainty, and draw on the page content and latest items, not only the snippets. Cite a page inline with its 🌐 link where a claim depends on it, but do not add a list of sources at the end: Pothub shows the source sites under your answer. Do not invent sources or facts.\n\n---\n${webBlock}`;
-        const read = found.hits.filter((h) => h.text).length; const deep = found.hits.filter((h) => h.via).length;
-        log.say('ok', 'web search', `${found.hits.length} result(s), ${read} page(s) read${deep ? `, ${deep} followed from those sites` : ''}${found.updates.length ? `, ${found.updates.length} recent update(s)` : ''}`);
-      }
-    } catch (e) { log.say('warn', 'web search failed', msg(e)); }
+      const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const hits = await webSearch(q);
+      if (hits.length) { sent = `${prompt}\n\nFor this web-researched answer, give a thorough, well-structured response that directly answers the request. Separate verified facts from estimates or uncertainty, include relevant dates, compare useful details, and cite the supplied source URLs inline. Do not invent sources or facts.\n\n---\n${resultsBlock(q, hits, today())}`; notes.push('Searched the web.'); log.say('ok', 'web search', `${hits.length} result(s)`); }
+      else { notes.push('Web search found nothing useful, so this answer does not include live results.'); }
+    } catch (e) { log.say('warn', 'web search failed', msg(e)); notes.push(/free web searches|daily research limit|free web-search allowance/i.test(msg(e)) ? msg(e) : 'Web search was not available this time, so this answer does not include live results.'); }
   }
   // Every file is made readable on this device first (documents, sheets, slides, archives, unknown formats...), before any provider is chosen.
   let files = o.files;
@@ -313,7 +308,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       // final writer receives the complete set of findings, not a truncated prefix.
       const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log, forceSplit) : { files, evidence: [] as string[], notes: [] as string[] };
       notes.push(...chunked.notes);
-      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, blockedFiles: o.blocked?.names, web: webSources.length > 0 }), history, prompt: sent, files: chunked.files, signal, onText: (t) => { partial = t; o.onText(t); } });
+      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, blockedFiles: o.blocked?.names, web: !!o.web }), history, prompt: sent, files: chunked.files, signal, onText: (t) => { partial = t; o.onText(t); } });
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
       // Independent quality-control pass before any text deliverable is released.
       log.step(files.length ? 'Fact-checking the draft against the supplied sources…' : 'Checking the result against your exact request…');
@@ -325,7 +320,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
             ? 'You are an independent fact-checking agent. Treat supplied source evidence as authoritative. Check every concrete claim, number, date, name, quotation, and conclusion in the draft. Correct unsupported or contradicted claims, preserve correct useful content, and clearly label any point the sources cannot establish. Do not claim to have verified facts absent from the evidence. Return the complete corrected draft only.'
             : `You are an independent quality-assurance agent. Compare the draft with the exact user request. Check that it performs the requested task, uses the requested output format and language, follows constraints, is complete, internally consistent, and does not drift into unrelated material. Review factual claims for obvious errors and unsupported certainty; do not invent external verification. Correct problems while preserving useful content. ${wanted.format === 'zip' ? 'For ZIP deliverables, preserve every === FILE: path === and === END FILE === marker exactly, preserve paths, and do not omit or shorten file contents.' : ''} Return the complete improved draft only.`,
           history: [],
-          prompt: `User request: ${prompt}\n\nSOURCE EVIDENCE:\n${files.length ? evidence || '[Some source formats could not be read; state limitations rather than inventing verification.]' : '[No source files were supplied. Do not claim external fact-checking.]'}${webBlock ? `\n\nWEB EVIDENCE (current pages the draft may rely on; treat as authoritative for current facts):\n${webBlock.slice(0, 24_000)}` : ''}\n\nDRAFT TO CHECK:\n${out.text}`,
+          prompt: `User request: ${prompt}\n\nSOURCE EVIDENCE:\n${files.length ? evidence || '[Some source formats could not be read; state limitations rather than inventing verification.]' : '[No source files were supplied. Do not claim external fact-checking.]'}\n\nDRAFT TO CHECK:\n${out.text}`,
           // Text sources already travel inside the prompt as SOURCE EVIDENCE; sending them again as files doubled the input.
           files: chunked.files.filter((f) => f.kind !== 'text' && f.kind !== 'docx'), signal,
         });
@@ -355,12 +350,12 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       }
       saveGood(model.id);
       void notifyDone({ kind: 'text', title: file ? 'Your answer and file are ready' : 'Your answer is ready', body: `${model.name} finished “${q(prompt, 60).slice(1, -1)}”.`, route: '/' });
-      return { text: out.text, model, file, notes, ...(webSources.length ? { sources: webSources } : {}) };
+      return { text: out.text, model, file, notes };
     } catch (e) {
       lastErr = e; log.fail(g, msg(e));
       const scope = fallbackScope(e); if (scope === 'none') throw e;
       // Most of the answer already arrived and then the connection dropped: keep what we have instead of starting over.
-      if (partial.length > 400) { log.say('warn', 'kept the partial answer'); return { text: partial, model, file: null, notes: [...notes, 'The connection dropped near the end, so this answer may be cut short. Ask me to continue and I will pick up from here.'], ...(webSources.length ? { sources: webSources } : {}) }; }
+      if (partial.length > 400) { log.say('warn', 'kept the partial answer'); return { text: partial, model, file: null, notes: [...notes, 'The connection dropped near the end, so this answer may be cut short. Ask me to continue and I will pick up from here.'] }; }
       const status = (e as ProviderErr).status;
       if (status === 400 && history.length > 2 && /token|context|too (long|large)|exceed|maximum|limit/i.test(msg(e))) {
         history = history.slice(Math.max(2, Math.ceil(history.length / 2) & ~1)); trimmed = true; log.say('warn', 'conversation too long for this model', 'leaving out the oldest messages');
