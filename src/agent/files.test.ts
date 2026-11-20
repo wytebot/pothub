@@ -78,7 +78,7 @@ describe('work that needs no model', () => {
   });
   it('builds the files', async () => {
     const z = await runLocal(detectLocal('zip these files', [txt, csv])!, [txt, csv]); expect(await names(z.file.blob)).toEqual(['notes.txt', 's.csv']);
-    const x = await runLocal(detectLocal('save it as excel', [], history)!, []); expect(x.file.name).toBe('study-plan.xlsx');
+    const x = await runLocal(detectLocal('save it as excel', [], history)!, []); expect(x.file.name).toBe('Study plan.xlsx');
     const p = await runLocal(detectLocal('convert to pdf', [txt])!, [txt]); expect(p.file.name).toBe('notes.pdf'); expect(p.text).toContain('no AI model');
   });
 });

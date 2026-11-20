@@ -1,6 +1,7 @@
 import { strToU8 } from 'fflate';
 import { markdownToDocx, markdownToPdf } from './deliver';
 import { csvToXlsx, markdownToPptx, safePath, zipEntries, type ZipEntry } from './office';
+import { cleanName, slugName } from './fileNames';
 
 /**
  * Multi-file answers. The text model is asked to write every file between markers, so a whole project (or a set of mixed
@@ -74,12 +75,12 @@ async function toBytes(f: BundleFile, notes: string[]): Promise<Uint8Array> {
   return strToU8(f.content.endsWith('\n') ? f.content : `${f.content}\n`);
 }
 
-/** Builds the zip for a model answer. Returns null with a reason when the answer holds no files. */
-export async function buildBundle(reply: string, title: string, extra: ZipEntry[] = []): Promise<{ blob: Blob; name: string; files: BundleFile[]; notes: string[] } | null> {
+/** Builds the zip for a model answer. `name` says what the zip contains ("pothub auth-ui fixed"): it names the file and the folder inside. Returns null when the answer holds no files. */
+export async function buildBundle(reply: string, name: string, extra: ZipEntry[] = []): Promise<{ blob: Blob; name: string; files: BundleFile[]; notes: string[] } | null> {
   let files = parseBundle(reply); const notes: string[] = [];
   if (!files.length) {
     const text = reply.trim(); if (!text) return null;
-    files = [{ path: 'answer.md', content: text }]; notes.push('The answer was a single document, so the zip holds it as answer.md.');
+    files = [{ path: `${slugName(name) || 'pothub-answer'}.md`, content: text }]; notes.push(`The answer was a single document, so the zip holds it as ${files[0].path}.`);
   }
   const entries: ZipEntry[] = [];
   for (const f of files) entries.push({ path: f.path, data: await toBytes(f, notes) });
@@ -87,7 +88,7 @@ export async function buildBundle(reply: string, title: string, extra: ZipEntry[
   for (const x of extra) if (!own.has(safePath(x.path))) entries.push(x);
   // one top-level folder keeps an extracted archive tidy: only added when files do not already share one
   const top = new Set(entries.map((e) => safePath(e.path).split('/')[0])); const shared = entries.length > 1 && top.size === 1 && entries.every((e) => safePath(e.path).includes('/'));
-  const base = (title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'pothub-files');
+  const base = slugName(name) || 'pothub-files'; const label = cleanName(name) || 'Pothub files';
   const blob = zipEntries(shared || entries.length === 1 ? entries : entries.map((e) => ({ ...e, path: `${base}/${e.path}` })));
-  return { blob, name: `${base}.zip`, files, notes };
+  return { blob, name: `${label}.zip`, files, notes };
 }

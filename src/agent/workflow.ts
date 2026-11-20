@@ -3,6 +3,7 @@ import { generateText, rankText, type ChatTurn, type TextModel } from '../models
 import { base64Of, textOf, type Attachment } from './attachments';
 import { buildFile, systemPrompt, wantedOutput, type OutFile } from './deliver';
 import { buildBundle, bundleSummary } from './bundle';
+import { bundleName } from './fileNames';
 import type { ImageModel, VideoModel } from '../models/registry';
 import { interpret, planImage } from '../models/router';
 import { startVideo } from '../models/video';
@@ -348,9 +349,9 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
             // attached files travel with the new ones when the request says "with these / my files"
             const keep = o.files.length > 0 && /\b(with|including|plus|and)\b[^.?!\n]{0,40}\b(these|them|my|attached|uploaded|files?)\b/i.test(prompt);
             const extra = keep ? await Promise.all(o.files.map(async (f) => ({ path: f.name, data: new Uint8Array(await f.blob.arrayBuffer()) }))) : [];
-            const b = await buildBundle(out.text, prompt.length > 60 ? prompt.slice(0, 60) : prompt, extra);
+            const b = await buildBundle(out.text, bundleName({ prompt, reply: out.text, inputs: o.files }), extra);
             if (b) { file = { blob: b.blob, name: b.name, mime: 'application/zip' }; notes.push(...b.notes); log.say('ok', 'zip ready', bundleSummary(b.files)); }
-          } else file = await buildFile(out.text, wanted, prompt);
+          } else file = await buildFile(out.text, wanted, prompt, o.files);
         } catch { notes.push('The answer is above, but I could not build the file this time. You can copy it from the chat.'); }
       }
       saveGood(model.id);

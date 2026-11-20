@@ -2,6 +2,7 @@ import { textOf, type Attachment } from './attachments';
 import { markdownToDocx, markdownToPdf, wantedOutput, type OutFile, type OutFormat } from './deliver';
 import { parseMarkdown, plainText, type Block, type Inline } from './markdown';
 import { csvToXlsx, firstTable, markdownToPptx, parseCsv, rowsToCsv, safePath, sheetsToXlsx, zipEntries } from './office';
+import { groupName, nameFromText } from './fileNames';
 
 /**
  * Work that needs no AI model at all: zipping the attached files, turning a file (or the last answer, or pasted text)
@@ -164,25 +165,24 @@ async function mergePdfs(files: Attachment[]): Promise<Blob> {
 }
 
 const an = (s: string) => `${/^[aeiou]/i.test(s) ? 'an' : 'a'} ${s}`;
-const stamp = () => new Date().toISOString().slice(0, 10);
 /** Runs a plan from detectLocal. Throws a friendly Error when the content cannot be converted that way. */
 export async function runLocal(plan: LocalPlan, files: Attachment[]): Promise<LocalResult> {
   const notes: string[] = []; let blob: Blob; let name: string; let did: string;
   if (plan.kind === 'zip') {
     const entries = await Promise.all(files.map(async (f) => ({ path: f.name, data: new Uint8Array(await f.blob.arrayBuffer()) })));
-    blob = zipEntries(entries); name = files.length === 1 ? `${safePath(baseName(files[0].name)) || 'files'}.zip` : `files-${stamp()}.zip`; did = `Zipped ${files.length} file${files.length === 1 ? '' : 's'}`;
-  } else if (plan.kind === 'merge') { blob = await mergePdfs(files); name = `merged-${stamp()}.pdf`; did = `Merged ${files.length} PDFs into one`; }
-  else if (plan.kind === 'images-pdf') { blob = await imagesToPdf(files); name = files.length === 1 ? `${safePath(baseName(files[0].name)) || 'photo'}.pdf` : `photos-${stamp()}.pdf`; did = `Put ${files.length} photo${files.length === 1 ? '' : 's'} into a PDF`; }
+    blob = zipEntries(entries); name = files.length === 1 ? `${safePath(baseName(files[0].name)) || 'files'}.zip` : `${groupName(files.map((f) => f.name), 'files')}.zip`; did = `Zipped ${files.length} file${files.length === 1 ? '' : 's'}`;
+  } else if (plan.kind === 'merge') { blob = await mergePdfs(files); name = `${groupName(files.map((f) => f.name), 'merged')}.pdf`; did = `Merged ${files.length} PDFs into one`; }
+  else if (plan.kind === 'images-pdf') { blob = await imagesToPdf(files); name = files.length === 1 ? `${safePath(baseName(files[0].name)) || 'photo'}.pdf` : `${groupName(files.map((f) => f.name), 'photos')}.pdf`; did = `Put ${files.length} photo${files.length === 1 ? '' : 's'} into a PDF`; }
   else if (plan.source === 'files') {
     const done: { blob: Blob; name: string }[] = [];
     for (const f of files) { try { done.push(await toFormat(await asMarkdown(f), plan.format, f.name)); } catch (e) { if (files.length === 1) throw e; notes.push(`${f.name} was left out: ${e instanceof Error ? e.message : 'it could not be converted'}`); } }
     if (!done.length) throw new Error('None of these files could be converted that way.');
     if (done.length === 1) { blob = done[0].blob; name = done[0].name; did = `Converted ${files[0].name} to ${an(LABEL[plan.format])}`; }
-    else { blob = zipEntries(await Promise.all(done.map(async (d) => ({ path: d.name, data: new Uint8Array(await d.blob.arrayBuffer()) })))); name = `converted-${stamp()}.zip`; did = `Converted ${done.length} files to ${LABEL[plan.format]}s and zipped them`; }
+    else { blob = zipEntries(await Promise.all(done.map(async (d) => ({ path: d.name, data: new Uint8Array(await d.blob.arrayBuffer()) })))); name = `${groupName(done.map((d) => d.name), 'converted')}.zip`; did = `Converted ${done.length} files to ${LABEL[plan.format]}s and zipped them`; }
   } else {
-    const md = plan.text ?? ''; const title = md.match(/^\s*#{1,2}\s+(.+?)\s*#*\s*$/m)?.[1]?.replace(/[*_`]/g, '') ?? 'pothub-answer';
+    const md = plan.text ?? '';
     const rows = firstTable(md) ?? (() => { const c = md.match(/```csv[^\n]*\n([\s\S]*?)```/i); return c ? parseCsv(c[1]) : undefined; })();
-    const out = await toFormat({ md, rows }, plan.format, title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'pothub-answer');
+    const out = await toFormat({ md, rows }, plan.format, `${nameFromText(md)}.x`); // the heading names the file; ".x" is dropped by toFormat, which keeps dots inside the name
     blob = out.blob; name = out.name; did = `Made ${an(LABEL[plan.format])} from ${plan.source === 'last' ? 'my last answer' : 'your text'}`;
   }
   return { text: `${did}. It was built on this device, so no AI model or key was used.`, file: { blob, name, mime: MIME[plan.format] }, notes };

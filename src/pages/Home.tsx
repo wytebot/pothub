@@ -12,6 +12,7 @@ import { listLibrary, putMedia, uid, type MediaRecord } from '../storage/db';
 import { RunLog, logFor } from '../agent/log';
 import { FadeStatus } from '../ui/FadeStatus';
 import { Sources } from '../ui/Sources';
+import { nameFromText } from '../agent/fileNames';
 import { Markdown } from '../ui/Markdown';
 import { MediaPicker } from '../ui/MediaPicker';
 import { useOutside } from '../ui/useOutside';
@@ -369,7 +370,7 @@ export function Home() {
     const out = outFiles.get(m.id);
     if (out) { await platform.saveFile(out.blob, out.name); return; }
     if (m.media?.length) { for (const r of await recsFor(m.media)) await platform.saveFile(r.blob, r.name); return; }
-    if (m.text) await platform.saveFile(new Blob([m.text], { type: 'text/markdown' }), `${slug(m.text.replace(/^#+\s*/, '').split('\n')[0]) || 'answer'}.md`);
+    if (m.text) await platform.saveFile(new Blob([m.text], { type: 'text/markdown' }), `${nameFromText(m.text)}.md`);
   };
   const useAsReference = async (m: Msg) => {
     const recs = (await recsFor(m.media ?? [])).filter((r) => r.kind === 'image'); if (!recs.length) return;

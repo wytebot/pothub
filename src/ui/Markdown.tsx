@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { parseMarkdown, type Block, type Inline } from '../agent/markdown';
 import { platform } from '../platform';
+import { snippetName } from '../agent/fileNames';
 import { isPremium } from '../quota/daily';
 
 const EXT: Record<string, string> = { js: 'js', javascript: 'js', jsx: 'jsx', ts: 'ts', typescript: 'ts', tsx: 'tsx', python: 'py', py: 'py', html: 'html', css: 'css', json: 'json', csv: 'csv', sql: 'sql', bash: 'sh', sh: 'sh', shell: 'sh', java: 'java', kotlin: 'kt', swift: 'swift', go: 'go', rust: 'rs', c: 'c', cpp: 'cpp', csharp: 'cs', php: 'php', ruby: 'rb', yaml: 'yml', yml: 'yml', xml: 'xml', md: 'md', markdown: 'md', dart: 'dart' };
@@ -9,7 +10,7 @@ function Code({ lang, code }: { lang: string; code: string }) {
   const [done, setDone] = useState('');
   const flash = (m: string) => { setDone(m); setTimeout(() => setDone(''), 1600); };
   const copy = async () => { try { await navigator.clipboard.writeText(code); flash('Copied'); } catch { flash('Press and hold to copy'); } };
-  const save = async () => { const ext = EXT[lang.toLowerCase()] ?? 'txt'; if ((await platform.saveFile(new Blob([code], { type: 'text/plain' }), `snippet.${ext}`)) === 'saved') flash('Saved'); };
+  const save = async () => { const ext = EXT[lang.toLowerCase()] ?? 'txt'; if ((await platform.saveFile(new Blob([code], { type: 'text/plain' }), snippetName(lang, code, ext))) === 'saved') flash('Saved'); };
   return (
     <div className="md-code">
       <div className="md-code-bar"><span>{lang || 'code'}</span><span className="md-code-actions"><button onClick={() => void copy()}>{done || 'Copy'}</button><button onClick={() => void save()}>Save</button></span></div>

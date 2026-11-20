@@ -1,4 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
+import { fileName } from './fileNames';
 import { parseMarkdown, plainText, rawFromReply, type Block, type Inline } from './markdown';
 import { csvToXlsx, markdownToPptx } from './office';
 import { BUNDLE_PROTOCOL } from './protocol';
@@ -80,8 +81,6 @@ export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean;
 }
 
 // -------------------------------------------------------------------------- files
-const safe = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'pothub-answer';
-const titleOf = (md: string, fallback: string) => { const h = md.match(/^\s*#{1,2}\s+(.+?)\s*#*\s*$/m); return (h ? h[1].replace(/[*_`]/g, '') : fallback).slice(0, 90); };
 export interface OutFile { blob: Blob; name: string; mime: string; }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
@@ -201,10 +200,10 @@ export async function markdownToPdf(md: string): Promise<Blob> {
   return new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' });
 }
 
-/** Builds the downloadable file for a finished answer. Returns null when the answer is only meant for the chat. */
-export async function buildFile(reply: string, w: Wanted, prompt: string): Promise<OutFile | null> {
+/** Builds the downloadable file for a finished answer. Returns null when the answer is only meant for the chat. The file is named for what it contains (see fileNames.ts). */
+export async function buildFile(reply: string, w: Wanted, prompt: string, inputs: { name: string }[] = []): Promise<OutFile | null> {
   if (!w.file || w.format === 'chat') return null;
-  const title = titleOf(reply, prompt); const base = safe(title);
+  const base = fileName({ prompt, reply, inputs });
   switch (w.format) {
     case 'docx': return { blob: markdownToDocx(reply), name: `${base}.docx`, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
     case 'pdf': return { blob: await markdownToPdf(reply), name: `${base}.pdf`, mime: 'application/pdf' };
