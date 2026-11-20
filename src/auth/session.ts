@@ -72,7 +72,7 @@ export async function signOut() {
 export async function idToken(): Promise<string | null> { try { return (await auth.currentUser?.getIdToken()) ?? null; } catch { return null; } }
 export const currentMe = (): Me | null => toMe(auth.currentUser);
 
-let redirectResultTask: Promise<void> | null = null;
+let redirectResultTask: Promise<User | null> | null = null;
 
 function publishRedirectError(message: string) {
   sessionStorage.removeItem('auth.redirectPending');
@@ -80,47 +80,64 @@ function publishRedirectError(message: string) {
   window.dispatchEvent(new Event('auth:redirect-error'));
 }
 
-function resolveBrowserRedirectOnce() {
+
+function resolveBrowserRedirectOnce(): Promise<User | null> {
   if (redirectResultTask) return redirectResultTask;
   redirectResultTask = getRedirectResult(auth).then((result) => {
-    const wasPending = sessionStorage.getItem('auth.redirectPending') === '1';
-    sessionStorage.removeItem('auth.redirectPending');
-    if (wasPending && !result?.user && !auth.currentUser) {
-      publishRedirectError('Google returned without completing sign-in. Please try again.');
-    }
+    const user = result?.user ?? auth.currentUser;
+    if (user) sessionStorage.removeItem('auth.redirectPending');
+    return user ?? null;
   }).catch((error: unknown) => {
-    if (sessionStorage.getItem('auth.redirectPending') !== '1') return; // offline or nothing to finish: not an error worth showing
+    if (sessionStorage.getItem('auth.redirectPending') !== '1') return auth.currentUser;
     const code = codeOf(error);
     const message = code in MESSAGES ? MESSAGES[code] : 'Google sign-in could not be completed. Please try again.';
     publishRedirectError(message || 'Google sign-in was cancelled.');
+    return auth.currentUser;
   });
   return redirectResultTask;
 }
 
+
 /** undefined = briefly restoring the saved session; null = signed out. */
 export function useMe(): Me | null | undefined {
-  const [me, setMe] = useState<Me | null | undefined>(() => (auth.currentUser ? toMe(auth.currentUser) : undefined));
+  const redirectPendingAtStart = !Capacitor.isNativePlatform() && sessionStorage.getItem('auth.redirectPending') === '1';
+  const [me, setMe] = useState<Me | null | undefined>(() => (auth.currentUser ? toMe(auth.currentUser) : redirectPendingAtStart ? undefined : undefined));
   useEffect(() => {
     let active = true;
-    let resolved = false;
-    // Never leave the installed PWA on an indefinite black spinner if redirect
-    // state cannot be restored (for example, stale browser storage or no network).
+    let redirectResolved = !redirectPendingAtStart;
+    let authResolved = false;
+    // A redirect may take longer on mobile networks or when the Google account picker
+    // returns through an external browser. Do not prematurely show the signed-out page.
     const fallback = window.setTimeout(() => {
-      if (active && !resolved) {
-        resolved = true;
+      if (!active) return;
+      if (!authResolved && !redirectPendingAtStart) setMe(toMe(auth.currentUser));
+      if (redirectPendingAtStart && !redirectResolved && sessionStorage.getItem('auth.redirectPending') === '1') {
+        publishRedirectError('Google sign-in did not return in time. Reopen Pothub and try again.');
+        setMe(toMe(auth.currentUser));
+      }
+    }, redirectPendingAtStart ? 45_000 : 8_000);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      authResolved = true;
+      if (u) {
+        redirectResolved = true;
+        sessionStorage.removeItem('auth.redirectPending');
+        setMe(toMe(u));
+      } else if (!redirectPendingAtStart || redirectResolved) {
         setMe(null);
       }
-      if (sessionStorage.getItem('auth.redirectPending') === '1') {
-        publishRedirectError('Google sign-in is taking too long to return. Check your connection and try again.');
-      }
-    }, 5000);
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      resolved = true;
-      window.clearTimeout(fallback);
-      setMe(toMe(u));
     });
-    // Only browsers return from Firebase's redirect handler; Android uses native credentials.
-    if (!Capacitor.isNativePlatform()) void resolveBrowserRedirectOnce();
+    if (!Capacitor.isNativePlatform()) {
+      void resolveBrowserRedirectOnce().then((u) => {
+        redirectResolved = true;
+        if (!active) return;
+        if (u) {
+          sessionStorage.removeItem('auth.redirectPending');
+          setMe(toMe(u));
+        } else if (sessionStorage.getItem('auth.redirectPending') !== '1') {
+          setMe(null);
+        }
+      });
+    }
     return () => {
       active = false;
       window.clearTimeout(fallback);
