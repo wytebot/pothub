@@ -1,0 +1,28 @@
+import { useEffect, useMemo, useState } from 'react';
+import { request } from '../security/api';
+import { auth } from '../firebase';
+
+type BillingState = { plan?: string; premium?: boolean; premiumUntil?: string | null; amount?: number; currency?: string; days?: number; configured?: boolean };
+function money(amount: number, currency: string) { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: currency === 'NGN' ? 0 : 2 }).format(amount); } catch { return `${currency} ${amount.toLocaleString()}`; } }
+function getCallback() { const search = new URLSearchParams(location.search); const hash = location.hash; const q = hash.includes('?') ? new URLSearchParams(hash.slice(hash.indexOf('?') + 1)) : new URLSearchParams(); return { status: search.get('status') ?? q.get('status'), txRef: search.get('tx_ref') ?? q.get('tx_ref'), transactionId: search.get('transaction_id') ?? q.get('transaction_id') }; }
+export function Billing() {
+  const [state, setState] = useState<BillingState>({}); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+  const price = useMemo(() => state.amount != null && state.currency ? money(state.amount, state.currency) : '—', [state.amount, state.currency]);
+  const refresh = async () => { try { const r = await request<BillingState>('/api/billing/status'); setState(r); } catch (e) { setError(e instanceof Error ? e.message : 'Billing information is unavailable.'); } };
+  useEffect(() => { void refresh(); const callback = getCallback(); if (callback.status === 'successful' && callback.transactionId) { setChecking(true); setMessage('Payment received. Verifying securely…'); void request<{premium: boolean; premiumUntil?: string}>('/api/billing/verify', { transactionId: callback.transactionId, txRef: callback.txRef }).then(r => { setMessage(r.premium ? `Premium activated${r.premiumUntil ? ` until ${new Date(r.premiumUntil).toLocaleString()}` : ''}.` : 'Payment is not yet confirmed.'); if (r.premium) await auth.currentUser?.getIdToken(true); return refresh(); }).catch(e => setError(e instanceof Error ? e.message : 'Payment verification failed.')).finally(() => setChecking(false)); } else if (callback.status === 'cancelled') setMessage('Checkout was cancelled. You can try again anytime.'); }, []);
+  const checkout = async () => { setBusy(true); setError(''); setMessage(''); try { const result = await request<{checkoutUrl: string}>('/api/billing/checkout', {}); if (!/^https:\/\/checkout\.flutterwave\.com\//.test(result.checkoutUrl)) throw new Error('Checkout URL failed validation.'); location.assign(result.checkoutUrl); } catch (e) { setError(e instanceof Error ? e.message : 'Checkout could not be started.'); } finally { setBusy(false); } };
+  const active = state.premium === true;
+  return <section className="page billing-page">
+    <header className="page-head"><div><h1>Premium</h1><p className="muted small">More capacity for your work. Free tools remain useful without a subscription.</p></div></header>
+    {message && <div className="notice" role="status">{message}</div>}{error && <p className="error" role="alert">{error}</p>}
+    <div className="panel billing-hero stack"><span className={`chip ${active ? 'success' : ''}`}>{active ? 'Premium active' : 'Free plan'}</span><h2>{active ? 'You’re on Pothub Pro' : 'Upgrade to Pothub Pro'}</h2><div className="billing-price">{price}<span className="muted small"> / {state.days ?? 30} days</span></div><p className="muted">{active ? 'Your current access period is shown below.' : 'One payment unlocks Pro for the configured access period. Renewal is manual—no surprise automatic charges.'}</p>
+      {active && state.premiumUntil && <div className="notice">Access expires: <strong>{new Date(state.premiumUntil).toLocaleString()}</strong></div>}
+      <button className="btn primary" disabled={busy || checking || state.configured === false} onClick={() => void checkout()}>{busy ? 'Opening secure checkout…' : active ? 'Renew / extend Premium' : 'Upgrade securely'}</button>
+      <button className="btn" disabled={checking} onClick={() => void refresh()}>{checking ? 'Verifying…' : 'Refresh status'}</button>
+      {state.configured === false && <p className="muted small">Billing is not configured by the administrator yet.</p>}
+    </div>
+    <div className="panel stack"><h2>What Premium includes</h2><ul className="billing-benefits"><li><strong>Up to five configured websites</strong> — manage multiple sites instead of the Free plan’s one.</li><li><strong>Expanded website workspace</strong> — organize diagnosis and backlink workflows across your sites.</li><li><strong>Premium entitlement</strong> — access Pro features while your paid period is active.</li><li><strong>BYOK remains yours</strong> — use your own AI provider keys; Pothub does not bundle AI usage.</li></ul><p className="muted small">Website diagnosis, backlink snippets, core chat and Codelab remain available on Free. Premium is a capacity upgrade, not a lockout.</p></div>
+    <div className="panel stack"><h2>Secure payment</h2><p className="muted small">Checkout is hosted by Flutterwave. Card PIN, OTP, 3-D Secure and bank verification steps are handled by the payment provider/bank. Pothub does not ask you to enter card PINs or OTPs into its own forms. Only server-verified successful payments activate Premium.</p><p className="muted small">Payment terms: one-time charge for the displayed access period. Renewal is manual unless an automatic subscription is explicitly enabled later.</p></div>
+  </section>;
+}
