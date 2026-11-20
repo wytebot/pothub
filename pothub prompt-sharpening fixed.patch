@@ -1,0 +1,43 @@
+--- a/src/agent/workflow.ts
++++ b/src/agent/workflow.ts
+@@ -53,23 +53,26 @@
+   return { text, flags, catalog };
+ }
+ 
+-/** Optional: asks the cheapest current Gemini text model to sharpen the prompt. 8 s cap; any failure keeps the original prompt. */
++/** Optional and OFF unless Settings > Workflow > "Sharpen my prompts" is ticked (or /enhance is typed). Asks the cheapest current Gemini text model, through the Gemini key ticked for Text, to sharpen the prompt. It is not part of image or video routing: the picture itself always goes to the provider ticked for Images/Video. 4 s cap; any failure keeps the original prompt and pauses sharpening for 10 minutes so it cannot slow every request. */
++let sharpenPausedUntil = 0;
+ async function enhance(text: string, catalog: Catalog, log: RunLog, signal: AbortSignal, task: 'image' | 'video'): Promise<string> {
+   const model = catalog.text; const key = usableKey('gemini', 'text');
+   if (!model || !key) { log.say('warn', 'enhance skipped', 'needs a Google Gemini key ticked as default for Text'); return text; }
++  if (Date.now() < sharpenPausedUntil) { log.say('warn', 'prompt sharpening skipped', 'Google Gemini did not answer a moment ago, so your prompt is used as written'); return text; }
++  log.step('Sharpening your prompt with Google Gemini (Settings › Workflow)…');
+   const id = log.start('cmd', `${model.id} enhance-prompt`);
+   try {
+     const secret = await getSecret(key.id);
+     const sys = task === 'video'
+       ? 'Rewrite the user\'s idea as one vivid video prompt: subject, action, camera movement, lighting, mood. Under 90 words. Keep every detail the user gave. Output only the prompt.'
+       : 'Rewrite the user\'s idea as one vivid image prompt: subject, setting, composition, lighting, style. Under 70 words. Keep every detail the user gave. Output only the prompt.';
+-    const sig = 'any' in AbortSignal ? (AbortSignal as unknown as { any(s: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(8000)]) : signal;
++    const sig = 'any' in AbortSignal ? (AbortSignal as unknown as { any(s: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(4000)]) : signal;
+     const r = await call(`https://generativelanguage.googleapis.com/v1beta/models/${model.id}:generateContent`, { method: 'POST', signal: sig, headers: { 'x-goog-api-key': secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents: [{ parts: [{ text }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 220 } }) }, secret);
+     if (!r.ok) throw await failure(r, secret);
+     const out = ((await r.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim();
+     if (!out || out.length < 8) throw new Error('empty');
+     log.done(id, q(out, 110)); return out;
+-  } catch (e) { if (isCancel(e)) throw e; log.fail(id, 'kept your original prompt'); return text; }
++  } catch (e) { if (isCancel(e)) throw e; sharpenPausedUntil = Date.now() + 10 * 60_000; log.fail(id, 'no answer from Google Gemini, so your own prompt was used (turn sharpening off in Settings › Workflow)'); return text; }
+ }
+ 
+ const wantEnhance = (f: Flags) => (f.plain ? false : f.enhance || getSettings().enhance);
+--- a/src/pages/Settings.tsx
++++ b/src/pages/Settings.tsx
+@@ -28,7 +28,7 @@
+       </div>
+       <div className="panel stack"><h2>Workflow</h2>
+         <label className="check"><input type="checkbox" checked={s.terminal} onChange={(e) => set({ terminal: e.target.checked })} /> Show the live step-by-step terminal in the Image and Video studios</label>
+-        <label className="check"><input type="checkbox" checked={s.enhance} onChange={(e) => set({ enhance: e.target.checked })} /> Sharpen my prompts first before generating (uses your Google Gemini key)</label>
++        <label className="check"><input type="checkbox" checked={s.enhance} onChange={(e) => set({ enhance: e.target.checked })} /> Sharpen my prompts first before generating (off by default; sends the prompt to Google Gemini and needs a Gemini key ticked for Text &amp; documents; the image or video itself still uses only your Images or Video provider)</label>
+       </div>
+       <div className="panel stack"><h2>Notifications</h2>
+         <label className="check"><input type="checkbox" checked={notify && perm === 'granted'} disabled={perm === 'unsupported'} onChange={(e) => void toggleNotify(e.target.checked)} /> Notify me when an image, video or answer is ready and I’m not in Pothub</label>

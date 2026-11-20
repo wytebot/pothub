@@ -28,7 +28,7 @@ export function Settings() {
       </div>
       <div className="panel stack"><h2>Workflow</h2>
         <label className="check"><input type="checkbox" checked={s.terminal} onChange={(e) => set({ terminal: e.target.checked })} /> Show the live step-by-step terminal in the Image and Video studios</label>
-        <label className="check"><input type="checkbox" checked={s.enhance} onChange={(e) => set({ enhance: e.target.checked })} /> Sharpen my prompts first before generating (uses your Google Gemini key)</label>
+        <label className="check"><input type="checkbox" checked={s.enhance} onChange={(e) => set({ enhance: e.target.checked })} /> Sharpen my prompts first before generating (off by default; sends the prompt to Google Gemini and needs a Gemini key ticked for Text &amp; documents; the image or video itself still uses only your Images or Video provider)</label>
       </div>
       <div className="panel stack"><h2>Notifications</h2>
         <label className="check"><input type="checkbox" checked={notify && perm === 'granted'} disabled={perm === 'unsupported'} onChange={(e) => void toggleNotify(e.target.checked)} /> Notify me when an image, video or answer is ready and I’m not in Pothub</label>
