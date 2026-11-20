@@ -1,34 +1,36 @@
-# PotHub 0.5.10 – faster reading of large files
+# PotHub 0.5.10 – deeper web research, sources row, no awareness text
+
+This zip is CUMULATIVE: it includes the earlier large-file speed-up (chunking.ts, attachments.ts fix) because workflow.ts carries both. The patch is against the original 0.5.10 upload.
 
 ## What was found
-Large text sources (plain text, code, Word, and anything `readyFiles` turns into text: PDFs with a text layer, ZIP/TAR projects, sheets, slides) went through `chunkLargeTextFiles()` in `src/agent/workflow.ts`:
-
-1. **Segments were tiny**: `CHUNK_CHARS = 28_000` (about 7k tokens), although the supported models hold 128k to 1M tokens.
-2. **Everything ran one request after another**: a `for` loop awaited each segment, then a second loop awaited each group of 5 summaries, round after round.
-3. **The merge step always ran**, even when the findings would have fit in a single request, and groups were a fixed 5 regardless of size.
-4. **Source text was sent twice in the quality-check pass**: it was in the prompt as `SOURCE EVIDENCE` and again as `files: chunked.files`.
-5. **No retry**: one 429/5xx in the middle of dozens of sequential requests threw the whole job away and restarted on another model.
-6. Segments were cut at arbitrary points, so a ZIP project could be split in the middle of a file, and every segment was summarised. For code-change requests, that is the part that loses exact source.
-
-Example (1.5M characters): old = 72 sequential extra requests; new (Gemini) = 8 requests, 2 sequential steps. A source up to 400k characters (Gemini) / 240k (OpenAI, xAI) is now read whole with 0 extra requests.
+- `/api/crawl` fetched at most 5 pages one at a time (7 s each), with `redirect: 'manual'` and a `!r.ok` check, so any site that redirected (http to https, bare domain to www) was silently dropped.
+- Extraction removed every `<header>`, `<nav>` and `<footer>` and then all tags: no main-content detection, no dates, no links. Nothing deeper than the search result page was ever read.
+- The private-network guard was a hostname regex only (no DNS check, no IPv6, no redirect re-check).
+- The client searched once and crawled only 2,800 characters per page.
+- `workflow.ts` appended "Searched the web.", "Web search found nothing useful…" and "Web search was not available…" notes to replies, and told the model web results existed even when none were found.
+- Sources were only whatever the model chose to cite inline.
 
 ## What changed
 | File | Change |
 |---|---|
-| `src/agent/chunking.ts` (new) | Dependency-free helpers: per-provider `budgetFor()`, `splitTextIntoChunks(text, size, overlap)` (now prefers cutting at an archive `=== path ===` marker), `groupByBudget()`, `mapLimit()` (ordered, concurrency-capped, fail-fast), `withRetry()`. |
-| `src/agent/workflow.ts` | `chunkLargeTextFiles()` rewritten: read whole if it fits; otherwise big segments analysed in parallel; merge only when findings still do not fit, in parallel groups packed by size, single-item groups skipped; temporary 429/5xx retried; the user is told when a file was condensed. A provider "too large" 400 now switches to read-in-parts automatically (`forceSplit`). Quality-check pass no longer re-sends text already in the prompt. `splitTextIntoChunks` is still exported from here. |
-| `src/agent/attachments.ts` | Bug fix: `toAttachments(files, _have)` used `have` in its body (`ReferenceError` at runtime, type error under `strict`). Parameter renamed to `have`. |
-| `src/agent/chunking.test.ts` | Existing tests kept (explicit 28k/900 sizes); added tests for budgets, marker-aware cuts, termination, ordering/concurrency, fail-fast, grouping, retry. |
-
-Budgets (characters, not tokens): Gemini 400k whole / 200k per part / 4 at a time; OpenAI and xAI 240k / 120k / 3; unknown provider 200k / 100k / 2. They sit below each provider's maximum on purpose, because free keys have per-minute token limits and the answer, history and review need room.
+| `server/src/crawl.ts` (new) | Parallel crawl on one shared 14 s budget; redirects followed manually with every hop re-checked; DNS-based block of private/loopback/link-local/IPv6-ULA/mapped addresses, non-80/443 ports, credentials; size-capped reads; main/article extraction with published/updated dates; one level deeper (up to 2 relevant same-site links from each of the top 3 pages, scored on the question and update-style paths such as news/blog/releases); RSS/Atom feed read for each site's newest items. |
+| `server/src/search.ts` | Old crawler removed. `ddgSearch` takes an optional recency filter (`fresh=d\|w\|m\|y`). |
+| `server/src/index.ts` | `/api/search` accepts `fresh`; `/api/crawl` accepts `query` and `depth` and returns `{ pages, updates }` (old fields kept). |
+| `server/package.json` | `npm test` now also runs the search and crawl tests. |
+| `src/agent/research.ts` (new) | Pure helpers: search variants (a past-month search runs alongside when the question is about something recent), merge/dedupe (max 2 per site), crawl merge, one-source-per-site list, and the results block for the model (page text up to 6,000 characters, followed pages 3,000, whole block capped near 40,000, dates and newest feed items included). |
+| `src/agent/search.ts` | `webResearch()` replaces `webSearch()`: searches in parallel, crawls the top 6, returns hits, updates and `sources`. |
+| `src/agent/workflow.ts` | The three web-search notes and the allowance note are gone. The model is told about web results only when some were found. Sources travel on the outcome (`sources`) only when web results were used. The fact-check pass now also sees the web evidence, so it does not strike current facts it could not otherwise verify. |
+| `src/agent/deliver.ts` | Prompt: prefer the newest information, cite with the 🌐 link, do not write a Sources list. |
+| `src/chat/types.ts`, `src/pages/Home.tsx`, `src/ui/Sources.tsx`, `src/styles.css` | New `sources` field on assistant messages (saved with the chat). `Sources` renders each source site as a chip with the web (globe) icon and the site name, as the last thing in the reply; renders nothing without web results. |
 
 ## Verified, and not verified
-- Ran: `chunking.test.ts` (15 tests) under Node 22 with a small stand-in for `vitest` and `fflate`: 15 pass, 0 fail. Syntax check of all four files passes. Request counts above come from the real splitter and grouping code; the size of merge summaries (about 12% of a segment) is an assumption.
-- Not run: `vitest` itself, `tsc --noEmit` and `vite build` (the upload has no `node_modules` and this sandbox has no network). Run `npm ci && npm run typecheck && npm test` before shipping.
-- Not tested against live Gemini/OpenAI/xAI keys, so real latency gains are unmeasured.
+- Ran under Node 22: 10 crawler tests (SSRF, redirects, parallelism, depth, feeds, budget), 2 existing search tests, 12 research tests, 15 chunking tests: all pass. Client tests used a stand-in for `vitest`.
+- A real bug was caught by those tests and fixed: feed summaries that arrive as escaped HTML kept their tags.
+- Not run: `tsc`, `vite build`, `vitest`, or the new UI in a browser (no `node_modules`, no network here). Not tested against live DuckDuckGo or real sites. The server and app must be deployed together for pages/updates to appear.
 
 ## Limits and next steps
-- A source bigger than the direct budget is still condensed, so exact wording can be lost. For "fix this project" requests, raise `direct` only if your keys' per-minute token limits allow it.
-- The quality-check pass is unchanged (one extra request). If you want it faster, skip it when `prefer === 'speed'`.
-- If free-tier Gemini keys return 429 on large reads, lower `gemini.direct` (e.g. 250_000) in `chunking.ts`.
-- PDF text extraction (`pdfText`) still reads pages one at a time; not changed.
+- DNS is checked before each fetch, but a hostname that changes its answer between the check and the fetch (DNS rebinding) is not fully closed; pin the resolved IP in the request if the server is exposed to untrusted users.
+- Pages that need JavaScript to show their content, or sit behind a login, are still unreadable.
+- The 🌐 chip lists every site given to the model, not only those the answer ended up using.
+- "Searching the web…" still appears in the live progress log, because every request searches first; it is not added to the reply.
+- Free-tier DuckDuckGo scraping can be rate limited; a failed search is now silent in the reply (logged in the progress log only).
