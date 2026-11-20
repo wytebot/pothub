@@ -56,6 +56,7 @@ describe('what the app does with it', () => {
     expect(wantedOutput('fix it and zip it', files).code).toBe('fix');
     const sp = systemPrompt(wantedOutput('wire it', files));
     expect(sp).toContain('WIRE-UP'); expect(sp).toContain('FIXES.md'); expect(sp).toContain('=== FILE:');
+    expect(sp).toContain('Diagnose first'); expect(sp).toContain('smallest targeted patch'); expect(sp).toContain('accidental/unrelated changes'); expect(sp).toContain('diagnostic table'); expect(sp).toContain('files deliberately left untouched');
   });
   it('leaves everything else alone', () => {
     expect(wantedOutput('fix it').format).toBe('chat');                  // no context given: unchanged
