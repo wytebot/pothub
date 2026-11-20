@@ -42,3 +42,11 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Added premium duration custom claim and server billing status.
 - Added server environment setup documentation and explicit hosted-checkout integration scope.
 - Free remains one configured website; Premium permits five while the entitlement is active.
+
+## Debug pass on 0.11.0 (Flutterwave billing)
+- Billing.tsx: `await` inside a non-async `.then` callback (broke `tsc` and `vite build`); callback parsing now copes with Flutterwave appending `?status=…` after `?payment=return`; URL cleaned after verification.
+- server/billing.ts + SiteTools.tsx: `pothubProUntil` claim was written in milliseconds but read as seconds, so Premium never expired. Claim is now seconds everywhere, and legacy millisecond claims are tolerated.
+- local.ts: added missing `an()` and `mergePdfs()` (pdf-lib). readers.ts: added missing `asText()`.
+- workflow.ts: removed unused `webRemaining` import (`noUnusedLocals`).
+- Icon.tsx: added `search`, `file-text`, `git-branch` icons that Home.tsx uses.
+- router.ts: `IntentOptions` accepts `code` so codeWork.test.ts type-checks.
