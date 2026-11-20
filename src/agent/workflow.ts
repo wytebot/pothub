@@ -4,6 +4,7 @@ import { base64Of, textOf, type Attachment } from './attachments';
 import { buildFile, systemPrompt, wantedOutput, type OutFile } from './deliver';
 import { buildBundle, bundleSummary } from './bundle';
 import { bundleName } from './fileNames';
+import { codeContext } from './codeWork';
 import type { ImageModel, VideoModel } from '../models/registry';
 import { interpret, planImage } from '../models/router';
 import { startVideo } from '../models/video';
@@ -249,7 +250,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text && !o.files.length && !o.blocked) throw new Error('Type your question or request first (commands alone are not a prompt).');
   const prompt = text || (o.files.length ? 'Describe and summarise the attached file(s) in detail.' : 'The person attached file(s) but did not write a message.');
-  const wanted = wantedOutput(prompt); const notes: string[] = [];
+  const wanted = wantedOutput(prompt, codeContext(o.history, { hasFiles: o.files.some((f) => f.kind !== 'image') || !!o.blocked })); const notes: string[] = [];
   if (wanted.note) notes.push(wanted.note);
   if (o.blocked) notes.push(`File analysis limit reached: I could not read ${o.blocked.names.slice(0, 3).join(', ')}${o.blocked.names.length > 3 ? ` and ${o.blocked.names.length - 3} more` : ''}. Free file analysis returns at ${o.blocked.back}. Premium has no limit.`);
   // Mandatory web research: search and crawl first, then hand the findings to the model with the question.

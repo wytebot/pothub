@@ -80,7 +80,7 @@ const FILLER = new Set(['simple', 'small', 'new', 'basic', 'complete', 'full', '
 /** "build me a todo app" -> "todo app" */
 export function newThingFromPrompt(prompt: string): string | null {
   const m = NEW_THING.exec(prompt); if (!m) return null;
-  const words = m[1].split(/\s+/).filter((w) => !FILLER.has(w.toLowerCase())); const noun = m[2].toLowerCase().replace('web site', 'website');
+  const words = m[1].split(/\s+/).filter((w) => !FILLER.has(w.toLowerCase())); if (!words.length) return null; const noun = m[2].toLowerCase().replace('web site', 'website');
   return cleanName([...words.slice(-2), noun].join(' '), 40) || null;
 }
 
@@ -88,6 +88,7 @@ export function newThingFromPrompt(prompt: string): string | null {
 const FIX = 'fix|repair|debug|patch|resolve|correct|solve';
 const UPDATE = 'update|upgrade|improve|enhance|refactor|optimi[sz]e|redesign|rewrite|rework|revamp';
 const ADD = 'add|implement|integrate';
+const WIRE = 'wire|rewire|connect|hook up|link|integrate';
 const GENERIC_AREA = new Set(['app', 'apps', 'project', 'projects', 'code', 'codebase', 'bug', 'bugs', 'issue', 'issues', 'error', 'errors', 'problem', 'problems', 'everything', 'it', 'them', 'file', 'files', 'website', 'site', 'thing', 'things', 'whole', 'entire', 'all', 'this', 'that', 'these', 'those', 'zip', 'source', 'version', 'application', 'script']);
 const STOP = new Set(['in', 'on', 'of', 'for', 'and', 'so', 'because', 'that', 'which', 'to', 'with', 'please', 'then', 'zip', 'send', 'give', 'download', 'as', 'from', 'by', 'using', 'but', 'since', 'when', 'while', 'it', 'them', 'inside', 'within', 'into', 'about', 'i', 'we', 'you']);
 const DET = /^(?:the|my|our|this|these|that|those|all|any|some|a|an)\s+/i;
@@ -112,8 +113,9 @@ export function describeWork(prompt: string, project = ''): string | null {
   const p = prompt.replace(/\s+/g, ' ');
   if (new RegExp(`\\b(?:${FIX})(?:e?s|e?d|ing)?\\b`, 'i').test(p)) { const a = areaOf(p, FIX, project); return a ? `${a} fixed` : 'fixed version'; }
   if (new RegExp(`\\b(?:${UPDATE})(?:e?s|e?d|ing)?\\b`, 'i').test(p)) { const a = areaOf(p, UPDATE, project); return a ? `${a} updated` : 'updated version'; }
+  if (new RegExp(`\\b(?:${WIRE})(?:e?s|e?d|ing)?\\b`, 'i').test(p)) { const a = areaOf(p, WIRE, project); return a ? `${a} wired` : 'wired version'; }
   if (new RegExp(`\\b(?:${ADD})(?:e?s|e?d|ing)?\\b`, 'i').test(p)) { const a = areaOf(p, ADD, project); if (a) return `${a} added`; }
-  if (/\b(source code|codebase|source|whole project|entire project|full project|code files|project files)\b/i.test(p) || NEW_THING.test(p)) return 'source code';
+  if (/\b(source code|codebase|source|whole project|entire project|full project|code files|project files)\b/i.test(p) || NEW_THING.test(p) || /\b(?:build|rebuild|develop|finish|complete|implement|code|scaffold)\s+(?:it|this|that|everything|the (?:whole |entire |full )?(?:app|project|thing|site|website|codebase))\b/i.test(p)) return 'source code';
   return null;
 }
 

@@ -13,6 +13,7 @@ import { RunLog, logFor } from '../agent/log';
 import { FadeStatus } from '../ui/FadeStatus';
 import { Sources } from '../ui/Sources';
 import { nameFromText } from '../agent/fileNames';
+import { codeContext } from '../agent/codeWork';
 import { Markdown } from '../ui/Markdown';
 import { MediaPicker } from '../ui/MediaPicker';
 import { useOutside } from '../ui/useOutside';
@@ -294,7 +295,7 @@ export function Home() {
         return;
       }
       const photos = atts.filter((a) => a.kind === 'image');
-      const intent = interpret(text, { hasFiles: atts.length > 0, hasImageFile: photos.length > 0 });
+      const intent = interpret(text, { hasFiles: atts.length > 0, hasImageFile: photos.length > 0, code: codeContext(history, { hasFiles: atts.some((a) => a.kind !== 'image') }) });
       task = flags.task ?? intent.task;
       // Never silently turn an image/video request into a text answer when the media provider is unavailable.
 

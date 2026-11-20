@@ -1,5 +1,6 @@
 import { IMAGE_MODELS, ratio, type ImageModel } from './registry';
 import type { ProviderId } from '../vault/vault';
+import { detectCodeWork, type CodeCtx } from '../agent/codeWork';
 
 export type Task = 'text' | 'image' | 'video' | 'edit';
 export interface Intent { task: Task; aspect?: string; /** true when the wording itself named the kind of output; false when it was inferred */ explicit: boolean; }
@@ -28,8 +29,9 @@ function aspectOf(t: string): string | undefined {
  * Otherwise questions and instructions go to a text model, and short descriptions of a scene go to an image model.
  * `hasFiles` means something was attached with the + button: without a generate/edit wording it is a question about the file.
  */
-export function interpret(text: string, o: { hasFiles?: boolean; hasImageFile?: boolean } = {}): Intent {
+export function interpret(text: string, o: { hasFiles?: boolean; hasImageFile?: boolean; /** what there is to work on; lets "fix it", "wire it", "build the app" go to the text model instead of being read as a picture request */ code?: CodeCtx } = {}): Intent {
   const raw = text.trim().toLowerCase(); const aspect = aspectOf(raw);
+  if (o.code && detectCodeWork(text, o.code)) return { task: 'text', explicit: true };
   // "can you please make ...", "i want you to write ..." are politeness, not a different request.
   const t = raw.replace(/^(please|kindly|hey|hi|hello)[\s,]+/, '').replace(/^(can|could|would|will)\s+you\s+(please\s+)?/, '').replace(/^(i (need|want|would like)( you)? to|help me( to)?)\s+/, '').trim();
   const words = t.split(/\s+/).filter(Boolean).length;

@@ -1,11 +1,12 @@
 import { strToU8, zipSync } from 'fflate';
 import { fileName } from './fileNames';
+import { detectCodeWork, type CodeCtx, type CodeTask, type CodeWork } from './codeWork';
 import { parseMarkdown, plainText, rawFromReply, type Block, type Inline } from './markdown';
 import { csvToXlsx, markdownToPptx } from './office';
 import { BUNDLE_PROTOCOL } from './protocol';
 
 export type OutFormat = 'chat' | 'md' | 'txt' | 'csv' | 'json' | 'html' | 'docx' | 'pdf' | 'xlsx' | 'pptx' | 'zip' | 'file';
-export interface Wanted { format: OutFormat; /** deliver as a downloadable file as well as in the chat */ file: boolean; /** shown to the person when the exact format asked for is not available yet */ note?: string; /** for format 'file': the extension to save (py, sql, yaml, svg ...) */ ext?: string; }
+export interface Wanted { format: OutFormat; /** deliver as a downloadable file as well as in the chat */ file: boolean; /** shown to the person when the exact format asked for is not available yet */ note?: string; /** for format 'file': the extension to save (py, sql, yaml, svg ...) */ ext?: string; /** set when the request is code work (fix, debug, wire, build): the model analyses, then delivers the code as a zip with a report */ code?: CodeTask; }
 
 /** Plain-text formats that can be written on request and saved under their own extension. */
 export const TEXT_EXTS = ['py', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'css', 'scss', 'sql', 'yaml', 'yml', 'xml', 'svg', 'ics', 'srt', 'vtt', 'tex', 'sh', 'bat', 'ps1', 'ini', 'toml', 'env', 'log', 'tsv', 'java', 'kt', 'swift', 'go', 'rs', 'c', 'cpp', 'cs', 'php', 'rb', 'dart', 'lua', 'r', 'vue', 'svelte', 'gradle', 'properties', 'conf', 'dockerfile', 'gitignore', 'rtf', 'vcf', 'eml', 'bib', 'tf'];
@@ -19,12 +20,17 @@ const pointing = (fmt: string) => new RegExp(`\\b(?:make|turn|convert|save|expor
 const asks = (t: string, fmt: string) => outRe(fmt).test(t) || pointing(fmt).test(t) || new RegExp(`(?<!\\b(?:this|that|the|attached|uploaded|my|these|those)\\s)\\b(?:${fmt})\\s+(?:file|document|doc|version|copy|download|sheet|deck)\\b`, 'i').test(t) || new RegExp(`^\\s*(?:${fmt})\\b|\\b(?:in|as)\\s+(?:${fmt})\\s+format\\b`, 'i').test(t);
 
 /** Reads the wording of a request and decides how the answer should be delivered. Nothing named = a well-formatted chat answer. */
-export function wantedOutput(prompt: string): Wanted {
+export function wantedOutput(prompt: string, code?: CodeCtx): Wanted {
+  // "fix it", "debug the code", "wire it", "build the app" (see codeWork.ts) are only looked for when the caller says what there is to work on.
+  return wantedBase(prompt, code ? detectCodeWork(prompt, code) : null);
+}
+
+function wantedBase(prompt: string, cw: CodeWork | null): Wanted {
   const t = prompt.toLowerCase();
   const fileAsk = /\b(as|in|into|to) (a |an )?(downloadable |separate )?(file|document)\b|\bdownload(able)?\b|\bsave (it |this )?as\b|\bexport( it| this)?( as| to)?\b|\b(send|give) me (a |the )?file\b/.test(t);
   // one archive holding several files ("the whole project as a zip", "zip it", "a zip with a PDF and a CSV")
   if (/\.zip\b|\bzipped\b|\bzip (it|them|up|everything|all|the|file|folder|archive)\b/.test(t) || (asks(t, 'zip|archive|bundle') && !/\bzip ?codes?\b/.test(t)) || (/\b(whole|entire|full|complete) (project|app|website|codebase|source code)\b/.test(t) && (fileAsk || /\bfiles?\b/.test(t))))
-    return { format: 'zip', file: true };
+    return { format: 'zip', file: true, ...(cw ? { code: cw.task } : {}) };
   if (asks(t, 'docx|\\.docx|word(?: doc(?:ument)?| file| format)|ms word|microsoft word') || /\b(?:as|into|to|in)\s+(?:an?\s+)?word\b(?!\s+(?:list|lists|count|problem|search|game|games|bank|cloud|limit|puzzle|processor))/.test(t)) return { format: 'docx', file: true };
   if (asks(t, 'pdf|\\.pdf')) return { format: 'pdf', file: true };
   if (asks(t, 'xlsx|\\.xlsx|excel|spreadsheet|google sheets?|workbook')) return { format: 'xlsx', file: true };
@@ -41,11 +47,22 @@ export function wantedOutput(prompt: string): Wanted {
   const typed = t.match(new RegExp(`\\b(${exts}) (?:file|format|config|script)\\b`)) ?? (outRe(`\\.?(${exts})`).exec(t) && t.match(new RegExp(`\\.(${exts})\\b`)));
   const ext = (named?.[1] ?? typed?.[1])?.toLowerCase();
   if (ext && (fileAsk || named || /\b(write|create|make|build|generate|give|output|as|in|into)\b/.test(t))) return { format: 'file', file: true, ext };
+  // code work with no other format named: the corrected or new code is delivered as one zip
+  if (cw) return { format: 'zip', file: true, code: cw.task };
   if (fileAsk) return { format: /\b(report|letter|proposal|cv|resume|essay|contract|policy|plan|minutes|memo|cover letter|speech|guide|handbook|article|assignment|lesson)\b/.test(t) ? 'docx' : 'md', file: true };
   return { format: 'chat', file: false };
 }
 
 export const FORMAT_LABEL: Record<OutFormat, string> = { chat: 'chat', md: 'Markdown', txt: 'text', csv: 'CSV', json: 'JSON', html: 'HTML', docx: 'Word', pdf: 'PDF', xlsx: 'Excel', pptx: 'PowerPoint', zip: 'ZIP', file: 'file' };
+
+const CODE_COMMON = 'Code task: the person wants working code delivered, not a discussion of it, so start the work now. (1) Read everything you were given and the conversation, and work out the architecture and how the pieces connect before changing anything. (2) Find root causes, not symptoms. (3) Deliver EVERY file that changed or is new, complete, in the ZIP format below, plus any unchanged file the project needs to run if it was not supplied in full. (4) Include a FIXES.md file as the completion report: what was found, the root cause of each problem, every file changed and what changed in it, which checks were actually run and which were not (never claim a test passed unless you ran it), what is still unresolved, and the exact commands to run the project. (5) Keep the project\'s existing conventions and behavior, add or update tests for changed behavior, and never ask the person questions: choose sensible defaults and record each assumption in FIXES.md.';
+const CODE_TASK: Record<CodeTask, string> = {
+  fix: `${CODE_COMMON} This is a FIX request: fix every defect you can find that stops it working (build, type, runtime, logic, layout), not only the one named, and list anything you chose not to change.`,
+  debug: `${CODE_COMMON} This is a DEBUG request: trace each failure through the code to its root cause, fix it, and list the other defects you noticed along the way.`,
+  wire: `${CODE_COMMON} This is a WIRE-UP request: connect the pieces end to end (imports, routes, props and state, API calls and endpoints, environment variables, auth, storage and build config) so the project runs as one working whole, and remove dead or duplicate wiring.`,
+  build: `${CODE_COMMON} This is a BUILD request: create or complete the whole project from the request and anything supplied: every file needed to install and run it, a README.md with run steps, and a .env.example for any keys. Finish anything missing or stubbed.`,
+  upgrade: `${CODE_COMMON} This is an IMPROVE request: improve structure, performance, security and quality without changing visible behavior unless asked.`,
+};
 
 /** What the text model is told. It is kept in one place so every provider receives the same standard. */
 export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean; blockedFiles?: string[]; web?: boolean } = {}): string {
@@ -62,6 +79,7 @@ export function systemPrompt(w: Wanted, o: { today?: string; hasFiles?: boolean;
     o.web ? 'Web research appears under "WEB RESULTS" at the end of the person\'s message: result snippets, the text of the pages that were read, pages followed from the same sites, and the latest items those sites published, each with a date where one was found. Prefer them for recent or factual claims and favour the newest information. Cite a page inline with the [🌐](url) link it came with when a claim depends on it. Do not write a "Sources" section or list links at the end: the app shows the source sites under your reply. If the results do not answer the question, say so plainly. Never invent links.' : '',
     o.hasFiles ? 'The person attached files. Read them carefully and base your answer on their actual content; refer to them by name.' : '',
     o.today ? `Today's date is ${o.today}.` : '',
+    w.code ? CODE_TASK[w.code] : '',
   ];
   const fmt: Record<OutFormat, string> = {
     chat: 'Format: a polished chat answer in Markdown.',
