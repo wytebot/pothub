@@ -146,7 +146,9 @@ async function mergePdfs(files: Attachment[]): Promise<Blob> {
     let src; try { src = await PDFDocument.load(await f.blob.arrayBuffer()); } catch { throw new Error(`${f.name} could not be opened (it may be locked or damaged).`); }
     for (const p of await out.copyPages(src, src.getPageIndices())) out.addPage(p);
   }
-  return new Blob([await out.save()], { type: 'application/pdf' });
+  const saved = await out.save();
+  const bytes = new Uint8Array(saved);
+  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
 }
 
 export async function runLocal(plan: LocalPlan, files: Attachment[]): Promise<LocalResult> {
