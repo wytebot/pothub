@@ -63,3 +63,10 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Wrapped optional-string `connect` handlers in click callbacks so React MouseEvent is not passed as a token.
 - Removed the unused `useMemo` import from Billing.
 - Renamed the workflow streaming callback parameter to `text` with an explicit string annotation.
+
+## Vercel TypeScript fixes and menu sign-out
+- Explicitly typed the streaming text callback parameter in the workflow request object.
+- Preserved GitHub Codelab commit history state and browser History API calls as separate concepts (`commitHistory` and `window.history`).
+- Added literal `blob` types to staged folder markers, copied files, and ZIP/text imports so they remain valid `TreeItem` entries.
+- Wrapped GitHub connect callbacks in click handlers to avoid passing React mouse events as optional token arguments.
+- Added a Sign out action to the expanded More navigation section; it uses the Firebase/native sign-out helper and closes the mobile drawer after sign-out.
