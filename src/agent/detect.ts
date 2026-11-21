@@ -2,13 +2,15 @@ import { call, failure } from '../models/providers';
 import { ENDPOINTS, PROVIDERS, authHeaders } from '../models/providerInfo';
 import { defaultKeys, getSecret, type ProviderId } from '../vault/vault';
 import { textModelsFrom, type TextModel } from '../models/text';
-export interface ListedModel { id: string; methods: string[]; }
+import { parseRef } from '../models/gatewayRef';
+export interface ListedModel { id: string; methods: string[]; pinned?: boolean; }
 export interface Catalog { texts: TextModel[]; verified: ProviderId[]; unverified: ProviderId[]; at: number; }
 const TTL = 15 * 60_000; const LS = 'agent.text.catalog.v2'; const LS_TTL = 6 * 3_600_000;
 const mem = new Map<string, { at: number; models: ListedModel[] }>();
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 const timeoutSignal = (signal?: AbortSignal) => signal ? ('any' in AbortSignal ? (AbortSignal as unknown as { any(s: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(6000)]) : signal) : AbortSignal.timeout(6000);
 export async function listProviderModels(provider: ProviderId, secret: string, signal?: AbortSignal): Promise<ListedModel[]> {
+  const pinned = parseRef(secret)?.m; if (pinned) return [{ id: pinned, methods: ['generateContent', 'chat'], pinned: true }];
   const sig = timeoutSignal(signal);
   if (provider !== 'gemini') {
     const r = await call(provider === 'anthropic' ? `${ENDPOINTS.anthropic.models}?limit=1000` : ENDPOINTS[provider].models, { headers: authHeaders(provider, secret), signal: sig }, secret);
