@@ -7,7 +7,7 @@ import { bundleName } from './fileNames';
 import { codeContext } from './codeWork';
 import { PROVIDERS } from '../models/providerInfo';
 import { defaultKeys, getSecret, setStatus, usableKey, type ProviderId } from '../vault/vault';
-import { isGatewayRef } from '../models/gatewayRef';
+import { isGatewayRef } from '../models/gateway-reference';
 import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, quickCatalog, type Catalog } from './detect';
