@@ -7,6 +7,7 @@ import { bundleName } from './fileNames';
 import { codeContext } from './codeWork';
 import { PROVIDERS } from '../models/providerInfo';
 import { defaultKeys, getSecret, setStatus, usableKey, type ProviderId } from '../vault/vault';
+import { isGatewayRef } from '../models/gatewayRef';
 import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, quickCatalog, type Catalog } from './detect';
@@ -235,7 +236,7 @@ ${webBlock}`;
       const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t: string) => { partial = t; o.onText(t); } };
       // Jobs run on the Pothub server when they can, so they finish even if the app is closed. If the server cannot take the job, it runs on this device.
       let out: Awaited<ReturnType<typeof generateText>>;
-      if (o.job && backgroundOn() && backgroundAvailable()) {
+      if (o.job && backgroundOn() && backgroundAvailable() && !isGatewayRef(secret)) {
         const job = o.job;
         try { out = await generateInBackground(model.provider, secret, req, { msgId: job.msgId, onStarted: (id: string) => { addPending({ id, chatId: job.chatId, msgId: job.msgId, prompt, wanted, modelName: model.name, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Running in the background…'); } }); }
         catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('warn', 'background run unavailable', e.message); out = await generateText(model.provider, secret, req); }
