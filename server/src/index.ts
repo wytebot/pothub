@@ -3,7 +3,8 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyIdToken } from './identity';
 import { distributedLimit } from './securityStore';
 import { ddgSearch, parseFresh } from './search';
-import { crawlSites } from './crawl';
+import { crawlSites, safeUrl } from './crawl';
+import { checkSite, META_NAME, verificationTag, verificationToken } from './siteVerify';
 import { publishCrawl, searchPublisherIndex, removePublisher } from './publisherIndex';
 import { cancelJob, jobView, startJob, validate } from './jobs';
 import { billingConfig, billingStatus, handleWebhook, startCheckout, verifyCheckout } from './billing';
@@ -30,7 +31,9 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/github/oauth/start' && req.method === 'GET') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again before connecting GitHub.' });
       const clientId = env.GITHUB_CLIENT_ID; const callback = env.GITHUB_CALLBACK_URL;
-      if (!clientId || !callback || !ORIGIN || !githubStateSecret()) return send(503, { error: 'GitHub OAuth is not configured. Set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_CALLBACK_URL and APP_ORIGIN in the server environment.' });
+      const missing = [['GITHUB_CLIENT_ID', clientId], ['GITHUB_CLIENT_SECRET', githubStateSecret()], ['GITHUB_CALLBACK_URL', callback], ['APP_ORIGIN', ORIGIN]].filter(([, v]) => !v).map(([k]) => k);
+      if (missing.length) return send(503, { error: `GitHub connection is not set up on the Pothub server yet. Missing server settings: ${missing.join(', ')}.` });
+      if (!/^https:\/\//i.test(String(callback))) return send(503, { error: 'GITHUB_CALLBACK_URL must be the full https URL of /api/github/oauth/callback on the Pothub server.' });
       const state = makeGithubState(who.uid);
       const authUrl = new URL('https://github.com/login/oauth/authorize'); authUrl.searchParams.set('client_id', clientId); authUrl.searchParams.set('redirect_uri', callback); authUrl.searchParams.set('scope', 'repo'); authUrl.searchParams.set('state', state);
       return send(200, { authUrl: authUrl.toString() });
@@ -129,6 +132,22 @@ createServer(async (req, res) => {
       if (!urls.length) return send(400, { error: 'Provide at least one web URL to crawl.' });
       const query = typeof body.query === 'string' ? body.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
       return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 11 }));
+    }
+    if (url.pathname === '/api/sites/verify-token' && req.method === 'GET') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to verify a site.' });
+      const site = await safeUrl(String(url.searchParams.get('site') ?? '')); if (!site) return send(400, { error: 'Enter a public http or https website URL.' });
+      const token = verificationToken(who.uid, site.hostname);
+      if (!token) return send(503, { error: 'Site verification is not set up on the Pothub server yet. Add SITE_VERIFY_SECRET to the server environment.' });
+      return send(200, { token, host: site.hostname, name: META_NAME, tag: verificationTag(token) });
+    }
+    if ((url.pathname === '/api/sites/verify' || url.pathname === '/api/sites/diagnose') && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
+      if (await rateLimited(`site:${who.uid}`, 20)) return send(429, { error: 'Too many site checks. Wait a moment.' });
+      const body = JSON.parse((await raw(req, 2_000)).toString('utf8') || '{}') as { url?: unknown };
+      const target = typeof body.url === 'string' ? body.url : '';
+      const check = await checkSite(who.uid, target); if (!check.ok) return send(check.status, { error: check.error });
+      if (url.pathname === '/api/sites/verify') return send(200, { verified: true, host: check.host });
+      return send(200, await crawlSites([target], { depth: 1, maxPages: 1 }));
     }
     if (url.pathname === '/api/jobs' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to run jobs in the background.' });
