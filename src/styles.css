@@ -702,3 +702,19 @@ input[type='search'] { width: 100%; }
 @media(max-width:420px) { .public-feature-grid { grid-template-columns:1fr; } .public-explore-footer { align-items:flex-start; flex-direction:column; } }
 
 .main.chat-mode.guest-mode { overflow-y:auto; } .main.chat-mode.guest-mode > .route { flex:none; min-height:calc(100dvh - 52px); overflow:visible; } .main.chat-mode.guest-mode .chat-home { min-height:calc(100dvh - 52px); }
+/* Rich, color-coded diagnosis report visuals */
+.site-tool-page .diagnosis-visuals { display: grid; gap: 14px; }
+.site-tool-page .diagnosis-score { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.site-tool-page .diagnosis-donut { width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; }
+.site-tool-page .diagnosis-donut-hole { width: 94px; height: 94px; border-radius: 50%; background: var(--panel, var(--bg)); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.site-tool-page .diagnosis-donut-hole strong { font-size: 1.6rem; line-height: 1.1; }
+.site-tool-page .diagnosis-donut-hole small { font-size: .7rem; opacity: .72; }
+.site-tool-page .diagnosis-score h3, .site-tool-page .diagnosis-bars h3, .site-tool-page .diagnosis-table-wrap h3 { margin: 0 0 8px; }
+.site-tool-page .diagnosis-bar { height: 10px; border-radius: 99px; overflow: hidden; background: color-mix(in srgb, var(--text, #333) 12%, transparent); }
+.site-tool-page .diagnosis-bar > span { display: block; height: 100%; border-radius: inherit; transition: width .35s ease; }
+.site-tool-page .diagnosis-bar-row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(80px, 2fr) 65px; align-items: center; gap: 10px; margin: 12px 0; font-size: .9rem; }
+.site-tool-page .diagnosis-table-wrap { overflow-x: auto; }
+.site-tool-page .diagnosis-table { width: 100%; border-collapse: collapse; min-width: 680px; }
+.site-tool-page .diagnosis-table th, .site-tool-page .diagnosis-table td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid var(--border, #ddd); }
+.site-tool-page .diagnosis-table th { background: color-mix(in srgb, #6366f1 12%, transparent); }
+@media (max-width: 640px) { .site-tool-page .diagnosis-score { align-items: flex-start; } .site-tool-page .diagnosis-bar-row { grid-template-columns: 1fr 1fr 54px; font-size: .78rem; gap: 6px; } }
