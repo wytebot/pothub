@@ -225,12 +225,12 @@ ${webBlock}`;
       // final writer receives the complete set of findings, not a truncated prefix.
       const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log, forceSplit) : { files, evidence: [] as string[], notes: [] as string[] };
       notes.push(...chunked.notes);
-      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t) => { partial = t; o.onText(t); } };
+      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t: string) => { partial = t; o.onText(t); } };
       // Jobs run on the Pothub server when they can, so they finish even if the app is closed. If the server cannot take the job, it runs on this device.
       let out: Awaited<ReturnType<typeof generateText>>;
       if (o.job && backgroundOn() && backgroundAvailable()) {
         const job = o.job;
-        try { out = await generateInBackground(model.provider, secret, req, { msgId: job.msgId, onStarted: (id) => { addPending({ id, chatId: job.chatId, msgId: job.msgId, prompt, wanted, modelName: model.name, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Running in the background…'); } }); }
+        try { out = await generateInBackground(model.provider, secret, req, { msgId: job.msgId, onStarted: (id: string) => { addPending({ id, chatId: job.chatId, msgId: job.msgId, prompt, wanted, modelName: model.name, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Running in the background…'); } }); }
         catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('warn', 'background run unavailable', e.message); out = await generateText(model.provider, secret, req); }
       } else out = await generateText(model.provider, secret, req);
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
