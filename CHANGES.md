@@ -56,3 +56,10 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Background server jobs now expose a `paused` status while waiting through provider credit exhaustion (402), rate limits (429), transient server errors (5xx), or connection failures.
 - Retry backoff is bounded and repeats until recovery or the six-hour job deadline; provider credits can be restored during that window and the job resumes automatically.
 - Server job pause reason is persisted with the bounded job result metadata; provider secrets remain memory-only and are never written to Firestore.
+
+## Vercel TypeScript build fixes (2026-11-21)
+- Renamed Codelab's commit-history state to `commitHistory` so it no longer shadows the browser History API; GitHub OAuth callback cleanup now uses `window.history.replaceState`.
+- Marked the locally generated GitHub tree item type as the literal `blob`, preserving the `TreeItem` union.
+- Wrapped optional-string `connect` handlers in click callbacks so React MouseEvent is not passed as a token.
+- Removed the unused `useMemo` import from Billing.
+- Renamed the workflow streaming callback parameter to `text` with an explicit string annotation.
