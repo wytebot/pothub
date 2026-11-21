@@ -36,6 +36,8 @@ export function buildCatalog(lists: Partial<Record<ProviderId, ListedModel[]>>, 
 const connectedProviders = (): ProviderId[] => [...new Set(defaultKeys('text').map((k) => k.provider))];
 const restrict = (c: Catalog): Catalog => { const allowed = new Set(defaultKeys('text').map((k) => k.provider)); return { ...c, texts: c.texts.filter((m) => allowed.has(m.provider)) }; };
 export const cachedCatalog = (): Catalog => last ?? restrict(buildCatalog({}, connectedProviders()));
+/** Fast path: use persisted provider model lists immediately, avoiding live model-list requests on chat startup. */
+export const quickCatalog = (): Catalog | null => { const connected = connectedProviders(); const store = persisted(); const lists: Partial<Record<ProviderId, ListedModel[]>> = {}; let found = false; for (const p of connected) { const key = defaultKeys('text').find((k) => k.provider === p); if (!key) continue; const hit = mem.get(key.id); const saved = hit && Date.now() - hit.at < LS_TTL ? hit : store[key.id]; if (saved && Date.now() - saved.at < LS_TTL) { lists[p] = saved.models; found = true; } } const c = restrict(buildCatalog(lists, connected, Date.now())); return found && c.texts.length ? c : null; };
 function persisted(): Record<string, { at: number; models: ListedModel[] }> { try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; } }
 function persist(id: string, v: { at: number; models: ListedModel[] }) { try { const p = persisted(); p[id] = v; localStorage.setItem(LS, JSON.stringify(p)); } catch { /* local storage unavailable */ } }
 export const dropCatalogCache = () => { mem.clear(); last = null; try { localStorage.removeItem(LS); } catch { /* ignore */ } };
