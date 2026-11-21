@@ -128,6 +128,32 @@ In the GitHub OAuth App settings, set **Authorization callback URL** to `https:/
 
 `VITE_API_URL` must still be the address of the Node API server (search, crawl, background jobs, billing, citations). If it points at the website itself, those calls return a web page and the app now says so.
 
+### Backend keys (recommended)
+
+The API key never goes into the app. The person who runs a backend sets four environment variables there, deploys it, and pastes its address into **AI Providers → Connect your backend**. The app stores only the address and the provider/model the backend reports.
+
+Set these on the backend (Vercel project or any host), then redeploy:
+
+| Variable | Value |
+| --- | --- |
+| `POTHUB_PROVIDER` | `openai`, `gemini`, `anthropic`, `xai`, `deepseek`, `mistral`, `groq`, `openrouter` or `together` |
+| `POTHUB_API_KEY` | the API key from that provider |
+| `POTHUB_MODEL` | the model to use, for example `gpt-4o` |
+| `POTHUB_ALLOWED_EMAILS` | the Google email(s) you sign in to Pothub with, comma separated |
+
+The simplest backend is this repository itself: deploy it to Vercel (or use the Pothub project you already have), add the four variables, and paste that project's address. Its `api/agent/` folder is the backend. One backend uses one provider and one model; connect several backends to use several.
+
+What the backend enforces (`api/_lib/agent.js`, tested in `agent.test.js`):
+
+- Only a verified Google sign-in whose email is in `POTHUB_ALLOWED_EMAILS` may use it. **If that variable is empty the backend is closed.**
+- It forwards only chat and model-list calls, only to the fixed address of `POTHUB_PROVIDER`. The app cannot pick the provider, the destination or the model: the backend always substitutes `POTHUB_MODEL`, so cost stays under the owner's control.
+- `GET /api/agent/info` returns the provider, model and the names of any missing variables, never the key. Replies stream back unchanged; each call may run up to 60 seconds and carry up to about 4 MB.
+- Calls from the Pothub web app and the Android app are allowed by default (CORS); other websites are not.
+
+Any other platform can act as a backend by serving `GET {address}/api/agent/info` and `POST {address}/api/agent/proxy` (body `{url, method, body}`, header `Authorization: Bearer <Firebase ID token>`, verified against Firebase project `pothub-ca2a1`) with the same rules.
+
+The app sends the person's Firebase sign-in token to the backend address they paste, so only connect a backend you control. Backend connections run from the device through the backend, not as background jobs on the API server (it would need the real key). `VITE_ALLOW_DEVICE_KEYS=false` at build time removes the option of storing a key on the device; keys already saved keep working until removed.
+
 ### Configured websites
 
 Everything for a site lives on one card: add the site, verify ownership with `<meta name="pothub-site-verification" content="pothub-…">` in the home page `<head>` (`/api/sites/verify-token`, `/api/sites/verify`), tick **Allow Pothub to crawl this site**, then run diagnosis (`/api/sites/diagnose`, which re-checks the tag first). Ticking the box also shares short excerpts for citations through the API server (`/api/publishers/crawl`); unticking removes them. Backlink snippet, verification and results sit behind the dots button on each card. The old Backlink snippets, Website diagnosis, Diagnosis results and Crawl & citations pages were removed; their old links open Configured websites.

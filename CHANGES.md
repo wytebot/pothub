@@ -79,3 +79,9 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Removed the Backlink snippets, Website diagnosis, Diagnosis results and Crawl & citations pages and menu entries; old links open Configured websites.
 - The checkbox requires a verified site, gates diagnosis, and shares/removes citation excerpts through the API server (`/api/publishers/crawl`, `/api/publishers/remove`).
 - Tests: `api/_lib/web.test.js` (tag, safe URL, check, extraction). Not run against a full install here (no network): run `npm test` and `npm run build` before shipping.
+
+## Backend instead of keys in the app
+- Flow: set `POTHUB_PROVIDER`, `POTHUB_API_KEY`, `POTHUB_MODEL`, `POTHUB_ALLOWED_EMAILS` on your own backend, deploy, paste its address in AI Providers → Connect your backend. The app lists those names (with a Copy button), checks the backend (`/api/agent/info`) and stores only the address, provider and model.
+- Backend gateway `api/agent/[action].js` + `api/_lib/agent.js`: closed unless `POTHUB_ALLOWED_EMAILS` matches the verified Google email; forwards only chat/model-list calls to the fixed provider address; always substitutes `POTHUB_MODEL`; never returns the key. Pothub's web and Android app origins are allowed by default.
+- App: a backend connection is a reference (`src/models/gatewayRef.ts`) that `call()` sends through `src/models/gateway.ts`; the backend's model is the only model offered (`pinned` in the catalog). Keys on the device move under "Advanced"; `VITE_ALLOW_DEVICE_KEYS=false` removes that option. Backend connections skip background jobs on the API server.
+- Privacy text updated. Tests: `api/_lib/agent.test.js`, `src/models/gatewayRef.test.ts`. Not run against a full install here (no network): run `npm test` and `npm run build` before shipping.

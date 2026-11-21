@@ -25,6 +25,6 @@ export async function verifyIdToken(authorization) {
     if (!verify('RSA-SHA256', Buffer.from(`${h}.${p}`), createPublicKey({ key: jwk, format: 'jwk' }), Buffer.from(s, 'base64url'))) return null;
     const c = json(p); const now = Date.now() / 1000; const id = projectId();
     if (c.aud !== id || c.iss !== `https://securetoken.google.com/${id}` || !c.sub || !(c.exp > now - 5) || c.iat > now + 300) return null;
-    return { uid: String(c.sub), email: typeof c.email === 'string' ? c.email : null };
+    return { uid: String(c.sub), email: typeof c.email === 'string' ? c.email : null, emailVerified: c.email_verified === true };
   } catch { return null; }
 }

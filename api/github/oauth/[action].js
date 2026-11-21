@@ -7,9 +7,10 @@ import { verifyIdToken } from '../../_lib/auth.js';
 const secret = () => process.env.GITHUB_CLIENT_SECRET || '';
 const callbackUrl = (req) => {
   const set = process.env.GITHUB_CALLBACK_URL || '';
-  try { const u = new URL(set); if (u.protocol === 'https:' && u.pathname.replace(/\/$/, '') === '/api/github/oauth/callback') return u.toString(); } catch { /* use this site */ }
+  try { const u = new URL(set); if (u.protocol === 'https:' && !u.username && !u.password && u.pathname.replace(/\/$/, '') === '/api/github/oauth/callback') return u.toString(); } catch { /* use this site */ }
   return `${origin(req)}/api/github/oauth/callback`;
 };
+const safeError = (e) => { const message = e instanceof Error ? e.message : String(e || 'unknown error'); return message.replace(/(?:ghp_|github_pat_|Bearer\s+)[A-Za-z0-9_\-]+/gi, '[redacted]').slice(0, 180); };
 
 function makeState(uid) {
   const payload = Buffer.from(JSON.stringify({ uid, exp: Date.now() + 10 * 60_000, nonce: randomUUID() })).toString('base64url');
@@ -35,8 +36,11 @@ export default async function handler(req, res) {
       if (limited(`gh-start:${who.uid}`, 10)) return reply(req, res, 429, { error: 'Too many attempts. Wait a minute and try again.' });
       const missing = [['GITHUB_CLIENT_ID', process.env.GITHUB_CLIENT_ID], ['GITHUB_CLIENT_SECRET', secret()]].filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return reply(req, res, 503, { error: `GitHub connection needs these Vercel environment variables: ${missing.join(', ')}. Add them, then redeploy.` });
+      const cb = callbackUrl(req);
+      let callback; try { callback = new URL(cb); } catch { return reply(req, res, 503, { error: 'GitHub callback URL could not be constructed. Set GITHUB_CALLBACK_URL to the exact HTTPS callback route.' }); }
+      if (callback.protocol !== 'https:' || callback.pathname.replace(/\/$/, '') !== '/api/github/oauth/callback') return reply(req, res, 503, { error: 'GitHub callback must be HTTPS and end in /api/github/oauth/callback.' });
       const u = new URL('https://github.com/login/oauth/authorize');
-      u.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID); u.searchParams.set('redirect_uri', callbackUrl(req));
+      u.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID); u.searchParams.set('redirect_uri', cb);
       u.searchParams.set('scope', 'repo'); u.searchParams.set('state', makeState(who.uid));
       return reply(req, res, 200, { authUrl: u.toString() });
     }
@@ -61,7 +65,7 @@ export default async function handler(req, res) {
       return reply(req, res, 200, { access_token: d.access_token });
     }
     return reply(req, res, 404, { error: 'not found' });
-  } catch {
-    return reply(req, res, 500, { error: 'GitHub connection failed unexpectedly. Try again in a moment.' });
+  } catch (e) {
+    return reply(req, res, 500, { error: `GitHub OAuth endpoint failed: ${safeError(e)}. Check the deployed API route and callback configuration.` });
   }
 }
