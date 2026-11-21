@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 
 import { announceChats, CHAT_OPEN, currentChatId, openChat, setCurrentChatId, titleFrom } from '../chat/state';
 import type { ChatMessage as Msg } from '../chat/types';
-import { getChat, putChat } from '../storage/db';
+import { getChat, putChat, getArtifact, putArtifact, allChats } from '../storage/db';
 import { defaultKeys } from '../vault/vault';
 import { FNS } from '../models/providerInfo';
 import { uid } from '../storage/db';
@@ -26,6 +26,8 @@ import { platform } from '../platform';
 import { Icon } from '../ui/Icon';
 import { detectLocal, runLocal } from '../agent/local';
 import { takeCodelabPrompt } from '../codelab/context';
+import { GeneratedCommitMenu } from '../ui/GeneratedCommitMenu';
+import { unzipSync, strFromU8 } from 'fflate';
 
 const OLD_KEY = 'chat.v3';
 const PROMPTS = [
@@ -45,6 +47,7 @@ const PROMPTS = [
 ];
 const logs = new Map<string, RunLog>();
 const outFiles = new Map<string, OutFile>();
+const keepArtifact = (id: string, file: OutFile) => { outFiles.set(id, file); void putArtifact(id, file).catch(() => {}); };
 const sent = new Map<string, Attachment[]>();
 const GLYPH: Record<string, string> = { pdf: 'PDF', docx: 'DOC', text: 'TXT', office: 'DOC', archive: 'ZIP', binary: 'FILE' };
 
@@ -75,6 +78,18 @@ function historyOf(ms: Msg[]): ChatTurn[] {
   // Keep all history in IndexedDB; send only a plan-aware recent window to the provider.
   const maxPairs = 8;
   return turns.slice(-maxPairs * 2);
+}
+/** On explicit continuity requests, recall relevant recent chats and recover saved artifacts locally. */
+async function recallPreviousChats(prompt: string, currentId: string): Promise<ChatTurn[]> {
+  if (!/\b(continue|previous|earlier|last time|same project|that project|the app|our app|the code|generated file|the zip|we discussed|we were|resume|pick up|recover|update it|fix it again)\b/i.test(prompt)) return [];
+  try {
+    const chats=(await allChats()).filter(c=>c.id!==currentId&&c.messages?.length).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,12);
+    const terms=new Set(prompt.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3));
+    const ranked=chats.map(c=>{const txt=`${c.title} ${c.messages.map(m=>m.text||'').join(' ')}`.toLowerCase();let score=0;for(const w of terms)if(txt.includes(w))score++;return {c,score};}).sort((a,b)=>b.score-a.score||b.c.updatedAt-a.c.updatedAt).slice(0,3);
+    const result:ChatTurn[]=[];let budget=11000;
+    for(const {c} of ranked){result.push({role:'user',text:`[Relevant earlier Pothub chat: ${c.title}]`});for(const m of c.messages.filter(m=>m.state==='done'&&m.text).slice(-5)){if(budget<=0)break;const content=m.text.slice(-Math.min(2500,budget));result.push({role:m.role==='assistant'?'assistant':'user',text:content});budget-=content.length;if(m.role==='assistant'&&m.fileOut&&budget>500){const artifact=await getArtifact(m.id);if(artifact){let recovered='';if(/\.zip$/i.test(artifact.name)){try{const entries=unzipSync(new Uint8Array(await artifact.blob.arrayBuffer()));recovered=Object.entries(entries).filter(([n,b])=>!n.endsWith('/')&&b.length<200000&&!b.some(x=>x===0)).map(([n,b])=>`--- ${n} ---\n${strFromU8(b).slice(0,1600)}`).join('\n\n').slice(0,Math.min(3500,budget));}catch{}}else if(artifact.blob.size<100000)recovered=(await artifact.blob.text()).slice(0,Math.min(3500,budget));if(recovered){result.push({role:'assistant',text:`[Recovered contents from previous generated artifact: ${artifact.name}]\n${recovered}`});budget-=recovered.length;}}}}if(budget<=0)break;}
+    return result;
+  }catch{return [];}
 }
 
 function Chip({ a, onRemove }: { a: Attachment; onRemove?: () => void }) {
@@ -241,12 +256,12 @@ export function Home() {
       void (async () => {
         let last = 0;
         try {
-          const r = await follow(p.id, { signal: ctl.signal, onText: (t) => { const now = Date.now(); if (idRef.current !== p.chatId || now - last < 150) return; last = now; patch(p.msgId, { kind: 'text', text: t }); } });
+          const r = await follow(p.id, { signal: ctl.signal, onText: p.wanted.file ? undefined : (t) => { const now = Date.now(); if (idRef.current !== p.chatId || now - last < 150) return; last = now; patch(p.msgId, { kind: 'text', text: t }); } });
           const here = idRef.current === p.chatId;
           const del = here ? await deliverable(r.text, p.wanted, p.prompt, []) : { file: null, notes: p.wanted.file ? ['You were in another chat when this finished, so the file was not built. Ask me to make it from this answer.'] : [] };
-          if (del.file) outFiles.set(p.msgId, del.file);
+          if (del.file) keepArtifact(p.msgId, del.file);
           const notes = [...p.notes, ...del.notes, ...(r.truncated ? ['The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.'] : [])];
-          await settle(p, { state: 'done', kind: 'text', text: r.text, notes: notes.length ? notes : undefined, sources: p.sources, fileOut: del.file ? { name: del.file.name, size: del.file.blob.size } : undefined });
+          await settle(p, { state: 'done', kind: 'text', text: p.wanted.file && del.file ? `**${del.file.name} is ready.** Download the attached file to review its contents.` : r.text, notes: notes.length ? notes : undefined, sources: p.sources, fileOut: del.file ? { name: del.file.name, size: del.file.blob.size } : undefined });
           dropPending(p.msgId); log.say('ok', 'done');
           void notifyDone({ kind: 'text', title: 'Your answer is ready', body: `${p.modelName} finished “${titleFrom(p.prompt, 'your request').slice(0, 60)}”.`, route: '/' });
         } catch (e) {
@@ -281,16 +296,19 @@ export function Home() {
         log.step('Building your file on this device…');
         const lr = log.start('cmd', `local ${local.kind} --to ${local.format}`);
         const out = await runLocal(local, atts); log.done(lr, `${out.file.name} · ${sizeLabel(out.file.blob.size)}`); log.say('ok', 'done');
-        outFiles.set(id, out.file);
+        keepArtifact(id, out.file);
         patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: { name: out.file.name, size: out.file.blob.size } });
         return;
       }
+      // Recall prior chats and recover locally stored generated files for continuity requests.
+      const recalled = await recallPreviousChats(prompt, idRef.current);
+      const contextualHistory = recalled.length ? [...recalled, ...history] : history;
       // Text-only routing: every prompt is handled by a text model, including legacy media prompts.
       let last = 0;
-      const out = await runText({ prompt, files: atts, web: true, history, job: { chatId: idRef.current, msgId: id }, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
+      const out = await runText({ prompt, files: atts, web: true, history: contextualHistory, job: { chatId: idRef.current, msgId: id }, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
         partial = t; const now = Date.now(); if (now - last < 90) return; last = now; patch(id, { kind: 'text', text: t });
       }});
-      if (out.file) outFiles.set(id, out.file);
+      if (out.file) keepArtifact(id, out.file);
       log.say('ok', 'done');
       patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, sources: out.sources?.length ? out.sources : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size } : undefined });
       return;
@@ -343,7 +361,8 @@ export function Home() {
   const flash = (k: string) => { setCopied(k); setTimeout(() => setCopied((c) => (c === k ? '' : c)), 1500); };
   const copyText = (key: string, t: string) => { void navigator.clipboard?.writeText(t).then(() => flash(key)).catch(() => flash(`${key}!`)); };
   const download = async (m: Msg) => {
-    const out = outFiles.get(m.id);
+    let out = outFiles.get(m.id);
+    if (!out && m.fileOut) { const saved = await getArtifact(m.id); if (saved) { out = { blob: saved.blob, name: saved.name, mime: saved.mime }; outFiles.set(m.id, out); } }
     if (out) { await platform.saveFile(out.blob, out.name); return; }
     if (m.text) await platform.saveFile(new Blob([m.text], { type: 'text/markdown' }), `${nameFromText(m.text)}.md`);
   };
@@ -396,6 +415,7 @@ export function Home() {
                   {m.text && m.state === 'done' && (outFiles.has(m.id)
                     ? <button className="primary file" aria-label={`Download ${outFiles.get(m.id)!.name}`} title={`Download ${outFiles.get(m.id)!.name}`} onClick={() => void download(m)}><Icon name={/\.zip$/i.test(outFiles.get(m.id)!.name) ? 'zip' : 'file'} size={16} /><span>{outFiles.get(m.id)!.name}</span></button>
                     : <button className="ia" aria-label={'Save as file'} title={'Save as file'} onClick={() => void download(m)}><Icon name="download" size={16} /></button>)}
+                  {m.fileOut && <GeneratedCommitMenu artifactId={m.id} artifactName={m.fileOut.name} />}
                   {m.kind === 'text' && m.state === 'done' && /length limit|cut short/.test((m.notes ?? []).join(' ')) && <button className="ia" aria-label="Continue" title="Continue where it stopped" disabled={active} onClick={() => send('Continue exactly where you stopped.')}><Icon name="continue" size={16} /></button>}
                   <button className="ia" aria-label={m.state === 'error' ? 'Try again' : 'Regenerate'} title={m.state === 'error' ? 'Try again' : 'Regenerate'} disabled={active} onClick={() => redo(m.id)}><Icon name="refresh" size={16} /></button>
                 </div>
