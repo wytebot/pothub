@@ -26,6 +26,7 @@ const BUDGETS: Record<string, Budget> = {
   gemini: { direct: 400_000, chunk: 200_000, overlap: 2_000, parallel: 4 },
   openai: { direct: 240_000, chunk: 120_000, overlap: 2_000, parallel: 3 },
   xai: { direct: 240_000, chunk: 120_000, overlap: 2_000, parallel: 3 },
+  anthropic: { direct: 300_000, chunk: 150_000, overlap: 2_000, parallel: 3 },
 };
 const FALLBACK: Budget = { direct: 200_000, chunk: 100_000, overlap: 2_000, parallel: 2 };
 

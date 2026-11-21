@@ -6,8 +6,7 @@ export interface Attachment { id: string; name: string; mime: string; size: numb
 /** What is kept in the saved chat (no bytes). */
 export interface AttachmentMeta { name: string; kind: AttachKind; size: number; }
 
-// Keep the picker itself uncapped: the plan-aware 10-per-5-hour free allowance is enforced
-// Pothub does not impose attachment quotas; provider-side limits still apply.
+// The per-message picker cap is separate from the local 20-file analysis allowance enforced by fileQuota.ts.
 export const MAX_FILES = 20;
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB per file
 export const MAX_BATCH_BYTES = 60 * 1024 * 1024; // 60 MB per message batch

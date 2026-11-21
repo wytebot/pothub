@@ -4,7 +4,6 @@ import { ChatHistory } from './ui/ChatHistory';
 import { OfflineBanner } from './ui/OfflineBanner';
 import { Home } from './pages/Home';
 import { Storage } from './pages/Storage';
-import { Welcome } from './pages/Welcome';
 import { Providers } from './pages/Providers';
 import { Legal } from './pages/Legal';
 import { Support } from './pages/Support';
@@ -12,9 +11,10 @@ import { Settings } from './pages/Settings';
 import { AppearancePage } from './pages/Appearance';
 import { SiteTools } from './pages/SiteTools';
 import { Codelab } from './pages/Codelab';
+import { CrawlCitations } from './pages/CrawlCitations';
 import { Billing } from './pages/Billing';
 import { getStorageInfo } from './storage/quota';
-import { useMe } from './auth/session';
+import { useMe, signInWithGoogle } from './auth/session';
 import { applyUpdate, UPDATE_READY } from './version';
 
 type IconName = Parameters<typeof Icon>[0]['name'];
@@ -27,6 +27,7 @@ const primary: Route[] = [
   { path: '/sites/backlinks', label: 'Backlink snippets', icon: 'link', el: <SiteTools mode="backlinks" /> },
   { path: '/sites/diagnosis', label: 'Website diagnosis', icon: 'globe', el: <SiteTools mode="diagnosis" /> },
   { path: '/sites/diagnosis/results', label: 'Diagnosis results', icon: 'file', el: <SiteTools mode="results" /> },
+  { path: '/sites/crawl-citations', label: 'Crawl & citations', icon: 'globe', el: <CrawlCitations /> },
   { path: '/codelab', label: 'Codelab', icon: 'code', el: <div /> },
   { path: '/billing', label: 'Premium', icon: 'star', el: <Billing /> },
 ];
@@ -57,8 +58,11 @@ export function App() {
   const [refresh, setRefresh] = useState(0);
   const [pull, setPull] = useState(0);
   const [update, setUpdate] = useState('');
+  const [guestSignInBusy, setGuestSignInBusy] = useState(false);
   const touch = useRef<{ y: number; on: boolean } | null>(null);
-  const route: Route = all.find((r) => r.path === path.split('?')[0]) ?? (path.startsWith('/legal/') ? { path: '/legal', label: 'Legal documents', el: <Legal id={path.slice(7)} /> } : primary[0]);
+  const requestedRoute: Route = all.find((r) => r.path === path.split('?')[0]) ?? (path.startsWith('/legal/') ? { path: '/legal', label: 'Legal documents', el: <Legal id={path.slice(7)} /> } : primary[0]);
+  const guestAccessible = new Set(['/', '/providers', '/legal', '/privacy', '/terms', '/support', '/about']);
+  const route: Route = !me && !guestAccessible.has(requestedRoute.path) ? primary[0] : requestedRoute;
 
   useEffect(() => setDrawer(false), [path]);
   useEffect(() => { const f = (e: Event) => setUpdate((e as CustomEvent<{ id: string }>).detail?.id ?? 'new'); window.addEventListener(UPDATE_READY, f); return () => window.removeEventListener(UPDATE_READY, f); }, []);
@@ -66,9 +70,7 @@ export function App() {
   useEffect(() => { getStorageInfo().then((i) => setLow(i.supported && i.quota > 0 && i.usage / i.quota > 0.85)).catch(() => {}); }, [path]);
   useEffect(() => { if (!drawer) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [drawer]);
 
-  if (me === undefined) return <div className="auth-loading" role="status" aria-label="Checking sign-in"><span className="spin" /><p>Checking your sign-in…</p></div>;
-  if (!me) return <Welcome />;
-
+  // Render a public, crawlable guest workspace while Firebase restores the session. Protected navigation is hidden for guests.
   const link = (r: Route) => (
     <a key={r.path} href={`#${r.path}`} className={`nav-link${r.path === route.path ? ' current' : ''}`} aria-current={r.path === route.path ? 'page' : undefined}>
       {r.icon ? <Icon name={r.icon} /> : <span className="nav-gap" />}{r.label}
@@ -80,21 +82,21 @@ export function App() {
       <header className="topbar">
         <button className="icon-btn" aria-label="Open navigation" aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" size={20} /></button>
         <span className="brand">Pothub</span>
-        <details className="header-tools"><summary>Tools <Icon name="chevron" size={14}/></summary><div className="header-tools-pop"><a href="#/sites">Configured websites</a><a href="#/sites/backlinks">Backlink snippets</a><a href="#/sites/diagnosis">Website diagnosis</a><a href="#/sites/diagnosis/results">Latest diagnosis</a><a href="#/codelab">Codelab</a><a href="#/billing">Premium & billing</a></div></details>
+        {!me ? <button className="guest-signin" disabled={guestSignInBusy} onClick={async () => { setGuestSignInBusy(true); const r = await signInWithGoogle(); if (!r.ok && r.message) alert(r.message); setGuestSignInBusy(false); }}>{guestSignInBusy ? 'Signing in…' : 'Sign in'}</button> : <details className="header-tools"><summary>Tools <Icon name="chevron" size={14}/></summary><div className="header-tools-pop"><a href="#/sites">Configured websites</a><a href="#/sites/backlinks">Backlink snippets</a><a href="#/sites/diagnosis">Website diagnosis</a><a href="#/sites/diagnosis/results">Latest diagnosis</a><a href="#/sites/crawl-citations">Crawl & citations</a><a href="#/codelab">Codelab</a><a href="#/billing">Premium & billing</a></div></details>}
       </header>
       {drawer && <div className="drawer-scrim" onClick={() => setDrawer(false)} />}
       <nav className={`sidebar${drawer ? ' open' : ''}`} aria-label="Main">
         <div className="brand desk">Pothub</div>
-        <div className="nav-group">{primary.map(link)}</div>
+        <div className="nav-group">{(me ? primary : primary.filter((r) => r.path === '/' || r.path === '/providers')).map(link)}</div>
         <ChatHistory onPick={() => setDrawer(false)} />
-        <div className="nav-group bottom">
+        {me && <div className="nav-group bottom">
           <button className="nav-link more-toggle" aria-expanded={more} aria-controls="more-nav" onClick={() => setMore((m) => { localStorage.setItem('ui.more', m ? '0' : '1'); return !m; })}>
             <span className={`chev${more ? ' up' : ''}`}><Icon name="chevron" size={16} /></span>More
           </button>
           {more && <div id="more-nav">{secondary.map(link)}</div>}
-        </div>
+        </div>}
       </nav>
-      <main className={`main${route.path === '/' ? ' chat-mode' : ''}`} id="main"
+      <main className={`main${route.path === '/' ? ` chat-mode${!me ? ' guest-mode' : ''}` : ''}`} id="main"
         onTouchStart={(e) => { touch.current = { y: e.touches[0].clientY, on: e.currentTarget.scrollTop === 0 && route.path !== '/' }; }}
         onTouchMove={(e) => { const t = touch.current; if (t?.on) setPull(Math.max(0, Math.min(100, e.touches[0].clientY - t.y))); }}
         onTouchEnd={() => { if (pull >= 80) setRefresh((n) => n + 1); setPull(0); touch.current = null; }}>
@@ -102,9 +104,25 @@ export function App() {
         <OfflineBanner />
         {update && <div className="notice" role="status">A new version of Pothub is ready. <button className="btn" onClick={() => void applyUpdate(update)}>Update now</button></div>}
         {low && <div className="notice warn" role="alert">Device storage is almost full. <a href="#/storage">Review storage</a> and export projects you want to keep.</div>}
-        <div key={`${route.path}:${refresh}`} className="route">{route.path === '/codelab' ? null : route.el}</div>
+        <div key={`${route.path}:${refresh}`} className="route">{route.path === '/codelab' ? null : route.el}{!me && route.path === '/' && <PublicExplore onSignIn={() => { void signInWithGoogle(); }} />}</div>
         <div className={`codelab-session${route.path === '/codelab' ? ' visible' : ''}`} aria-hidden={route.path !== '/codelab'}><Codelab /></div>
       </main>
     </div>
   );
+}
+
+function PublicExplore({ onSignIn }: { onSignIn: () => void }) {
+  return <section className="public-explore" aria-label="Explore Pothub features">
+    <div className="public-explore-head"><p className="eyebrow">EXPLORE POTHUB</p><h2>One workspace for research, code, files and websites.</h2><p>Start a new chat without an account. Sign in to unlock saved chats, site tools, publisher features, and protected workspace features.</p></div>
+    <div className="public-feature-grid">
+      <article><h3>AI chat & writing</h3><p>Ask questions, draft, explain, plan and refine work using your configured AI providers.</p></article>
+      <article><h3>Deep research & sources</h3><p>Research current topics with relevant web results, structured explanations and consolidated citations.</p></article>
+      <article><h3>Code & development</h3><p>Debug projects, understand code, plan edits and work through implementation steps.</p></article>
+      <article><h3>File analysis</h3><p>Read supported documents and project files locally. Free accounts get 20 file analyses every five hours; Premium has unlimited analyses.</p></article>
+      <article><h3>Website diagnosis</h3><p>Inspect site issues, review actionable recommendations and manage configured websites.</p></article>
+      <article><h3>Publisher crawling & citations</h3><p>Opt in to content discovery so relevant articles can be surfaced and linked as research sources.</p></article>
+      <article><h3>Developer workspace</h3><p>GitHub repository workspace, file tools and project-oriented workflows across mobile and desktop layouts.</p></article>
+      <article><h3>Native app conveniences</h3><p>Android file picker and share flows, refresh gestures, offline awareness, device-safe storage and notification support where enabled.</p></article>
+    </div><div className="public-explore-footer"><span>Available on web and Android · Mobile-first, desktop-ready</span><button className="btn" onClick={onSignIn}>Sign in to unlock features</button></div>
+  </section>;
 }
