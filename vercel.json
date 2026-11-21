@@ -99,7 +99,7 @@
       "destination": "https://pothub-ca2a1.firebaseapp.com/__/auth/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
