@@ -1,5 +1,5 @@
 export type Page = { url: string; title: string; text: string };
-export type Site = { id: string; url: string; label: string };
+export type Site = { id: string; url: string; label: string; verified?: boolean };
 export type Check = { name: string; ok: boolean; detail: string; recommendation: string };
 export const POT_HUB_URL = 'https://pothub-self.vercel.app/';
 export const safeLabel = (label: string) => label.trim().replace(/[<>"']/g, '').slice(0, 80) || 'Pothub';
@@ -28,3 +28,6 @@ export function analyze(page: Page): Check[] {
     { name: 'Canonical signal', ok: canonicalSignal, detail: canonicalSignal ? 'Canonical text signal found in crawl output.' : 'Canonical tag was not detected in extracted text; this is not a definitive tag check.', recommendation: 'Confirm the HTML contains a correct rel="canonical" tag when duplicate or alternate URLs exist.' },
   ];
 }
+
+export const VERIFY_META_NAME = 'pothub-site-verification';
+export const verificationTag = (token: string) => `<meta name="${VERIFY_META_NAME}" content="${token.replace(/[^\w-]/g, '')}">`;

@@ -22,8 +22,6 @@ import { consumeFileQuota, FILE_ANALYSIS_LIMIT, formatQuotaReset, getFileQuota, 
 import type { OutFile } from '../agent/deliver';
 import type { ChatTurn } from '../models/text';
 import { getSettings } from '../settings';
-import { auth } from '../firebase';
-import { onAuthStateChanged } from 'firebase/auth';
 import { platform } from '../platform';
 import { Icon } from '../ui/Icon';
 import { detectLocal, runLocal } from '../agent/local';
@@ -114,8 +112,6 @@ export function Home() {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [fileNote, setFileNote] = useState('');
   const [serverQuota, setServerQuota] = useState<FileQuota | null>(null);
-  const [isSignedIn, setIsSignedIn] = useState(!!auth.currentUser);
-  useEffect(() => onAuthStateChanged(auth, (u) => setIsSignedIn(!!u)), []);
   const [editing, setEditing] = useState<{ userId: string; assistantId: string; before: Msg[] } | null>(null);
   const [menu, setMenu] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -419,7 +415,6 @@ export function Home() {
         )}
         {editing && <div className="notice" role="status">Editing this request. Sending will update its existing reply instead of adding a new conversation entry. <button className="btn" onClick={() => { setEditing(null); setIdea(''); setFiles([]); }}>Cancel edit</button></div>}
         {fileNote && <p className="attach-note" role="status">{fileNote}</p>}
-        {!fileNote && !isSignedIn && <p className="attach-note">{serverQuota?.premium ? 'Premium: unlimited file analysis.' : serverQuota ? `File allowance: ${serverQuota.remaining}/${FILE_ANALYSIS_LIMIT} analyses available · resets 5 hours after first use.` : 'File allowance is checked securely when you submit files. Sign in to use file analysis.'}</p>}
         <div className="chat-composer">
           {files.length > 0 && (
             <div className="attach-row" aria-label="Attached files">
