@@ -10,7 +10,7 @@ export interface ChatRecord { id: string; title: string; createdAt: number; upda
 const touch = () => { try { window.dispatchEvent(new Event('data:changed')); } catch { /* not in a browser */ } };
 
 const DB_NAME = 'creative-studio';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 let dbp: Promise<IDBDatabase> | null = null;
 
 export const uid = () => crypto.randomUUID();
@@ -25,6 +25,8 @@ function open(): Promise<IDBDatabase> {
       if (!d.objectStoreNames.contains('media')) d.createObjectStore('media', { keyPath: 'id' }).createIndex('projectId', 'projectId');
       if (!d.objectStoreNames.contains('chats')) d.createObjectStore('chats', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
+      if (!d.objectStoreNames.contains('artifacts')) d.createObjectStore('artifacts', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('artifacts')) d.createObjectStore('artifacts', { keyPath: 'id' });
     };
     r.onsuccess = () => {
       const d = r.result;
@@ -149,3 +151,23 @@ export async function clearLocalData(): Promise<void> {
   for (const n of ['projects', 'media', 'chats']) t.objectStore(n).clear();
   await f;
 }
+
+/** Persist generated downloadable files locally so a previous chat can recover its artifact. */
+export interface ArtifactRecord { id: string; name: string; mime: string; blob: Blob; createdAt: number; }
+export async function putArtifact(id: string, file: { name: string; mime: string; blob: Blob }): Promise<void> {
+  const t = (await open()).transaction('artifacts', 'readwrite'); const f = done(t); t.objectStore('artifacts').put({ id, ...file, createdAt: Date.now() } satisfies ArtifactRecord); await f;
+}
+export async function getArtifact(id: string): Promise<ArtifactRecord | undefined> {
+  return req((await open()).transaction('artifacts').objectStore('artifacts').get(id));
+}
+export async function deleteArtifact(id: string): Promise<void> {
+  const t = (await open()).transaction('artifacts', 'readwrite'); const f = done(t); t.objectStore('artifacts').delete(id); await f;
+}
+
+/** Persist generated downloadable files locally so chats can recover artifacts. */
+export interface ArtifactRecord { id: string; name: string; mime: string; blob: Blob; createdAt: number; }
+export async function putArtifact(id: string, file: { name: string; mime: string; blob: Blob }): Promise<void> {
+  const t = (await open()).transaction('artifacts', 'readwrite'); const f = done(t); t.objectStore('artifacts').put({ id, ...file, createdAt: Date.now() } satisfies ArtifactRecord); await f;
+}
+export async function getArtifact(id: string): Promise<ArtifactRecord | undefined> { return req((await open()).transaction('artifacts').objectStore('artifacts').get(id)); }
+export async function deleteArtifact(id: string): Promise<void> { const t = (await open()).transaction('artifacts', 'readwrite'); const f = done(t); t.objectStore('artifacts').delete(id); await f; }

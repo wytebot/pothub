@@ -376,7 +376,7 @@ input[type='search'] { width: 100%; }
 
 /* ---- chat: icon buttons ---- */
 .msg-actions button.ia { width: 36px; padding: 0; display: inline-grid; place-items: center; }
-.msg-actions button.file { display: inline-flex; align-items: center; gap: 7px; max-width: min(100%, 320px); }
+.msg-actions button.file { display: inline-flex; align-items: center; gap: 9px; max-width: min(100%, 360px); min-height: 64px; padding: 12px 18px; border-radius: 18px; font-size: 14px; }
 .msg-actions button.file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-new { width: 36px; height: 36px; display: inline-grid; place-items: center; padding: 0; }
 .chat-dl { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; }
@@ -728,3 +728,6 @@ input[type='search'] { width: 100%; }
 .site-more details { border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; }
 .site-more details summary { cursor: pointer; font-size: 13.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .site-more pre { overflow-x: auto; }
+
+/* Generated artifact commit picker: compact, app-native menu (not browser select). */
+.generated-commit-overlay{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.68);display:flex;align-items:center;justify-content:center;padding:18px}.generated-commit-dialog{width:min(560px,100%);max-height:min(88vh,760px);overflow:auto;background:var(--panel,var(--surface));border:1px solid var(--border);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 24px 70px rgba(0,0,0,.4)}.generated-commit-dialog h3{margin:0}.generated-commit-dialog input{width:100%;box-sizing:border-box}.generated-repo-list{max-height:35vh;overflow:auto;border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;gap:2px;padding:4px}.generated-repo-list button{background:transparent;border:0;text-align:left;padding:11px;border-radius:9px;color:inherit;cursor:pointer}.generated-repo-list button.selected{background:var(--accent-soft,rgba(100,130,255,.15));outline:1px solid var(--accent,var(--border))}.generated-repo-list small{display:block;color:var(--muted);margin-top:3px}.generated-commit-dialog label{display:flex;flex-direction:column;gap:6px}.generated-commit-dialog .row{justify-content:flex-end}
