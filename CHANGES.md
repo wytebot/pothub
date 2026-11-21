@@ -70,3 +70,10 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Added literal `blob` types to staged folder markers, copied files, and ZIP/text imports so they remain valid `TreeItem` entries.
 - Wrapped GitHub connect callbacks in click handlers to avoid passing React mouse events as optional token arguments.
 - Added a Sign out action to the expanded More navigation section; it uses the Firebase/native sign-out helper and closes the mobile drawer after sign-out.
+
+## Chat composer note, GitHub connect and site verification
+- Removed the "File allowance is checked securely when you submit files. Sign in to use file analysis." note (and the sign-in state that only fed it) above the chat composer in Home.tsx.
+- Codelab "Connect GitHub": the client now accepts the authorization link from the server and checks it points at github.com before redirecting; the server names exactly which GitHub settings are missing (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_CALLBACK_URL, APP_ORIGIN) and requires an https callback URL.
+- Website diagnosis now requires ownership verification. Each account gets a signed tag for each site: `<meta name="pothub-site-verification" content="pothub-...">` to paste inside the site's `<head>`. New server routes: GET /api/sites/verify-token, POST /api/sites/verify, POST /api/sites/diagnose (re-checks the tag, then crawls). Sites list shows Verified / Not verified.
+- New server setting SITE_VERIFY_SECRET (falls back to GITHUB_CLIENT_SECRET, then FLW_WEBHOOK_HASH). Redeploy the server after setting it.
+- Added tests: server/src/siteVerify.test.ts and a tag test in siteDiagnosis.test.ts. Not run against a full install here (no network); run `npm test` and `npm run build` before shipping.
