@@ -28,7 +28,7 @@ export interface JobInput { provider: string; model: string; secret: string; sys
 export interface JobView { status: JobStatus | 'paused'; length: number; chunk: string; error?: string; httpStatus?: number; pauseReason?: string; truncated?: boolean; }
 
 const jobs = new Map<string, Job>();
-const KEEP_MS = 48 * 3_600_000; const MAX_RUN_MS = 6 * 60 * 60_000; const MAX_ROUNDS = 10;
+const KEEP_MS = 48 * 3_600_000; const MAX_RUN_MS = KEEP_MS; const MAX_ROUNDS = 10;
 const MAX_PER_USER = 4; const MAX_TOTAL = 150;
 const CONTINUE = 'Continue exactly where you stopped. Do not repeat anything already written, do not add an introduction, and keep the same structure and format.';
 
@@ -166,6 +166,6 @@ async function run(job: Job, input: JobInput) {
   } catch (e) {
     if (job.status === 'cancelled') return;
     job.status = 'error'; job.httpStatus = e instanceof ProviderError ? e.status : undefined;
-    job.error = job.ctl.signal.aborted ? 'This took longer than the 6 hour limit and was stopped.' : scrub(e instanceof ProviderError ? e.message : 'Could not reach the provider. Try again.', input.secret);
+    job.error = job.ctl.signal.aborted ? 'This job exceeded the 48 hour processing window and was stopped. Its saved partial answer is still available for recovery.' : scrub(e instanceof ProviderError ? e.message : 'Could not reach the provider. Try again.', input.secret);
   } finally { job.updated = Date.now(); save(job); }
 }

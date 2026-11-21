@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyIdToken } from './identity';
 import { distributedLimit } from './securityStore';
 import { ddgSearch, parseFresh } from './search';
@@ -12,7 +12,9 @@ import { fileQuotaStatus, consumeFileQuota } from './fileQuota';
 const env = process.env; const PORT = Number(env.PORT ?? 8787); const ORIGIN = (env.APP_ORIGIN ?? '').replace(/\/$/, '');
 const ORIGINS = new Set([ORIGIN, 'https://localhost', 'capacitor://localhost', ...String(env.EXTRA_ORIGINS ?? '').split(',').map((x) => x.trim().replace(/\/$/, '')).filter(Boolean)].filter(Boolean));
 const raw = (req: IncomingMessage, max = 12_000) => new Promise<Buffer>((resolve, reject) => { const chunks: Buffer[] = []; let size = 0; req.on('data', (chunk: Buffer) => { size += chunk.length; if (size > max) { reject(new Error('Request too large')); req.destroy(); } else chunks.push(chunk); }); req.on('end', () => resolve(Buffer.concat(chunks))); req.on('error', reject); });
-const githubOAuthStates = new Map<string, { uid: string; expires: number }>();
+const githubStateSecret = () => env.GITHUB_CLIENT_SECRET || '';
+const makeGithubState = (uid: string) => { const payload = Buffer.from(JSON.stringify({ uid, exp: Date.now() + 10 * 60_000, nonce: randomUUID() })).toString('base64url'); const sig = createHmac('sha256', githubStateSecret()).update(payload).digest('base64url'); return `${payload}.${sig}`; };
+const verifyGithubState = (state: string) => { try { const [payload, sig] = state.split('.'); if (!payload || !sig || !githubStateSecret()) return null; const expected = createHmac('sha256', githubStateSecret()).update(payload).digest(); const actual = Buffer.from(sig, 'base64url'); if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null; const data = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { uid: string; exp: number; nonce: string }; return data.uid && data.exp > Date.now() ? data : null; } catch { return null; } };
 const burst = new Map<string, number[]>();
 function limit(key: string, max: number) { const now = Date.now(); const times = (burst.get(key) ?? []).filter(t => now - t < 60_000); times.push(now); burst.set(key, times); return times.length > max; }
 async function rateLimited(key: string, max: number) { try { if (await distributedLimit(key, max)) return true; } catch { /* process-local fallback if Firestore isn't configured */ } return limit(key, max); }
@@ -28,9 +30,8 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/github/oauth/start' && req.method === 'GET') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again before connecting GitHub.' });
       const clientId = env.GITHUB_CLIENT_ID; const callback = env.GITHUB_CALLBACK_URL;
-      if (!clientId || !callback || !ORIGIN) return send(503, { error: 'GitHub OAuth is not configured. The administrator must set GITHUB_CLIENT_ID, GITHUB_CALLBACK_URL and APP_ORIGIN.' });
-      const state = randomUUID(); githubOAuthStates.set(state, { uid: who.uid, expires: Date.now() + 10 * 60_000 });
-      for (const [k, v] of githubOAuthStates) if (v.expires < Date.now()) githubOAuthStates.delete(k);
+      if (!clientId || !callback || !ORIGIN || !githubStateSecret()) return send(503, { error: 'GitHub OAuth is not configured. Set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_CALLBACK_URL and APP_ORIGIN in the server environment.' });
+      const state = makeGithubState(who.uid);
       const authUrl = new URL('https://github.com/login/oauth/authorize'); authUrl.searchParams.set('client_id', clientId); authUrl.searchParams.set('redirect_uri', callback); authUrl.searchParams.set('scope', 'repo'); authUrl.searchParams.set('state', state);
       return send(200, { authUrl: authUrl.toString() });
     }
@@ -39,16 +40,15 @@ createServer(async (req, res) => {
       if (!ORIGIN) return send(503, { error: 'APP_ORIGIN is not configured.' });
       const redirect = new URL(ORIGIN + '/');
       if (oauthError) { redirect.searchParams.set('github_error', url.searchParams.get('error_description') || oauthError); redirect.hash = '/codelab'; res.writeHead(302, { Location: redirect.toString(), 'Cache-Control': 'no-store' }); return res.end(); }
-      if (!code || !state || !githubOAuthStates.has(state)) return send(400, { error: 'GitHub authorization expired or invalid. Return to Codelab and connect again.' });
+      if (!code || !state || !verifyGithubState(state)) return send(400, { error: 'GitHub authorization expired or invalid. Return to Codelab and connect again.' });
       redirect.searchParams.set('github_code', code); redirect.searchParams.set('github_state', state); redirect.hash = '/codelab';
       res.writeHead(302, { Location: redirect.toString(), 'Cache-Control': 'no-store' }); return res.end();
     }
     if (url.pathname === '/api/github/oauth/exchange' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to finish connecting GitHub.' });
       const body = JSON.parse((await raw(req, 2_000)).toString('utf8') || '{}') as { code?: unknown; state?: unknown };
-      const code = typeof body.code === 'string' ? body.code : ''; const state = typeof body.state === 'string' ? body.state : ''; const pending = githubOAuthStates.get(state);
-      if (!code || !pending || pending.uid !== who.uid || pending.expires < Date.now()) { if (state) githubOAuthStates.delete(state); return send(400, { error: 'GitHub OAuth state expired or did not match this signed-in account. Reconnect and retry.' }); }
-      githubOAuthStates.delete(state);
+      const code = typeof body.code === 'string' ? body.code : ''; const state = typeof body.state === 'string' ? body.state : ''; const pending = verifyGithubState(state);
+      if (!code || !pending || pending.uid !== who.uid) return send(400, { error: 'GitHub OAuth state expired or did not match this signed-in account. Reconnect and retry.' });
       const clientId = env.GITHUB_CLIENT_ID; const secret = env.GITHUB_CLIENT_SECRET; const callback = env.GITHUB_CALLBACK_URL;
       if (!clientId || !secret || !callback) return send(503, { error: 'GitHub OAuth credentials are not configured on the server.' });
       const exchange = await fetch('https://github.com/login/oauth/access_token', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, client_secret: secret, code, redirect_uri: callback }) });
