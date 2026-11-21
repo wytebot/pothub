@@ -50,3 +50,9 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - workflow.ts: removed unused `webRemaining` import (`noUnusedLocals`).
 - Icon.tsx: added `search`, `file-text`, `git-branch` icons that Home.tsx uses.
 - router.ts: `IntentOptions` accepts `code` so codeWork.test.ts type-checks.
+
+## Offline readiness and resumable server jobs
+- Preserved the offline-first PWA shell, static asset cache, IndexedDB chat/project/media storage, and online-wait behavior for direct provider requests.
+- Background server jobs now expose a `paused` status while waiting through provider credit exhaustion (402), rate limits (429), transient server errors (5xx), or connection failures.
+- Retry backoff is bounded and repeats until recovery or the six-hour job deadline; provider credits can be restored during that window and the job resumes automatically.
+- Server job pause reason is persisted with the bounded job result metadata; provider secrets remain memory-only and are never written to Firestore.

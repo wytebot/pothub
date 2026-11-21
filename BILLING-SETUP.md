@@ -11,9 +11,9 @@ Set these values on the server deployment (never in VITE_ variables or the clien
 - `FLW_SECRET_KEY`: Flutterwave test key initially; rotate before go-live if exposed.
 - `FLW_WEBHOOK_HASH`: strong random value configured as Flutterwave webhook secret hash.
 - `APP_ORIGIN`: exact canonical app origin, no trailing slash.
-- `PREMIUM_AMOUNT_NGN`: integer or numeric amount (default 2500).
-- `PREMIUM_CURRENCY`: currently NGN by default; must match your Flutterwave merchant account.
-- `PREMIUM_DAYS`: access duration (default 30 days).
+- `PREMIUM_MONTHLY_AMOUNT`: monthly Premium amount (default 4.99).
+- `PREMIUM_YEARLY_AMOUNT`: yearly Premium amount (default 45).
+- `PREMIUM_CURRENCY`: defaults to USD; must be supported by your Flutterwave merchant account. Monthly access is 30 days; annual access is 365 days.
 - Firebase Admin credentials via `FIREBASE_SERVICE_ACCOUNT` or `GOOGLE_APPLICATION_CREDENTIALS`.
 
 
@@ -49,3 +49,20 @@ Set these values on the server deployment (never in VITE_ variables or the clien
 ## OTP / PIN
 
 Flutterwave-hosted checkout delegates cardholder PIN, bank OTP and 3DS challenges to Flutterwave and the issuing bank. Pothub does not request or store card PINs or OTPs. Any Flutterwave PIN challenge shown by the checkout page is controlled by the payment provider.
+
+## Publisher index storage and cost controls
+
+The opt-in publisher index uses Firestore only; it does not upload files, images, full HTML, backups, chat history, or AI attachments. Each publisher document is capped at 6 pages with 1,200 extracted text characters per page, a 180-character summary and 160-character title. The index is capped at 3 domains per account, a bounded 12-document scan per publisher search, a 5-minute in-process query cache, and rate limits. Published documents expire after 30 days; rate-limit records have expiration fields too.
+
+**Enable Firestore TTL in Firebase Console → Firestore → Time-to-live (TTL)** for the `publisherSites` collection group using the `expiresAt` field. TTL deletion is not immediate and the expiration field alone does not delete records. Review costs and remove the publisher index if you want it disabled. Configure TTL for each collection group with the following commands (in the selected Google Cloud project):
+
+```bash
+gcloud firestore fields ttls update expiresAt --collection-group=publisherSites --enable-ttl
+gcloud firestore fields ttls update expiresAt --collection-group=jobs --enable-ttl
+gcloud firestore fields ttls update expiresAt --collection-group=rateLimits --enable-ttl
+gcloud firestore fields ttls update expiresAt --collection-group=billingTransactions --enable-ttl
+```
+
+Verified billing transactions remove `expiresAt`, so TTL applies only to pending records. Publisher content is shared for relevant source discovery; do not publish private or copyrighted content you lack permission to share. Domain ownership verification is not implemented yet—publish only sites you own or have permission to manage.
+
+Firestore remains the small metadata store. Large files and media should remain on-device or in an external object-storage service with explicit size limits, not Firestore documents. Background-job results are capped at 100,000 characters in Firestore (the live process can retain more in memory); this keeps job documents well below Firestore's document-size ceiling. Configure TTL for `jobs.expiresAt` (48 hours), `rateLimits.expiresAt` (short-lived), and `billingTransactions.expiresAt` (pending-only; verified payments remove the expiry) as well as publisher sites. TTL may delete after a delay.
