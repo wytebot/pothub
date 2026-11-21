@@ -8,7 +8,7 @@ export interface TextModel { id: string; provider: ProviderId; name: string; spe
 export interface ChatTurn { role: 'user' | 'assistant'; text: string; }
 export interface TextRequest { model: string; system: string; history: ChatTurn[]; prompt: string; files: Attachment[]; signal?: AbortSignal; /** longest single reply in tokens */ maxTokens?: number; /** called with everything written so far while the answer arrives */ onText?: (soFar: string) => void; }
 export interface TextResult { text: string; /** true when the provider still stopped at its length limit after every continuation */ truncated: boolean; unread: string[]; }
-export interface ListedLike { id: string; methods: string[]; }
+export interface ListedLike { id: string; methods: string[]; /** the person's backend fixes this model, so no filtering or ranking applies */ pinned?: boolean; }
 
 /** What each provider can read directly. Everything else is turned into text first, or skipped with a friendly note. */
 const NATIVE: Partial<Record<ProviderId, AttachKind[]>> = {}; // Text-only app: files are extracted to text before being sent.
@@ -33,6 +33,8 @@ const nice = (id: string, p: ProviderId) => `${brand[p] ?? p} ${id.replace(/^[\w
 
 /** Pure: turns one provider's live model list into the chat models worth offering. Nothing is hard-coded, so a retired model drops out by itself. */
 export function textModelsFrom(p: ProviderId, list: ListedLike[]): TextModel[] {
+  const pin = list.find((m) => m.pinned);
+  if (pin) return [{ id: pin.id, provider: p, name: `${brand[p] ?? p} ${pin.id}`, quality: 3, speed: 2 }];
   const ids = new Set(list.map((m) => m.id));
   const ok = list.filter((m) => {
     if (p === 'anthropic') return /^claude-/.test(m.id);

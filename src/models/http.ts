@@ -1,5 +1,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { isOnline, waitOnline } from './online';
+import { viaGateway } from './gateway';
+import { GatewayError, parseRef } from './gatewayRef';
 
 export type ProviderErr = Error & { status?: number };
 export const perr = (m: string, status?: number): ProviderErr => Object.assign(new Error(m), { status });
@@ -25,15 +27,20 @@ async function nativeFetch(url: string, init: RequestInit): Promise<Response> {
 }
 
 export async function call(url: string, init: RequestInit, secret: string): Promise<Response> {
+  // A backend key is only a reference: the request goes to the Pothub backend, which holds the real key.
+  const ref = parseRef(secret);
   // Offline: wait for the connection (the person can still cancel), then send. If the connection drops during the request, send it again once it is back.
   for (;;) {
     await waitOnline(init.signal ?? undefined);
     try {
+      if (ref) return await viaGateway(url, init, ref);
       if (useNative(url)) return await nativeFetch(url, init);
       return await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(120_000) });
     } catch (e) {
+      if (e instanceof GatewayError) throw e;
       const stopped = e instanceof DOMException && (e.name === 'AbortError' || e.name === 'TimeoutError');
       if (!stopped && !isOnline()) continue;
+      if (ref && !stopped) throw new GatewayError('Could not reach your backend. Check your connection and that the backend is online.');
       return fail(e, url, secret);
     }
   }
