@@ -190,6 +190,7 @@ ${webBlock}`;
   // Every file is made readable on this device first (documents, sheets, slides, archives, unknown formats...), before any provider is chosen.
   let files = o.files;
   if (files.length) {
+    log.step('Inspecting attached files…');
     const hasZip = files.some((f) => /\.(zip|tar|tgz|gz)$/i.test(f.name));
     const codeChange = /\b(fix|debug|repair|update|edit|amend|refactor|wire|implement|change|remove|add)\b/i.test(prompt);
     if (hasZip && codeChange) log.step('Stripping off the ZIP archive…');
@@ -233,7 +234,7 @@ ${webBlock}`;
       // final writer receives the complete set of findings, not a truncated prefix.
       const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log, forceSplit) : { files, evidence: [] as string[], notes: [] as string[] };
       notes.push(...chunked.notes);
-      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t: string) => { partial = t; o.onText(t); } };
+      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t: string) => { if (!wanted.file) { partial = t; o.onText(t); } } };
       // Jobs run on the Pothub server when they can, so they finish even if the app is closed. If the server cannot take the job, it runs on this device.
       let out: Awaited<ReturnType<typeof generateText>>;
       if (o.job && backgroundOn() && backgroundAvailable() && !isGatewayRef(secret)) {
@@ -246,9 +247,10 @@ ${webBlock}`;
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
       if (trimmed) notes.push('This conversation is longer than the model can hold at once, so the oldest messages were left out of this reply.');
       const delivered = await deliverable(out.text, wanted, prompt, o.files, log); notes.push(...delivered.notes); const file = delivered.file;
+      const displayText = wanted.file && file ? `**${file.name} is ready.** Download the attached file to review its contents.` : out.text;
       saveGood(model.id);
       void notifyDone({ kind: 'text', title: file ? 'Your answer and file are ready' : 'Your answer is ready', body: `${model.name} finished “${q(prompt, 60).slice(1, -1)}”.`, route: '/' });
-      return { text: out.text, model, file, notes, ...(webSources.length ? { sources: webSources } : {}) };
+      return { text: displayText, model, file, notes, ...(webSources.length ? { sources: webSources } : {}) };
     } catch (e) {
       lastErr = e; log.fail(g, msg(e));
       const scope = fallbackScope(e); if (scope === 'none') throw e;
