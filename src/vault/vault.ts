@@ -1,8 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { uid } from '../storage/db';
-import { checkSecret, fnsOf, splitSecret, type Fn } from '../models/providerInfo';
+import { checkSecret, fnsOf, isProviderId, splitSecret, type Fn } from '../models/providerInfo';
 
-export type ProviderId = 'openai' | 'gemini' | 'xai';
+export type ProviderId = 'openai' | 'gemini' | 'xai' | 'anthropic' | 'deepseek' | 'mistral' | 'groq' | 'openrouter' | 'together';
 export type KeyStatus = 'untested' | 'ok' | 'invalid' | 'error';
 export interface KeyMeta { id: string; provider: ProviderId; label: string; last4: string; createdAt: number; status: KeyStatus; testedAt?: number;
   /** Functions this key is ticked as a default for, with the time it was ticked (earlier = tried first). The app only ever uses ticked keys. */
@@ -10,7 +10,7 @@ export interface KeyMeta { id: string; provider: ProviderId; label: string; last
 
 // Non-secret metadata only. Secrets never touch localStorage.
 const META = 'vault.meta';
-const allowedProvider = (p: string): p is ProviderId => p === 'openai' || p === 'gemini' || p === 'xai';
+const allowedProvider = (p: string): p is ProviderId => isProviderId(p);
 const writeMeta = (m: KeyMeta[]) => localStorage.setItem(META, JSON.stringify(m.filter((k) => allowedProvider(k.provider))));
 const MIGRATED = 'vault.defaults.v1';
 const MIGRATED_TEXT = 'vault.defaults.text.v1';

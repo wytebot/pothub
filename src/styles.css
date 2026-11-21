@@ -662,3 +662,43 @@ input[type='search'] { width: 100%; }
 .billing-benefits { margin: 0; padding-left: 1.3rem; display: grid; gap: .7rem; }
 .billing-benefits li { padding-left: .15rem; }
 .billing-page .billing-hero .btn { align-self: flex-start; }
+
+/* Codelab horizontal tool rail and publisher crawl page */
+.codelab-toolbar { overflow-x:auto; overscroll-behavior-x:contain; flex-wrap:nowrap !important; gap:8px; padding-bottom:10px; scrollbar-width:thin; }
+.codelab-toolbar > * { flex:0 0 auto; }
+.codelab-connect details { border-top:1px solid var(--border); padding-top:10px; }
+.codelab-connect details summary { cursor:pointer; font-weight:600; padding:6px 0; }
+.web-sources-drawer { margin-top:12px; position:relative; width:max-content; max-width:100%; }
+.web-sources-button { display:flex; width:max-content; max-width:100%; align-items:center; gap:7px; padding:7px 11px; border:1px solid var(--border); border-radius:999px; background:var(--surface2); color:var(--muted); font-size:12px; font-weight:700; cursor:pointer; list-style:none; }
+.web-sources-button::-webkit-details-marker { display:none; }
+.source-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:999px; background:var(--surface); font-size:11px; }
+.web-sources-list { display:flex; flex-direction:column; gap:4px; padding:8px; margin-top:6px; width:min(380px, calc(100vw - 40px)); max-height:40vh; overflow:auto; border:1px solid var(--border); border-radius:12px; background:var(--surface); box-shadow:0 10px 30px rgba(0,0,0,.25); }
+.web-source { display:flex; align-items:center; gap:9px; padding:8px; border-radius:8px; text-decoration:none; color:var(--text); }
+.web-source:hover { background:var(--surface2); }
+.web-source span:nth-child(2) { display:flex; flex-direction:column; min-width:0; flex:1; }
+.web-source small { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.publisher-benefits { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.publisher-benefits article { border:1px solid var(--border); border-radius:12px; padding:12px; background:var(--surface2); }
+.publisher-benefits ul { margin-bottom:0; padding-left:20px; }
+.publisher-page p { white-space:pre-wrap; }
+@media(max-width:620px) { .publisher-benefits { grid-template-columns:1fr; } }
+.codelab-toolbar .row.wrap { flex-wrap:nowrap !important; }
+.codelab-toolbar .row.wrap > * { flex:0 0 auto; }
+
+/* Public guest workspace and feature discovery; visible before sign-in. */
+.guest-signin { margin-left:auto; border:1px solid var(--border); background:var(--surface2); color:var(--text); border-radius:999px; min-height:36px; padding:0 14px; font-weight:600; cursor:pointer; }
+.guest-signin:disabled { opacity:.65; }
+.public-explore { max-width:1100px; margin:36px auto 24px; padding:24px; border:1px solid var(--border); border-radius:18px; background:var(--surface); }
+.public-explore-head { max-width:780px; margin:0 auto 20px; text-align:center; }
+.public-explore-head .eyebrow { font-size:11px; letter-spacing:.15em; font-weight:700; opacity:.7; }
+.public-explore-head h2 { font-size:clamp(23px,3vw,34px); line-height:1.2; margin:8px 0 10px; }
+.public-explore-head p { color:var(--muted); line-height:1.65; }
+.public-feature-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.public-feature-grid article { border:1px solid var(--border); border-radius:12px; padding:14px; background:var(--surface2); }
+.public-feature-grid h3 { font-size:15px; margin:0 0 8px; }
+.public-feature-grid p { font-size:13px; line-height:1.55; color:var(--muted); margin:0; }
+.public-explore-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; border-top:1px solid var(--border); margin-top:18px; padding-top:16px; font-size:12px; color:var(--muted); }
+@media(max-width:900px) { .public-feature-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .public-explore { margin:24px 12px; padding:16px; } }
+@media(max-width:420px) { .public-feature-grid { grid-template-columns:1fr; } .public-explore-footer { align-items:flex-start; flex-direction:column; } }
+
+.main.chat-mode.guest-mode { overflow-y:auto; } .main.chat-mode.guest-mode > .route { flex:none; min-height:calc(100dvh - 52px); overflow:visible; } .main.chat-mode.guest-mode .chat-home { min-height:calc(100dvh - 52px); }
