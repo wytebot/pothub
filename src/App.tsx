@@ -14,7 +14,7 @@ import { Codelab } from './pages/Codelab';
 import { CrawlCitations } from './pages/CrawlCitations';
 import { Billing } from './pages/Billing';
 import { getStorageInfo } from './storage/quota';
-import { useMe, signInWithGoogle } from './auth/session';
+import { useMe, signInWithGoogle, signOut } from './auth/session';
 import { applyUpdate, UPDATE_READY } from './version';
 
 type IconName = Parameters<typeof Icon>[0]['name'];
@@ -59,6 +59,7 @@ export function App() {
   const [pull, setPull] = useState(0);
   const [update, setUpdate] = useState('');
   const [guestSignInBusy, setGuestSignInBusy] = useState(false);
+  const [signOutBusy, setSignOutBusy] = useState(false);
   const touch = useRef<{ y: number; on: boolean } | null>(null);
   const requestedRoute: Route = all.find((r) => r.path === path.split('?')[0]) ?? (path.startsWith('/legal/') ? { path: '/legal', label: 'Legal documents', el: <Legal id={path.slice(7)} /> } : primary[0]);
   const guestAccessible = new Set(['/', '/providers', '/legal', '/privacy', '/terms', '/support', '/about']);
@@ -93,7 +94,7 @@ export function App() {
           <button className="nav-link more-toggle" aria-expanded={more} aria-controls="more-nav" onClick={() => setMore((m) => { localStorage.setItem('ui.more', m ? '0' : '1'); return !m; })}>
             <span className={`chev${more ? ' up' : ''}`}><Icon name="chevron" size={16} /></span>More
           </button>
-          {more && <div id="more-nav">{secondary.map(link)}</div>}
+          {more && <div id="more-nav">{secondary.map(link)}<button type="button" className="nav-link signout-link" disabled={signOutBusy} onClick={async () => { setSignOutBusy(true); try { await signOut(); setDrawer(false); } finally { setSignOutBusy(false); } }}>{signOutBusy ? 'Signing out…' : 'Sign out'}</button></div>}
         </div>}
       </nav>
       <main className={`main${route.path === '/' ? ` chat-mode${!me ? ' guest-mode' : ''}` : ''}`} id="main"
