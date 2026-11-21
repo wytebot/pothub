@@ -2,7 +2,7 @@ import { call, failure } from '../models/providers';
 import { ENDPOINTS, PROVIDERS, authHeaders } from '../models/providerInfo';
 import { defaultKeys, getSecret, type ProviderId } from '../vault/vault';
 import { textModelsFrom, type TextModel } from '../models/text';
-import { parseRef } from '../models/gatewayRef';
+import { parseRef } from '../models/gateway-reference';
 export interface ListedModel { id: string; methods: string[]; pinned?: boolean; }
 export interface Catalog { texts: TextModel[]; verified: ProviderId[]; unverified: ProviderId[]; at: number; }
 const TTL = 15 * 60_000; const LS = 'agent.text.catalog.v2'; const LS_TTL = 6 * 3_600_000;
