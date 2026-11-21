@@ -51,9 +51,22 @@ export function parseBundle(reply: string): BundleFile[] {
     i = j;
   }
   if (out.length) return out;
+  if (out.length) return out;
   // fallback: a fence whose info string carries a path ("```tsx title=src/App.tsx" or "```js:server.js")
   const re = /(```|~~~)[\w+#-]*(?:[: ]\s*(?:title=|file=|filename=)?["']?([\w@.\-/]+\.[A-Za-z0-9]{1,8})["']?)\s*\n([\s\S]*?)\n\1/g;
   for (let m: RegExpExecArray | null; (m = re.exec(reply));) { const p = safePath(m[2]); if (p) out.push({ path: p, content: m[3] }); }
+  // Fallback for a single-file response that contains fenced source but omits file markers.
+  // Use a conservative extension map and never treat shell packaging instructions as project source.
+  const fenced = [...reply.matchAll(/```([\w+#.-]*)\s*\n([\s\S]*?)\n```/g)];
+  if (fenced.length) {
+    const extFor = (lang: string) => ({ typescript: 'ts', ts: 'ts', tsx: 'tsx', javascript: 'js', js: 'js', jsx: 'jsx', python: 'py', py: 'py', html: 'html', css: 'css', json: 'json', yaml: 'yml', sql: 'sql', bash: 'sh', shell: 'sh', sh: 'sh', markdown: 'md', md: 'md' } as Record<string, string>)[lang.toLowerCase()] ?? 'txt';
+    for (const [i, m] of fenced.entries()) {
+      const lang = m[1] || 'text'; const body = m[2];
+      if (/\b(?:execSync|Compress-Archive|zip -r|powershell -Command)\b/i.test(body) && /\b(?:packaging project|zip generation|zip archive)\b/i.test(reply)) continue;
+      out.push({ path: fenced.length === 1 ? `generated-file.${extFor(lang)}` : `generated/file-${i + 1}.${extFor(lang)}`, content: body });
+    }
+    if (out.length) return out;
+  }
   return out;
 }
 
@@ -80,7 +93,12 @@ export async function buildBundle(reply: string, name: string, extra: ZipEntry[]
   let files = parseBundle(reply); const notes: string[] = [];
   if (!files.length) {
     const text = reply.trim(); if (!text) return null;
-    files = [{ path: `${slugName(name) || 'pothub-answer'}.md`, content: text }]; notes.push(`The answer was a single document, so the zip holds it as ${files[0].path}.`);
+    const looksLikePackagingScript = /(?:execSync\s*\(|Compress-Archive|zip\s+-r|powershell\s+-Command)/i.test(text) && /(?:packaging project|zip generation|zip archive|node_modules|DestinationPath)/i.test(text);
+    const safeFallback = looksLikePackagingScript
+      ? '# ZIP generation needs project files\n\nThe model returned a packaging command instead of the requested project files. Retry the request with the project attached and ask Pothub to return complete files using its ZIP file format.\n'
+      : text;
+    files = [{ path: looksLikePackagingScript ? 'README.md' : `${slugName(name) || 'pothub-answer'}.md`, content: safeFallback }];
+    notes.push(looksLikePackagingScript ? 'The model returned a ZIP packaging script instead of the project files. The archive contains a recovery note; retry with the source project attached.' : `The answer was a single document, so the zip holds it as ${files[0].path}.`);
   }
   const entries: ZipEntry[] = [];
   for (const f of files) entries.push({ path: f.path, data: await toBytes(f, notes) });
