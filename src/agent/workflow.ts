@@ -1,7 +1,7 @@
 import type { ProviderErr } from '../models/providers';
 import { generateText, rankText, type ChatTurn, type TextModel } from '../models/text';
 import { textOf, type Attachment } from './attachments';
-import { buildFile, systemPrompt, wantedOutput, type OutFile } from './deliver';
+import { buildFile, systemPrompt, wantedOutput, type OutFile, type Wanted } from './deliver';
 import { buildBundle, bundleSummary } from './bundle';
 import { bundleName } from './fileNames';
 import { codeContext } from './codeWork';
@@ -11,6 +11,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
+import { NotStarted, addPending, backgroundAvailable, backgroundOn, generateInBackground } from './background';
 import { resultsBlock, webResearch, shouldAutoWebSearch, type WebSource } from './search';
 import { readyFiles } from './readers';
 import { notifyDone } from '../notify';
@@ -121,18 +122,36 @@ async function chunkLargeTextFiles(files: Attachment[], provider: ProviderId, se
     const consolidated = level.join('\n\n').trim() || 'No extractable text was returned by the analysis provider.';
     const sourceEvidence = `Complete source processed: ${file.name} (${source.length.toLocaleString()} characters; ${chunks.length} overlapping segments).\nConsolidated segment findings (all segments were submitted):\n${consolidated}`;
     evidence.push(sourceEvidence); whole += sourceEvidence.length;
-    notes.push(`${file.name} was too large to send in one request, so I read all of it in ${chunks.length} large part${chunks.length === 1 ? '' : 's'} and worked from detailed notes on each. Exact wording may be condensed.`);
+    
     prepared.push({ ...file, kind: 'text', mime: 'text/plain', size: sourceEvidence.length,
       blob: new Blob([sourceEvidence], { type: 'text/plain' }) });
   }
   return { files: prepared, evidence, notes };
 }
 
+
+/** Builds the file a request asked for (zip, Word, PDF, ...) from the finished answer. Also used when a background job finishes after the app was reopened. */
+export async function deliverable(text: string, wanted: Wanted, prompt: string, inputs: Attachment[], log?: RunLog): Promise<{ file: OutFile | null; notes: string[] }> {
+  const notes: string[] = []; let file: OutFile | null = null;
+  if (!wanted.file) return { file, notes };
+  log?.step(wanted.format === 'zip' ? 'Packaging the ZIP…' : 'Preparing your file…');
+  try {
+    if (wanted.format === 'zip') {
+      // attached files travel with the new ones when the request says "with these / my files"
+      const keep = inputs.length > 0 && /\b(with|including|plus|and)\b[^.?!\n]{0,40}\b(these|them|my|attached|uploaded|files?)\b/i.test(prompt);
+      const extra = keep ? await Promise.all(inputs.map(async (f) => ({ path: f.name, data: new Uint8Array(await f.blob.arrayBuffer()) }))) : [];
+      const b = await buildBundle(text, bundleName({ prompt, reply: text, inputs }), extra);
+      if (b) { file = { blob: b.blob, name: b.name, mime: 'application/zip' }; notes.push(...b.notes); log?.say('ok', 'zip ready', bundleSummary(b.files)); }
+    } else file = await buildFile(text, wanted, prompt, inputs);
+  } catch { notes.push('The answer is above, but I could not build the file this time. You can copy it from the chat.'); }
+  return { file, notes };
+}
+
 /**
  * Chat, writing, analysis, coding and documents. Picks the best ready text model for the files and the request,
  * streams the answer as it is written, falls back to another model or key if one fails, and builds a file when the person asked for one.
  */
-export async function runText(o: { prompt: string; files: Attachment[]; history: ChatTurn[]; prefer: 'quality' | 'speed'; signal: AbortSignal; log: RunLog; onText: (soFar: string) => void; /** Text-only attachment analysis. */ web?: boolean }): Promise<TextOutcome> {
+export async function runText(o: { prompt: string; files: Attachment[]; history: ChatTurn[]; prefer: 'quality' | 'speed'; signal: AbortSignal; log: RunLog; onText: (soFar: string) => void; /** Text-only attachment analysis. */ web?: boolean; /** where the answer belongs, so a background job can be picked up again after the app was closed */ job?: { chatId: string; msgId: string } }): Promise<TextOutcome> {
   const { log, signal } = o;
   const { text, flags, catalog } = await prepare(o.prompt, log, signal);
   if (!text && !o.files.length) throw new Error('Type your question or request first (commands alone are not a prompt).');
@@ -143,13 +162,18 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   // Nothing about the search is added to the reply text. When it was used, the source sites are shown under the
   // answer (`sources`); when it was not (nothing found, or it failed), the answer is simply written without it.
   let sent = prompt; let webBlock = ''; let webSources: WebSource[] = [];
-  if (shouldAutoWebSearch(prompt)) {
+  if (shouldAutoWebSearch(prompt) && !wanted.code && !o.files.length) {
     log.step('Searching the web…');
     try {
       const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const found = await webResearch(q);
       if (found.hits.length) {
         webBlock = resultsBlock(q, found, today()); webSources = found.sources;
-        sent = `${prompt}\n\nFor this web-researched answer, give a thorough, well-structured response that directly answers the request. Prefer the newest information and say when a page was published or updated if it matters. Separate verified facts from estimates or uncertainty, and draw on the page content and latest items, not only the snippets. Cite a page inline with its 🌐 link where a claim depends on it, but do not add a list of sources at the end: Pothub shows the source sites under your answer. Do not invent sources or facts.\n\n---\n${webBlock}`;
+        sent = `${prompt}
+
+Use the web results below for current facts. Answer directly and concisely. Do not add a sources list or link icons; do not invent facts.
+
+---
+${webBlock}`;
         const read = found.hits.filter((h) => h.text).length; const deep = found.hits.filter((h) => h.via).length;
         log.say('ok', 'web search', `${found.hits.length} result(s), ${read} page(s) read${deep ? `, ${deep} followed from those sites` : ''}${found.updates.length ? `, ${found.updates.length} recent update(s)` : ''}`);
       }
@@ -201,46 +225,19 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
       // final writer receives the complete set of findings, not a truncated prefix.
       const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log, forceSplit) : { files, evidence: [] as string[], notes: [] as string[] };
       notes.push(...chunked.notes);
-      const out = await generateText(model.provider, secret, { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: webSources.length > 0 }), history, prompt: sent, files: chunked.files, signal, onText: (t) => { partial = t; o.onText(t); } });
+      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t) => { partial = t; o.onText(t); } };
+      // Jobs run on the Pothub server when they can, so they finish even if the app is closed. If the server cannot take the job, it runs on this device.
+      let out: Awaited<ReturnType<typeof generateText>>;
+      if (o.job && backgroundOn() && backgroundAvailable()) {
+        const job = o.job;
+        try { out = await generateInBackground(model.provider, secret, req, { msgId: job.msgId, onStarted: (id) => { addPending({ id, chatId: job.chatId, msgId: job.msgId, prompt, wanted, modelName: model.name, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Running in the background…'); } }); }
+        catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('warn', 'background run unavailable', e.message); out = await generateText(model.provider, secret, req); }
+      } else out = await generateText(model.provider, secret, req);
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
-      // Independent quality-control pass before any text deliverable is released.
-      log.step(files.length ? 'Fact-checking the draft against the supplied sources…' : 'Checking the result against your exact request…');
-      const evidence = chunked.evidence.join('\n\n');
-      try {
-        const review = await generateText(model.provider, secret, {
-          model: model.id,
-          system: files.length
-            ? 'You are an independent fact-checking agent. Treat supplied source evidence as authoritative. Check every concrete claim, number, date, name, quotation, and conclusion in the draft. Correct unsupported or contradicted claims, preserve correct useful content, and clearly label any point the sources cannot establish. Do not claim to have verified facts absent from the evidence. Return the complete corrected draft only.'
-            : `You are an independent quality-assurance agent. Compare the draft with the exact user request. Check that it performs the requested task, uses the requested output format and language, follows constraints, is complete, internally consistent, and does not drift into unrelated material. Review factual claims for obvious errors and unsupported certainty; do not invent external verification. Correct problems while preserving useful content. ${wanted.format === 'zip' ? 'For ZIP deliverables, preserve every === FILE: path === and === END FILE === marker exactly, preserve paths, and do not omit or shorten file contents.' : ''} Return the complete improved draft only.`,
-          history: [],
-          prompt: `User request: ${prompt}\n\nSOURCE EVIDENCE:\n${files.length ? evidence || '[Some source formats could not be read; state limitations rather than inventing verification.]' : '[No source files were supplied. Do not claim external fact-checking.]'}${webBlock ? `\n\nWEB EVIDENCE (current pages the draft may rely on; treat as authoritative for current facts):\n${webBlock.slice(0, 24_000)}` : ''}\n\nDRAFT TO CHECK:\n${out.text}`,
-          // Text sources already travel inside the prompt as SOURCE EVIDENCE; sending them again as files doubled the input.
-          files: chunked.files.filter((f) => f.kind !== 'text' && f.kind !== 'docx'), signal,
-        });
-        if (!review.text.trim()) throw new Error('The reviewer returned an empty result.');
-        out.text = review.text; partial = review.text; o.onText(review.text);
-        log.say('ok', files.length ? 'source fact-check complete' : 'quality check complete', 'reviewed before delivery');
-      } catch (e) {
-        if (isCancel(e)) throw e;
-        notes.push('The independent quality-check pass could not finish, so the draft is delivered without a completed second review. Please review important details before relying on it.');
-        log.say('warn', 'quality check unavailable', msg(e));
-      }
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Attach a text-based document or source file for text analysis.`);
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
       if (trimmed) notes.push('This conversation is longer than the model can hold at once, so the oldest messages were left out of this reply.');
-      let file: OutFile | null = null;
-      if (wanted.file) {
-        log.step(wanted.format === 'zip' ? 'Packaging the ZIP…' : 'Preparing your file…');
-        try {
-          if (wanted.format === 'zip') {
-            // attached files travel with the new ones when the request says "with these / my files"
-            const keep = o.files.length > 0 && /\b(with|including|plus|and)\b[^.?!\n]{0,40}\b(these|them|my|attached|uploaded|files?)\b/i.test(prompt);
-            const extra = keep ? await Promise.all(o.files.map(async (f) => ({ path: f.name, data: new Uint8Array(await f.blob.arrayBuffer()) }))) : [];
-            const b = await buildBundle(out.text, bundleName({ prompt, reply: out.text, inputs: o.files }), extra);
-            if (b) { file = { blob: b.blob, name: b.name, mime: 'application/zip' }; notes.push(...b.notes); log.say('ok', 'zip ready', bundleSummary(b.files)); }
-          } else file = await buildFile(out.text, wanted, prompt, o.files);
-        } catch { notes.push('The answer is above, but I could not build the file this time. You can copy it from the chat.'); }
-      }
+      const delivered = await deliverable(out.text, wanted, prompt, o.files, log); notes.push(...delivered.notes); const file = delivered.file;
       saveGood(model.id);
       void notifyDone({ kind: 'text', title: file ? 'Your answer and file are ready' : 'Your answer is ready', body: `${model.name} finished “${q(prompt, 60).slice(1, -1)}”.`, route: '/' });
       return { text: out.text, model, file, notes, ...(webSources.length ? { sources: webSources } : {}) };

@@ -1,5 +1,5 @@
 import { call, failure } from '../models/providers';
-import { PROVIDERS } from '../models/providerInfo';
+import { ENDPOINTS, PROVIDERS, authHeaders } from '../models/providerInfo';
 import { defaultKeys, getSecret, type ProviderId } from '../vault/vault';
 import { textModelsFrom, type TextModel } from '../models/text';
 export interface ListedModel { id: string; methods: string[]; }
@@ -10,11 +10,13 @@ const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 const timeoutSignal = (signal?: AbortSignal) => signal ? ('any' in AbortSignal ? (AbortSignal as unknown as { any(s: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(6000)]) : signal) : AbortSignal.timeout(6000);
 export async function listProviderModels(provider: ProviderId, secret: string, signal?: AbortSignal): Promise<ListedModel[]> {
   const sig = timeoutSignal(signal);
-  if (provider === 'openai' || provider === 'xai') {
-    const url = provider === 'openai' ? 'https://api.openai.com/v1/models' : 'https://api.x.ai/v1/models';
-    const r = await call(url, { headers: { Authorization: `Bearer ${secret}` }, signal: sig }, secret);
+  if (provider !== 'gemini') {
+    const r = await call(provider === 'anthropic' ? `${ENDPOINTS.anthropic.models}?limit=1000` : ENDPOINTS[provider].models, { headers: authHeaders(provider, secret), signal: sig }, secret);
     if (!r.ok) throw await failure(r, secret);
-    return ((await r.json()) as { data?: { id: string }[] }).data?.map((m) => ({ id: m.id, methods: [] })) ?? [];
+    const j = (await r.json()) as { data?: { id: string; type?: string }[] } | { id: string; type?: string }[];
+    const rows = Array.isArray(j) ? j : (j.data ?? []);
+    // Together lists every kind of model in one array; its "type" says which are chat models.
+    return rows.filter((m) => typeof m.id === 'string').map((m) => ({ id: m.id, methods: m.type ? [m.type] : [] }));
   }
   const out: ListedModel[] = []; let token = '';
   for (let page = 0; page < 4; page++) {

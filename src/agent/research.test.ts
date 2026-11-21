@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { applyCrawl, buildSources, hostOf, mergeHits, normUrl, queryVariants, resultsBlock, type WebHit } from './research';
+import { applyCrawl, buildSources, hostOf, mergeHits, normUrl, queryVariants, rankHits, resultsBlock, type WebHit } from './research';
 
 const hit = (url: string, title = url, snippet = 'snippet'): WebHit => ({ title, url, snippet });
 
 describe('search variants', () => {
   it('adds a past-month search, first, when the question is about something recent', () => {
     expect(queryVariants('What is the latest Android version?').slice(0, 2)).toEqual([{ q: 'What is the latest Android version?', fresh: 'm' }, { q: 'What is the latest Android version?' }]);
-    expect(queryVariants('What is the latest Android version?')).toHaveLength(3);
+    expect(queryVariants('What is the latest Android version?')).toHaveLength(2);
     expect(queryVariants('Nigeria news this week').length).toBe(2);
   });
   it('runs one plain search for a timeless question', () => {
     expect(queryVariants('Explain   photosynthesis')).toEqual([{ q: 'Explain photosynthesis' }]);
+  });
+  it('does not add generic docs or troubleshooting searches unless intent is explicit', () => {
+    expect(queryVariants('React component architecture')).toEqual([{ q: 'React component architecture' }]);
+    expect(queryVariants('React documentation')).toHaveLength(2);
+    expect(queryVariants('Fix TypeScript build error')).toHaveLength(2);
   });
 });
 
@@ -28,6 +33,18 @@ describe('merging results', () => {
   it('helpers normalise addresses', () => {
     expect(hostOf('https://www.Example.com/a')).toBe('example.com');
     expect(normUrl('https://www.example.com/a/?utm_medium=x&id=2#frag')).toBe('https://example.com/a/?id=2');
+  });
+});
+
+describe('result relevance ranking', () => {
+  it('prioritizes relevant titles and drops unrelated results', () => {
+    const out = rankHits('React hooks useEffect', [hit('https://x.com/1', 'React useEffect guide', 'Hooks explanation'), hit('https://y.com/2', 'Best pizza places', 'Food list'), hit('https://z.com/3', 'React hooks tutorial', 'useEffect basics')]);
+    expect(out.map(x => x.title)).toEqual(['React useEffect guide', 'React hooks tutorial']);
+  });
+  it('keeps publisher pages relevant by matching query terms in extracted article text', () => {
+    const out = rankHits('publisher SEO backlink quality', [{ ...hit('https://publisher.example/article', 'Article', 'General overview'), text: 'This article discusses SEO backlink quality and link relevance.' }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toContain('SEO backlink quality');
   });
 });
 

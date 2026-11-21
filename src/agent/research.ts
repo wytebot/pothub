@@ -16,17 +16,21 @@ export const normUrl = (u: string): string => {
 
 const RECENT = /\b(latest|news|updates?|updated|today|tonight|currently|current|now|recent(ly)?|this (week|month|year)|new|newest|releases?|released|price|prices|score|scores|weather|breaking|announce[ds]?|trending|20\d\d)\b/i;
 
-/** The searches to run for a question: always the question itself, plus a past-month search when it is about something recent. */
+/** Build only intent-matched query variants; avoid broad documentation/troubleshooting queries unless requested. */
 export function queryVariants(prompt: string): SearchVariant[] {
   const q = prompt.replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!q) return [];
   const recent = RECENT.test(q);
   const technical = /\b(api|sdk|github|error|exception|build|compile|typescript|react|android|capacitor|python|framework|library|package|documentation|docs|debug|code)\b/i.test(q);
+  const docsIntent = /\b(official documentation|docs|documentation|api reference|how to use|installation guide)\b/i.test(q);
+  const troubleshootIntent = /\b(error|exception|failed|failure|bug|debug|fix|troubleshoot|broken)\b/i.test(q);
   const out: SearchVariant[] = recent ? [{ q, fresh: 'm' }, { q }] : [{ q }];
-  if (technical && !/\b(documentation|docs|official)\b/i.test(q)) out.push({ q: `${q} official documentation`.slice(0, 200) });
-  if (technical && /\b(error|exception|failed|failure|bug|debug|fix)\b/i.test(q)) out.push({ q: `${q} solution troubleshooting`.slice(0, 200) });
+  if (technical && docsIntent && !/\bofficial documentation\b/i.test(q)) out.push({ q: `${q} official documentation`.slice(0, 200) });
+  if (technical && troubleshootIntent && !/\bsolution|troubleshooting\b/i.test(q)) out.push({ q: `${q} solution troubleshooting`.slice(0, 200) });
   return out.slice(0, 3);
 }
 
+/** Interleaves several result lists, drops repeated pages, and keeps at most `perHost` per site. */
 /** Interleaves several result lists (so the best of each comes first), drops repeated pages, and keeps at most `perHost` per site. */
 export function mergeHits(lists: WebHit[][], max = 10, perHost = 2): WebHit[] {
   const out: WebHit[] = []; const seen = new Set<string>(); const count = new Map<string, number>();
@@ -39,6 +43,20 @@ export function mergeHits(lists: WebHit[][], max = 10, perHost = 2): WebHit[] {
     }
   }
   return out;
+}
+
+/** Ranks hits by query-term overlap and suppresses clearly unrelated results. */
+export function rankHits(query: string, hits: WebHit[], max = 10): WebHit[] {
+  const stop = new Set(['what','who','when','where','why','how','the','a','an','is','are','was','were','to','of','in','on','for','with','and','or','about','best','latest','current','today','please','tell','me']);
+  const terms = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(t => t.length > 2 && !stop.has(t));
+  if (!terms.length) return hits.slice(0, max);
+  const scored = hits.map((h, i) => {
+    const title = (h.title || '').toLowerCase(); const snippet = (h.snippet || '').toLowerCase(); const content = (h.text || '').toLowerCase(); const url = h.url.toLowerCase();
+    const matched = terms.filter(t => title.includes(t) || snippet.includes(t) || content.includes(t) || url.includes(t));
+    const score = matched.reduce((sum, t) => sum + (title.includes(t) ? 3 : 0) + (snippet.includes(t) ? 1 : 0) + (content.includes(t) ? .5 : 0) + (url.includes(t) ? .5 : 0), 0) + (title.toLowerCase().includes(query.toLowerCase()) ? 4 : 0);
+    return { h, i, score, matched: matched.length };
+  }).filter(x => x.score > 0 && x.matched > 0).sort((a,b) => b.score-a.score || a.i-b.i);
+  return scored.slice(0, max).map(x => x.h);
 }
 
 /** Puts the crawler's page text onto the matching results, and adds the pages it followed from them as extra entries. */
