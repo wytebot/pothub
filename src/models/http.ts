@@ -6,7 +6,7 @@ export const perr = (m: string, status?: number): ProviderErr => Object.assign(n
 export const scrub = (t: string, secret: string) => (secret ? t.split(secret).join('••••') : t);
 
 /** OpenAI and Google allow calls straight from a browser. Every other provider goes through the phone's own network stack on Android, because browsers block most of them. */
-const BROWSER_OK = new Set(['api.openai.com', 'generativelanguage.googleapis.com', 'huggingface.co']);
+const BROWSER_OK = new Set(['api.openai.com', 'generativelanguage.googleapis.com', 'huggingface.co', 'api.anthropic.com', 'openrouter.ai', 'api.groq.com']);
 const hostOf = (url: string) => { try { return new URL(url).hostname; } catch { return ''; } };
 const useNative = (url: string) => Capacitor.isNativePlatform() && !BROWSER_OK.has(hostOf(url));
 

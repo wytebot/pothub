@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = '2.1';
+export const LEGAL_VERSION = '2.2';
 export const LEGAL_EFFECTIVE = '20 November 2026';
 export interface LegalDoc { id: string; title: string; sections: [string, string][]; }
 
@@ -12,9 +12,9 @@ export const LEGAL_DOCS: LegalDoc[] = [
     ['Governing law', 'These Terms are governed by the laws of the Federal Republic of Nigeria, and the courts of Nigeria have jurisdiction, without removing any consumer rights you have under mandatory law where you live.'],
   ]},
   { id: 'privacy', title: 'Privacy Policy', sections: [
-    ['Summary', 'Your chats, projects, provider keys, website configuration and diagnosis reports are kept on your device or in session-only browser storage. You can download a ZIP backup and restore it later. Backup files remain under your control; we do not receive them. This build does not have an active in-app checkout; any Pro entitlement is granted through a signed Firebase account claim when subscription infrastructure is configured. We do not store AI keys or prompts on our servers.'],
+    ['Summary', 'Your chats, projects, provider keys, website configuration and diagnosis reports are kept on your device or in session-only browser storage. You can download a ZIP backup and restore it later. Backup files remain under your control; we do not receive them. Publisher crawling is optional: if you explicitly opt in, Pothub stores small article metadata and text excerpts in Firestore for shared citation discovery; they stop being eligible after 30 days and physical deletion depends on TTL configuration. We do not store AI keys or prompts on our servers.'],
     ['Data kept on your device', 'Your chat history, attachments, configured website URLs, diagnosis reports (session-only) and encrypted provider keys are stored locally in your browser or Android app storage. We cannot access, recover or delete this data for you.'],
-    ['Data we process', 'Google sign-in is used for account authentication. Search/crawl requests are rate-limited; where server-side Firebase rate limiting is configured, only hashed rate-limit identifiers and counters are stored. Your chats, documents and provider keys are not sent to Pothub servers.'],
+    ['Data we process', 'Google sign-in is used for account authentication. Search/crawl requests are rate-limited; where server-side Firebase rate limiting is configured, only hashed rate-limit identifiers and counters are stored. Publisher index excerpts are stored only after the optional sharing checkbox is selected. Your chats, documents and provider keys are not sent to Pothub servers.'],
     ['Web search', 'Pothub may automatically search the web when current or externally verifiable information would improve a response. Search queries are sent to our server and a third-party search provider. Search is free for all accounts, subject to fair-use protections and provider availability. We do not store search text. Avoid asking Pothub to search for private information.'],
     ['Data sent to AI providers', 'When you use AI, your text prompt, attached documents and API key are sent directly from your device to the provider you chose. That provider processes them under its own terms and privacy policy. We do not receive your keys or prompts.'],
     ['Retention and your rights', 'Authentication and security records are kept only as needed to operate and secure the service. You may contact Support with privacy questions. Where applicable law gives you additional rights, such as under the Nigeria Data Protection Act, we will honour them.'],
@@ -26,7 +26,8 @@ export const LEGAL_DOCS: LegalDoc[] = [
     ['Enforcement', 'You are solely responsible for what you generate. We may refuse service, suspend a subscription or end access where use breaches this policy or the law.'],
   ]},
   { id: 'byok', title: 'BYOK and Third-Party AI Provider Disclosure', sections: [
-    ['Bring your own key', 'The App works with API keys that you obtain from AI providers such as OpenAI, Google and xAI for text services. You pay those providers directly. We do not resell AI usage or provider credits.'],
+    ['Bring your own key', 'The App works with API keys that you obtain from AI providers such as OpenAI, Google, Anthropic, xAI, DeepSeek, Mistral, Groq, OpenRouter and Together AI for text services. You pay those providers directly. We do not resell AI usage or provider credits.'],
+    ['Background jobs', 'When Background jobs is switched on in Settings, the request and your provider key are sent over HTTPS to the Pothub server so the answer can finish while the App is closed. The key is held in memory for that one job only; it is never written to disk or a database and is never logged. The finished answer is kept for 48 hours so the App can collect it, then deleted. Switch the setting off to run jobs only on your device.'],
     ['Your keys', 'Keys are stored on your device, are masked after saving, and are sent only to the provider they belong to. A fingerprint or device-lock prompt controls access to the key page but is not itself encryption. Create keys with spending limits and revoke them with the provider if your device is lost.'],
     ['Third-party terms', 'Each provider has separate terms, privacy policy, pricing, content rules, regional availability and rate limits. You must comply with them. Providers can change or withdraw models at any time, which may affect features in the App.'],
   ]},
