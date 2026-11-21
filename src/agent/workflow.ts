@@ -9,7 +9,7 @@ import { PROVIDERS } from '../models/providerInfo';
 import { defaultKeys, getSecret, setStatus, usableKey, type ProviderId } from '../vault/vault';
 import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
-import { refreshCatalog, type Catalog } from './detect';
+import { refreshCatalog, quickCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
 import { NotStarted, addPending, backgroundAvailable, backgroundOn, generateInBackground } from './background';
 import { resultsBlock, webResearch, shouldAutoWebSearch, type WebSource } from './search';
@@ -39,6 +39,13 @@ async function prepare(rawPrompt: string, log: RunLog, signal: AbortSignal): Pro
   log.step('Checking connected text models…');
   const d = log.start('cmd', 'providers detect --text-models');
   const parts: string[] = [];
+  const cached = quickCatalog();
+  if (cached) {
+    log.done(d, `${cached.texts.length} cached text models ready`);
+    // Refresh in the background so the next request benefits from fresh provider lists.
+    void refreshCatalog({ signal, onProvider: (p, r) => { if (r.source === 'unavailable') parts.push(`${PROVIDERS[p].name} ✕ (${r.reason ?? 'unreachable'})`); else parts.push(`${PROVIDERS[p].name} ✓ ${r.count} text models`); log.update(d, { detail: parts.join(' · ') }); } }).catch(() => {});
+    return { text, flags, catalog: cached };
+  }
   const catalog = await refreshCatalog({ signal, onProvider: (p, r) => {
     if (r.source === 'unavailable') parts.push(`${PROVIDERS[p].name} ✕ (${r.reason ?? 'unreachable'})`);
     else parts.push(`${PROVIDERS[p].name} ✓ ${r.count} text model${r.count === 1 ? '' : 's'}${r.source === 'cache' ? ' (cached)' : ''}`);
