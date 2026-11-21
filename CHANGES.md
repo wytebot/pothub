@@ -71,9 +71,11 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Wrapped GitHub connect callbacks in click handlers to avoid passing React mouse events as optional token arguments.
 - Added a Sign out action to the expanded More navigation section; it uses the Firebase/native sign-out helper and closes the mobile drawer after sign-out.
 
-## Chat composer note, GitHub connect and site verification
-- Removed the "File allowance is checked securely when you submit files. Sign in to use file analysis." note (and the sign-in state that only fed it) above the chat composer in Home.tsx.
-- Codelab "Connect GitHub": the client now accepts the authorization link from the server and checks it points at github.com before redirecting; the server names exactly which GitHub settings are missing (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_CALLBACK_URL, APP_ORIGIN) and requires an https callback URL.
-- Website diagnosis now requires ownership verification. Each account gets a signed tag for each site: `<meta name="pothub-site-verification" content="pothub-...">` to paste inside the site's `<head>`. New server routes: GET /api/sites/verify-token, POST /api/sites/verify, POST /api/sites/diagnose (re-checks the tag, then crawls). Sites list shows Verified / Not verified.
-- New server setting SITE_VERIFY_SECRET (falls back to GITHUB_CLIENT_SECRET, then FLW_WEBHOOK_HASH). Redeploy the server after setting it.
-- Added tests: server/src/siteVerify.test.ts and a tag test in siteDiagnosis.test.ts. Not run against a full install here (no network); run `npm test` and `npm run build` before shipping.
+## Chat composer note, GitHub connect, merged Configured websites
+- Removed the "File allowance is checked securely when you submit files…" note above the chat composer (and the sign-in state that only fed it).
+- Root cause of "GitHub OAuth setup is incomplete" and "Pothub could not authorize this request": the app asked the website for /api/... and got the website's HTML back. GitHub sign-in and the website tools are now Vercel functions in `api/` (`api/github/oauth/[action].js`, `api/sites/[action].js`) that read the Vercel project's own environment variables. `vercel.json` no longer rewrites /api to the app shell.
+- The client (`src/security/api.ts`) detects a web page where data was expected and says what is misconfigured; new `requestSite()` calls the site's own functions. Codelab uses it.
+- Configured websites is now the single place for site tools. Each site card has: Verified / Not verified chip, a checkbox "Allow Pothub to crawl this site" with a short note, and a dots button that opens Ownership (the meta tag to paste in `<head>`, Copy, Verify), Diagnosis (results inline) and the Backlink snippet.
+- Removed the Backlink snippets, Website diagnosis, Diagnosis results and Crawl & citations pages and menu entries; old links open Configured websites.
+- The checkbox requires a verified site, gates diagnosis, and shares/removes citation excerpts through the API server (`/api/publishers/crawl`, `/api/publishers/remove`).
+- Tests: `api/_lib/web.test.js` (tag, safe URL, check, extraction). Not run against a full install here (no network): run `npm test` and `npm run build` before shipping.
