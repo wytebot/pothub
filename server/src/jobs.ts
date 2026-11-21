@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { adminApp } from './adminApp';
 
@@ -23,9 +23,9 @@ const ENDPOINTS: Record<string, { api: Api; chat: string; tokens?: string }> = {
 };
 
 export type JobStatus = 'running' | 'done' | 'error' | 'cancelled';
-interface Job { id: string; uid: string; status: JobStatus; text: string; error?: string; httpStatus?: number; pauseReason?: string; truncated: boolean; provider: string; model: string; created: number; updated: number; ctl: AbortController; }
+interface Job { id: string; uid: string; status: JobStatus; text: string; error?: string; httpStatus?: number; pauseReason?: string; truncated: boolean; provider: string; model: string; created: number; updated: number; ctl: AbortController; encryptedPayload?: string; leaseOwner?: string; leaseUntil?: number; }
 export interface JobInput { provider: string; model: string; secret: string; system: string; history: { role: 'user' | 'assistant'; text: string }[]; prompt: string; maxTokens?: number; }
-export interface JobView { status: JobStatus | 'paused'; length: number; chunk: string; error?: string; httpStatus?: number; pauseReason?: string; truncated?: boolean; }
+export interface JobView { status: JobStatus | 'queued' | 'paused'; length: number; chunk: string; error?: string; httpStatus?: number; pauseReason?: string; truncated?: boolean; }
 
 const jobs = new Map<string, Job>();
 const KEEP_MS = 48 * 3_600_000; const MAX_RUN_MS = KEEP_MS; const MAX_ROUNDS = 10;
@@ -33,10 +33,26 @@ const MAX_PER_USER = 4; const MAX_TOTAL = 150;
 const CONTINUE = 'Continue exactly where you stopped. Do not repeat anything already written, do not add an introduction, and keep the same structure and format.';
 
 const db = () => getFirestore(adminApp());
+function encryptionKey(): Buffer {
+  const raw = process.env.BACKGROUND_JOB_ENCRYPTION_KEY ?? '';
+  const key = /^[a-f0-9]{64}$/i.test(raw) ? Buffer.from(raw, 'hex') : Buffer.from(raw, 'base64');
+  if (key.length !== 32) throw new Error('BACKGROUND_JOB_ENCRYPTION_KEY must be a 32-byte base64 or 64-character hex key.');
+  return key;
+}
+function encryptPayload(input: JobInput): string {
+  const iv = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
+  const body = Buffer.concat([cipher.update(JSON.stringify(input), 'utf8'), cipher.final()]);
+  return `${iv.toString('base64')}.${cipher.getAuthTag().toString('base64')}.${body.toString('base64')}`;
+}
+export function decryptPayload(value: string): JobInput {
+  const [iv64, tag64, body64] = value.split('.'); if (!iv64 || !tag64 || !body64) throw new Error('Invalid encrypted job payload.');
+  const dec = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(iv64, 'base64')); dec.setAuthTag(Buffer.from(tag64, 'base64'));
+  return JSON.parse(Buffer.concat([dec.update(Buffer.from(body64, 'base64')), dec.final()]).toString('utf8')) as JobInput;
+}
 const save = (j: Job) => {
-  // Result only (never the key). Best effort: the in-memory copy is the source of truth while the server is up.
-  void db().doc(`jobs/${j.id}`).set({ uid: j.uid, status: j.status, text: j.text.slice(0, 100_000), persistedTruncated: j.text.length > 100_000, error: j.error ?? null, httpStatus: j.httpStatus ?? null, pauseReason: j.pauseReason ?? null, truncated: j.truncated, provider: j.provider, model: j.model, updatedAt: j.updated, expiresAt: Timestamp.fromMillis(j.created + KEEP_MS) }).catch(() => { /* Firestore not configured */ });
+  void db().doc(`jobs/${j.id}`).set({ uid: j.uid, status: j.status, text: j.text.slice(0, 100_000), persistedTruncated: j.text.length > 100_000, error: j.error ?? null, httpStatus: j.httpStatus ?? null, pauseReason: j.pauseReason ?? null, truncated: j.truncated, provider: j.provider, model: j.model, updatedAt: j.updated, expiresAt: Timestamp.fromMillis(j.created + KEEP_MS), encryptedPayload: j.encryptedPayload ?? null, leaseOwner: j.leaseOwner ?? null, leaseUntil: j.leaseUntil ?? null }, { merge: true }).catch(() => { /* Firestore transient */ });
 };
+
 setInterval(() => { const now = Date.now(); for (const [id, j] of jobs) if (j.status !== 'running' && now - j.updated > KEEP_MS) jobs.delete(id); }, 10 * 60_000).unref();
 
 export function validate(b: unknown): JobInput | string {
@@ -52,29 +68,27 @@ export function validate(b: unknown): JobInput | string {
   return { provider: x.provider, model: x.model, secret: x.secret, system: typeof x.system === 'string' ? x.system : '', history, prompt: x.prompt, maxTokens: typeof x.maxTokens === 'number' && x.maxTokens > 0 ? Math.min(x.maxTokens, 128_000) : undefined };
 }
 
-export function startJob(uid: string, input: JobInput): { id: string } | { error: string; status: number } {
-  const mine = [...jobs.values()].filter((j) => j.uid === uid && j.status === 'running').length;
-  if (mine >= MAX_PER_USER) return { error: 'You already have several jobs running. Wait for one to finish.', status: 429 };
-  if ([...jobs.values()].filter((j) => j.status === 'running').length >= MAX_TOTAL) return { error: 'The server is busy. Try again in a minute.', status: 503 };
-  const now = Date.now(); const job: Job = { id: randomUUID(), uid, status: 'running', text: '', truncated: false, provider: input.provider, model: input.model, created: now, updated: now, ctl: new AbortController() };
-  jobs.set(job.id, job); save(job);
-  const limit = setTimeout(() => job.ctl.abort(), MAX_RUN_MS); limit.unref();
-  void run(job, input).finally(() => { clearTimeout(limit); input.secret = ''; });
-  return { id: job.id };
+export async function startJob(uid: string, input: JobInput): Promise<{ id: string } | { error: string; status: number }> {
+  try {
+    const store = db(); const active = await store.collection('jobs').where('uid', '==', uid).get();
+    const open = active.docs.filter(d => ['queued', 'running'].includes(String(d.data().status)));
+    if (open.length >= MAX_PER_USER) return { error: 'You already have several background jobs queued or running. Wait for one to finish.', status: 429 };
+    const globalActive = await store.collection('jobs').where('status', 'in', ['queued', 'running']).limit(MAX_TOTAL).get();
+    if (globalActive.size >= MAX_TOTAL) return { error: 'The background worker queue is busy. Try again shortly.', status: 503 };
+    const encryptedPayload = encryptPayload(input); const now = Date.now(); const id = randomUUID();
+    await store.doc(`jobs/${id}`).create({ uid, status: 'queued', text: '', truncated: false, provider: input.provider, model: input.model, createdAt: now, updatedAt: now, expiresAt: Timestamp.fromMillis(now + KEEP_MS), encryptedPayload, leaseOwner: null, leaseUntil: null });
+    input.secret = ''; return { id };
+  } catch (e) { return { error: e instanceof Error && /BACKGROUND_JOB_ENCRYPTION_KEY/.test(e.message) ? e.message : 'Durable background queue is unavailable. Configure Firestore and the job encryption key, then retry.', status: 503 }; }
 }
 
 export async function jobView(uid: string, id: string, from: number): Promise<JobView | null> {
-  let j = jobs.get(id);
-  if (j) { if (j.uid !== uid) return null; return { status: j.status === 'running' && j.pauseReason ? 'paused' : j.status, length: j.text.length, chunk: j.text.slice(Math.max(0, from)), error: j.error, httpStatus: j.httpStatus, pauseReason: j.pauseReason, truncated: j.truncated }; }
-  try {
-    const d = (await db().doc(`jobs/${id}`).get()).data(); if (!d || d.uid !== uid) return null;
-    // A job that was still running when the server restarted cannot continue: its key was only ever held in memory.
-    const interrupted = d.status === 'running';
-    const text = String(d.text ?? '');
-    return { status: interrupted ? 'error' : d.status, length: text.length, chunk: text.slice(Math.max(0, from)), error: interrupted ? 'The server restarted while this was running. Send it again.' : (d.error ?? undefined), httpStatus: d.httpStatus ?? undefined, truncated: !!d.truncated || !!d.persistedTruncated };
+  if (!/^[a-f0-9-]{20,80}$/i.test(id)) return null;
+  try { const snap = await db().doc(`jobs/${id}`).get(); const d = snap.data(); if (!d || d.uid !== uid) return null;
+    const text = String(d.text ?? ''); return { status: d.status === 'running' && d.pauseReason ? 'paused' : (d.status as JobStatus | 'queued'), length: text.length, chunk: text.slice(Math.max(0, from)), error: d.error ?? undefined, httpStatus: d.httpStatus ?? undefined, pauseReason: d.pauseReason ?? undefined, truncated: !!d.truncated || !!d.persistedTruncated };
   } catch { return null; }
 }
-export function cancelJob(uid: string, id: string): boolean { const j = jobs.get(id); if (!j || j.uid !== uid) return false; if (j.status === 'running') { j.status = 'cancelled'; j.updated = Date.now(); j.ctl.abort(); save(j); } return true; }
+
+export async function cancelJob(uid: string, id: string): Promise<boolean> { try { const ref = db().doc(`jobs/${id}`); const result = await db().runTransaction(async tx => { const snap = await tx.get(ref); const d = snap.data(); if (!d || d.uid !== uid || !['queued','running'].includes(String(d.status))) return false; tx.update(ref, { status: 'cancelled', updatedAt: Date.now(), encryptedPayload: null, leaseUntil: null }); return true; }); const j = jobs.get(id); if (j) { j.status = 'cancelled'; j.ctl.abort(); } return result; } catch { return false; } }
 
 // ------------------------------------------------------------------------------------------------ provider calls
 const scrub = (t: string, secret: string) => (secret ? t.split(secret).join('••••') : t);
@@ -130,10 +144,12 @@ function makeOnce(job: Job, i: JobInput): Once {
   };
 }
 
-async function run(job: Job, input: JobInput) {
+export async function run(job: Job, input: JobInput) {
   const once = makeOnce(job, input);
   const messages: { role: 'user' | 'assistant'; content: string }[] = [...input.history.map((h) => ({ role: h.role, content: h.text })), { role: 'user', content: input.prompt }];
+  if (job.text.trim()) messages.push({ role: 'assistant', content: job.text }, { role: 'user', content: CONTINUE });
   const push = (t: string) => { job.text += t; job.updated = Date.now(); };
+  const persistTimer = setInterval(() => save(job), 2_000); persistTimer.unref();
   try {
     let drops = 0;
     for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -167,5 +183,17 @@ async function run(job: Job, input: JobInput) {
     if (job.status === 'cancelled') return;
     job.status = 'error'; job.httpStatus = e instanceof ProviderError ? e.status : undefined;
     job.error = job.ctl.signal.aborted ? 'This job exceeded the 48 hour processing window and was stopped. Its saved partial answer is still available for recovery.' : scrub(e instanceof ProviderError ? e.message : 'Could not reach the provider. Try again.', input.secret);
-  } finally { job.updated = Date.now(); save(job); }
+  } finally { clearInterval(persistTimer); job.updated = Date.now(); job.encryptedPayload = undefined; save(job); }
+}
+
+/** Atomically claims a queued job for the dedicated worker process. */
+export async function claimNextJob(workerId: string): Promise<{ job: Job; input: JobInput } | null> {
+  const dbx = db(); const now = Date.now(); const queued = await dbx.collection('jobs').where('status', '==', 'queued').limit(1).get(); const running = await dbx.collection('jobs').where('status', '==', 'running').limit(30).get(); const expiredDocs = running.docs.filter(doc => Number(doc.data().leaseUntil ?? 0) <= now).slice(0, 1); const expired = { docs: expiredDocs };  const candidates = [...queued.docs, ...expired.docs];
+  for (const candidate of candidates) {
+    const claimed = await dbx.runTransaction(async tx => { const snap = await tx.get(candidate.ref); const d = snap.data(); if (!d || !(d.status === 'queued' || (d.status === 'running' && Number(d.leaseUntil ?? 0) <= now))) return null; tx.update(candidate.ref, { status: 'running', leaseOwner: workerId, leaseUntil: now + 90_000, updatedAt: now }); return d; });
+    if (!claimed?.encryptedPayload) continue;
+    try { const input = decryptPayload(String(claimed.encryptedPayload)); const job: Job = { id: candidate.id, uid: String(claimed.uid), status: 'running', text: String(claimed.text ?? ''), truncated: !!claimed.truncated, provider: String(claimed.provider), model: String(claimed.model), created: Number(claimed.createdAt ?? now), updated: now, ctl: new AbortController(), encryptedPayload: String(claimed.encryptedPayload), leaseOwner: workerId, leaseUntil: now + 90_000 }; jobs.set(job.id, job); return { job, input }; }
+    catch { await candidate.ref.update({ status: 'error', error: 'Could not decrypt queued task. Check BACKGROUND_JOB_ENCRYPTION_KEY.', encryptedPayload: null, updatedAt: now }); }
+  }
+  return null;
 }

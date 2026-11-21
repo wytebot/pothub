@@ -137,7 +137,7 @@ createServer(async (req, res) => {
       if (await rateLimited(`job:${who.uid}`, 12)) return send(429, { error: 'Too many jobs started. Wait a minute and retry.' });
       const input = validate(JSON.parse((await raw(req, 8_000_000)).toString('utf8') || '{}'));
       if (typeof input === 'string') return send(400, { error: input });
-      const started = startJob(who.uid, input); return 'error' in started ? send(started.status, { error: started.error }) : send(202, started);
+      const started = await startJob(who.uid, input); return 'error' in started ? send(started.status, { error: started.error }) : send(202, started);
     }
     if (url.pathname === '/api/jobs/status' && req.method === 'GET') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
@@ -148,7 +148,7 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/jobs/cancel' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to continue.' });
       const body = JSON.parse((await raw(req, 2_000)).toString('utf8') || '{}') as { id?: unknown };
-      return send(200, { cancelled: cancelJob(who.uid, typeof body.id === 'string' ? body.id : '') });
+      return send(200, { cancelled: await cancelJob(who.uid, typeof body.id === 'string' ? body.id : '') });
     }
     return send(404, { error: 'not found' });
   } catch (e) {
