@@ -1,0 +1,11 @@
+Pothub update 0.11.1
+- GitHub OAuth server route reviewed; HMAC state/callback exchange preserved and clearer server config errors retained.
+- Site diagnosis/backlink/crawl navigation is consolidated under Configured websites (not separate menu links).
+- Backend gateway supports configurable env-variable names for provider, API key, model and allowlist.
+- Defaults remain POTHUB_PROVIDER, POTHUB_API_KEY, POTHUB_MODEL, POTHUB_ALLOWED_EMAILS.
+- Optional mappings: POTHUB_PROVIDER_ENV, POTHUB_API_KEY_ENV, POTHUB_MODEL_ENV, POTHUB_ALLOWED_EMAILS_ENV.
+- API info returns only variable names and provider/model status; it never returns key values.
+- Coding prompt now prioritizes production readiness, tests, exact affected files, preserving secrets and newest project source.
+- Package version bumped to 0.11.1 for web update checks.
+- Background job support/pending-job recovery/notifications retained; 48-hour server-side job window.
+- npm install timed out in this environment; build and full tests are not verified.
