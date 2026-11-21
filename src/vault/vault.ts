@@ -1,12 +1,15 @@
 import { Capacitor } from '@capacitor/core';
 import { uid } from '../storage/db';
 import { checkSecret, fnsOf, isProviderId, splitSecret, type Fn } from '../models/providerInfo';
+import { encodeRef } from '../models/gatewayRef';
 
 export type ProviderId = 'openai' | 'gemini' | 'xai' | 'anthropic' | 'deepseek' | 'mistral' | 'groq' | 'openrouter' | 'together';
 export type KeyStatus = 'untested' | 'ok' | 'invalid' | 'error';
 export interface KeyMeta { id: string; provider: ProviderId; label: string; last4: string; createdAt: number; status: KeyStatus; testedAt?: number;
   /** Functions this key is ticked as a default for, with the time it was ticked (earlier = tried first). The app only ever uses ticked keys. */
-  defaults?: Partial<Record<Fn, number>>; }
+  defaults?: Partial<Record<Fn, number>>;
+  /** 'backend': no secret is stored here, only the address of the person's own backend and the model it reported. */
+  source?: 'backend'; gateway?: string; model?: string; }
 
 // Non-secret metadata only. Secrets never touch localStorage.
 const META = 'vault.meta';
@@ -95,10 +98,25 @@ export async function addKey(provider: ProviderId, label: string, secret: string
   writeMeta([...rows, meta]);
   return meta;
 }
+/** Connects the person's own backend. Only its address and the provider/model it reported are stored; the key never reaches this device. */
+export async function addBackendKey(label: string, gateway: string, info: { provider: string; model: string }): Promise<KeyMeta> {
+  const provider = info.provider; if (!isProviderId(provider)) throw new Error('The backend reported a provider Pothub does not support.');
+  const rows = readMeta();
+  if (rows.some((k) => k.source === 'backend' && k.gateway === gateway)) throw new Error('That backend is already connected.');
+  const defaults: Partial<Record<Fn, number>> = {};
+  for (const f of fnsOf(provider)) if (!rows.some((k) => k.provider === provider && k.defaults?.[f] !== undefined)) defaults[f] = Date.now();
+  let host = gateway; try { host = new URL(gateway).host; } catch { /* keep the address */ }
+  const meta: KeyMeta = { id: uid(), provider, label: label.trim() || host, last4: '', createdAt: Date.now(), status: 'untested', defaults, source: 'backend', gateway, model: info.model };
+  writeMeta([...rows, meta]);
+  return meta;
+}
+/** The backend's model can change on the backend; keep the saved copy in step. */
+export function setBackendModel(id: string, model: string) { writeMeta(readMeta().map((k) => (k.id === id && k.source === 'backend' ? { ...k, model } : k))); }
 /** Change the name and/or the secret of a saved key. Ticked defaults are kept. Leave `secret` out to keep the stored secret. */
 export async function updateKey(id: string, o: { label?: string; secret?: string }): Promise<KeyMeta> {
   const rows = readMeta(); const cur = rows.find((k) => k.id === id);
   if (!cur) throw new Error('This key could not be found. Reload the page and try again.');
+  if (cur.source === 'backend') { const next: KeyMeta = { ...cur, label: o.label === undefined ? cur.label : (o.label.trim() || cur.label) }; writeMeta(rows.map((k) => (k.id === id ? next : k))); return next; }
   const s = o.secret?.trim();
   if (s) { checkSecret(cur.provider, splitSecret(cur.provider, s)); await backend().set(id, s); }
   const next: KeyMeta = { ...cur, label: o.label === undefined ? cur.label : (o.label.trim() || cur.label), ...(s ? { last4: s.slice(-4), status: 'untested' as KeyStatus, testedAt: undefined } : {}) };
@@ -106,7 +124,12 @@ export async function updateKey(id: string, o: { label?: string; secret?: string
   return next;
 }
 export async function removeKey(id: string) { await backend().remove(id).catch(() => {}); writeMeta(readMeta().filter((k) => k.id !== id)); }
-export const getSecret = (id: string) => backend().get(id);
+/** For a device key the stored secret. For a backend key a reference (never a secret) that the network layer sends through the backend. */
+export async function getSecret(id: string): Promise<string> {
+  const k = readMeta().find((m) => m.id === id);
+  if (k?.source === 'backend' && k.gateway) return encodeRef({ p: k.provider, g: k.gateway, ...(k.model ? { m: k.model } : {}) });
+  return backend().get(id);
+}
 export function setStatus(id: string, status: KeyStatus) { writeMeta(readMeta().map((k) => (k.id === id ? { ...k, status, testedAt: Date.now() } : k))); }
 
 // ---- Defaults: the only keys the app routes through ----
