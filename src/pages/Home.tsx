@@ -12,10 +12,13 @@ import { Sources } from '../ui/Sources';
 import { nameFromText } from '../agent/fileNames';
 import { Markdown } from '../ui/Markdown';
 import { useOutside } from '../ui/useOutside';
-import { runInfo, runText } from '../agent/workflow';
+import { deliverable, runInfo, runText } from '../agent/workflow';
+import { DETACH, dropPending, follow, pendingFor, pendingJobs, type PendingJob } from '../agent/background';
+import { notifyDone } from '../notify';
 import { parseCommands } from '../agent/commands';
 import { friendlyNote } from '../agent/friendly';
 import { MAX_FILES, meta, sizeLabel, toAttachments, type Attachment } from '../agent/attachments';
+import { consumeFileQuota, FILE_ANALYSIS_LIMIT, formatQuotaReset, getFileQuota, type FileQuota } from '../agent/fileQuota';
 import type { OutFile } from '../agent/deliver';
 import type { ChatTurn } from '../models/text';
 import { getSettings } from '../settings';
@@ -50,6 +53,7 @@ function revive(all: Msg[]): Msg[] {
   return all.map((m) => {
     if (m.fileOut) m = { ...m, fileOut: undefined }; // the built file only lives while the app is open
     if (m.state !== 'working') return m;
+    if (pendingFor(m.id)) return m; // still running on the server: it is picked up again below
     return { ...m, state: 'error' as const, note: 'This request was interrupted. Send it again.' };
   });
 }
@@ -100,12 +104,14 @@ export function Home() {
   const [ready, setReady] = useState(false);
 
   const idRef = useRef('');
+  const runningId = useRef('');
   const created = useRef(0);
   const fromLoad = useRef<Msg[] | null>(null);
   const flush = useRef<(() => void) | null>(null);
   const [idea, setIdea] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [fileNote, setFileNote] = useState('');
+  const [serverQuota, setServerQuota] = useState<FileQuota | null>(null);
   const [editing, setEditing] = useState<{ userId: string; assistantId: string; before: Msg[] } | null>(null);
   const [menu, setMenu] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -148,7 +154,7 @@ export function Home() {
   useEffect(() => { const prompt = takeCodelabPrompt(); if(prompt) { setIdea(prompt); setFiles([]); } }, []);
   useEffect(() => {
     const f = (e: Event) => {
-      abort.current?.abort();
+      abort.current?.abort(runningId.current && pendingFor(runningId.current) ? DETACH : undefined);
       outFiles.clear(); sent.clear();
       setIdea(''); setFiles([]); setFileNote(''); setMenu(false);
       void loadChat((e as CustomEvent<{ id: string | null }>).detail?.id ?? '');
@@ -206,18 +212,65 @@ export function Home() {
   // ---- attachments (+ button, paste, drop) ----
   const addFiles = (list: FileList | File[] | null | undefined) => {
     const picked = Array.from(list ?? []); if (!picked.length) return;
-    // Free accounts have a limited number of attachments per 5 hours; only that many files go in, and the person is told when the rest can come back.
-    const room = Math.max(0, MAX_FILES - files.length);
+    const quota = serverQuota;
+    const room = Math.max(0, Math.min(MAX_FILES - files.length, quota?.premium ? MAX_FILES : quota?.remaining ?? MAX_FILES));
     const { added, skipped } = toAttachments(picked.slice(0, room), files);
     if (added.length) setFiles((f) => [...f, ...added]);
-    setFileNote(skipped.length ? `${skipped.slice(0, 2).join('. ')}${skipped.length > 2 ? ` (and ${skipped.length - 2} more)` : ''}.` : '');
+    const quotaNote = quota && !quota.premium && quota.remaining === 0 && quota.resetAt ? `File-analysis allowance used. You can attach and analyze files again after ${formatQuotaReset(quota.resetAt)}.` : picked.length > room ? (quota?.resetAt ? `Only ${room} file(s) can be added now. Your allowance resets ${formatQuotaReset(quota.resetAt)}.` : `Only ${room} file(s) can be added to this message; the per-message limit is ${MAX_FILES}.`) : '';
+    setFileNote([quotaNote, skipped.length ? `${skipped.slice(0, 2).join('. ')}${skipped.length > 2 ? ` (and ${skipped.length - 2} more)` : ''}.` : ''].filter(Boolean).join(' '));
     setMenu(false); input.current?.focus();
   };
-  useEffect(() => { if (!fileNote) return; const t = setTimeout(() => setFileNote(''), 7000); return () => clearTimeout(t); }, [fileNote]);
+  useEffect(() => { if (!fileNote || /allowance|analysis/i.test(fileNote)) return; const t = setTimeout(() => setFileNote(''), 7000); return () => clearTimeout(t); }, [fileNote]);
+  // The server owns quota and Premium status; refresh the display and expiry without trusting local storage.
+  const refreshFileQuota = useCallback(async () => { try { const q = await getFileQuota(); setServerQuota(q); if (q.premium || (q.remaining !== null && q.remaining > 0)) setFileNote((n) => /allowance|analysis/i.test(n) ? '' : n); } catch { setServerQuota(null); } }, []);
+  useEffect(() => { void refreshFileQuota(); const t = setInterval(() => { tick((n) => n + 1); void refreshFileQuota(); }, 60_000); return () => clearInterval(t); }, [refreshFileQuota]);
   const pick = (el: HTMLInputElement | null) => { setMenu(false); if (el) { el.value = ''; el.click(); } };
 
+  // ---- jobs that kept running on the server while the app was closed, or while another chat was open ----
+  const live = useRef(new Set<string>());
+  const following = useRef(new Map<string, AbortController>());
+  const settle = useCallback(async (p: PendingJob, change: Partial<Msg>) => {
+    if (idRef.current === p.chatId) { patch(p.msgId, change); return; }
+    try { const c = await getChat(p.chatId); if (c) { await putChat({ ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === p.msgId ? { ...m, ...change } : m)) }); announceChats(); } } catch { /* chat removed */ }
+  }, []);
+  const resumeJobs = useCallback(() => {
+    for (const p of pendingJobs()) {
+      if (live.current.has(p.msgId) || following.current.has(p.id)) continue;
+      const ctl = new AbortController(); following.current.set(p.id, ctl);
+      const log = new RunLog(); log.step('Finishing your answer…'); logs.set(p.msgId, log);
+      void (async () => {
+        let last = 0;
+        try {
+          const r = await follow(p.id, { signal: ctl.signal, onText: (t) => { const now = Date.now(); if (idRef.current !== p.chatId || now - last < 150) return; last = now; patch(p.msgId, { kind: 'text', text: t }); } });
+          const here = idRef.current === p.chatId;
+          const del = here ? await deliverable(r.text, p.wanted, p.prompt, []) : { file: null, notes: p.wanted.file ? ['You were in another chat when this finished, so the file was not built. Ask me to make it from this answer.'] : [] };
+          if (del.file) outFiles.set(p.msgId, del.file);
+          const notes = [...p.notes, ...del.notes, ...(r.truncated ? ['The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.'] : [])];
+          await settle(p, { state: 'done', kind: 'text', text: r.text, notes: notes.length ? notes : undefined, sources: p.sources, fileOut: del.file ? { name: del.file.name, size: del.file.blob.size } : undefined });
+          dropPending(p.msgId); log.say('ok', 'done');
+          void notifyDone({ kind: 'text', title: 'Your answer is ready', body: `${p.modelName} finished “${titleFrom(p.prompt, 'your request').slice(0, 60)}”.`, route: '/' });
+        } catch (e) {
+          if (ctl.signal.aborted && ctl.signal.reason === DETACH) return;
+          const expired = e instanceof Error && /session has expired/i.test(e.message);
+          if (expired) return; // keep the job; it is picked up the next time the app opens signed in
+          const n = friendlyNote(e, { task: 'text', step: log.lastStep() });
+          dropPending(p.msgId);
+          await settle(p, { state: 'error', kind: 'text', note: n.cancelled ? 'Stopped.' : n.text, providers: n.providers });
+        } finally { following.current.delete(p.id); tick((n) => n + 1); }
+      })();
+    }
+  }, [settle]);
+  useEffect(() => {
+    if (!ready) return;
+    const t = setTimeout(resumeJobs, 800);
+    const v = () => { if (document.visibilityState === 'visible') resumeJobs(); };
+    document.addEventListener('visibilitychange', v);
+    return () => { clearTimeout(t); document.removeEventListener('visibilitychange', v); };
+  }, [ready, resumeJobs, messages.length]);
+  const stopAll = () => { abort.current?.abort(); following.current.forEach((c) => c.abort()); };
+
   const run = async (id: string, prompt: string, log: RunLog, atts: Attachment[], history: ChatTurn[]) => {
-    const ctl = new AbortController(); abort.current = ctl; const signal = ctl.signal;
+    const ctl = new AbortController(); abort.current = ctl; const signal = ctl.signal; live.current.add(id); runningId.current = id;
     let partial = '';
     try {
       const { text, flags } = parseCommands(prompt);
@@ -234,7 +287,7 @@ export function Home() {
       }
       // Text-only routing: every prompt is handled by a text model, including legacy media prompts.
       let last = 0;
-      const out = await runText({ prompt, files: atts, web: true, history, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
+      const out = await runText({ prompt, files: atts, web: true, history, job: { chatId: idRef.current, msgId: id }, prefer: flags.prefer ?? getSettings().priority, signal, log, onText: (t) => {
         partial = t; const now = Date.now(); if (now - last < 90) return; last = now; patch(id, { kind: 'text', text: t });
       }});
       if (out.file) outFiles.set(id, out.file);
@@ -246,7 +299,7 @@ export function Home() {
       const n = friendlyNote(e, { task: 'text', step: log.lastStep() });
       log.say(n.cancelled ? 'warn' : 'err', n.cancelled ? 'cancelled' : (e instanceof Error ? e.message : 'failed'));
       patch(id, { state: 'error', kind: 'text', text: partial, note: n.text, providers: n.providers });
-    } finally { abort.current = null; setActive(false); tick((n) => n + 1); }
+    } finally { abort.current = null; live.current.delete(id); if (runningId.current === id) runningId.current = ''; setActive(false); tick((n) => n + 1); }
   };
 
   /** Starts a request. With `replace`, the answer to an earlier message is redone in place instead of adding a new exchange. */
@@ -260,12 +313,24 @@ export function Home() {
     else { if (!idRef.current) { idRef.current = uid(); created.current = Date.now(); setCurrentChatId(idRef.current); } const userId = uid(); sent.set(userId, atts); setMessages((ms) => [...ms, { id: userId, role: 'user', text: prompt, files: atts.map(meta) }, { id, role: 'assistant', text: '', state: 'working' }]); }
     setActive(true); void run(id, prompt, log, atts, history);
   };
-  const send = (value = idea) => {
+  const send = async (value = idea) => {
     const prompt = value.trim(); if ((!prompt && !files.length) || active) return;
     const atts = files;
+    let postSendQuotaNote = '';
+    if (atts.length) {
+      try {
+        const quota = await consumeFileQuota(atts.length); setServerQuota(quota);
+        if (!quota.premium && quota.remaining === 0 && quota.resetAt) postSendQuotaNote = `You have used all ${FILE_ANALYSIS_LIMIT} file analyses for this 5-hour window. You can come back after ${formatQuotaReset(quota.resetAt)}.`;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'File allowance could not be verified.';
+        try { const latest = await getFileQuota(); setServerQuota(latest); if (!latest.premium) setFileNote(latest.remaining === 0 && latest.resetAt ? `Free file-analysis allowance reached. You can come back after ${formatQuotaReset(latest.resetAt)}.` : message); else setFileNote(message); }
+        catch { setFileNote(message); }
+        return;
+      }
+    }
     if (editing) { begin(prompt, atts, { id: editing.assistantId, before: editing.before, userId: editing.userId }); setEditing(null); }
     else begin(prompt, atts);
-    setIdea(''); setFiles([]); setFileNote(''); setMenu(false);
+    setIdea(''); setFiles([]); setFileNote(postSendQuotaNote); setMenu(false);
   };
   /** Regenerate / retry / resend: run the same request again where it stands. */
   const redo = (assistantId: string) => {
@@ -350,6 +415,7 @@ export function Home() {
         )}
         {editing && <div className="notice" role="status">Editing this request. Sending will update its existing reply instead of adding a new conversation entry. <button className="btn" onClick={() => { setEditing(null); setIdea(''); setFiles([]); }}>Cancel edit</button></div>}
         {fileNote && <p className="attach-note" role="status">{fileNote}</p>}
+        {!fileNote && <p className="attach-note">{serverQuota?.premium ? 'Premium: unlimited file analysis.' : serverQuota ? `File allowance: ${serverQuota.remaining}/${FILE_ANALYSIS_LIMIT} analyses available · resets 5 hours after first use.` : 'File allowance is checked securely when you submit files. Sign in to use file analysis.'}</p>}
         <div className="chat-composer">
           {files.length > 0 && (
             <div className="attach-row" aria-label="Attached files">
@@ -358,7 +424,7 @@ export function Home() {
           )}
           <div className="composer-row">
             <div className="plus-wrap" ref={plus}>
-              <button className="plus-button" type="button" aria-label="Attach text or documents" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES} onClick={() => setMenu((o) => !o)}><Icon name="plus" size={22} /></button>
+              <button className="plus-button" type="button" aria-label="Attach text or documents" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES || (!!serverQuota && !serverQuota.premium && (serverQuota.remaining ?? 0) <= 0)} onClick={() => setMenu((o) => !o)}><Icon name="plus" size={22} /></button>
               {menu && (
                 <div className="plus-menu" role="menu">
                   <button role="menuitem" onClick={() => pick(fileIn.current)}><b aria-hidden="true"><Icon name="file" size={18} /></b><span>Attach files<small>Code, text and documents</small></span></button>
@@ -374,8 +440,8 @@ export function Home() {
               onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
               onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !coarse) { e.preventDefault(); send(); } }} />
-            {active
-              ? <button className="send-button stop" aria-label="Stop" onClick={() => abort.current?.abort()}><Icon name="stop" size={18} /></button>
+            {working
+              ? <button className="send-button stop" aria-label="Stop" onClick={stopAll}><Icon name="stop" size={18} /></button>
               : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><Icon name="send" size={20} /></button>}
           </div>
         </div>

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getSettings, saveSettings, type Settings as S } from '../settings';
+import { backgroundAvailable, backgroundOn, setBackground } from '../agent/background';
 import { disableNotifications, enableNotifications, notifyPermission, notifyWanted, type NotifyPermission } from '../notify';
 
 export function Settings() {
   const [s, setS] = useState<S>(getSettings());
   const [notify, setNotify] = useState(notifyWanted());
+  const [bg, setBg] = useState(backgroundOn());
   const [perm, setPerm] = useState<NotifyPermission>('default');
   useEffect(() => { void notifyPermission().then(setPerm); }, []);
   const toggleNotify = async (on: boolean) => {
@@ -18,6 +20,10 @@ export function Settings() {
       <div className="panel stack"><h2>Text models</h2><p className="muted small">Pothub routes text, writing, research and code requests to connected providers. Models are selected automatically for quality or speed.</p><p>Preferred text model: <strong>Automatic routing</strong></p></div>
       <div className="panel stack"><h2>Workflow</h2>
         <label className="check"><input type="checkbox" checked={s.terminal} onChange={(e) => set({ terminal: e.target.checked })} /> Show the live step-by-step terminal while the assistant works</label>
+      </div>
+      <div className="panel stack"><h2>Background jobs</h2>
+        <label className="check"><input type="checkbox" checked={bg && backgroundAvailable()} disabled={!backgroundAvailable()} onChange={(e) => { setBackground(e.target.checked); setBg(e.target.checked); }} /> Keep jobs running when I leave the app</label>
+        <p className="muted small">{backgroundAvailable() ? 'Answers are written by the Pothub server, so they finish even if you close the app or lose signal, and are waiting for you when you come back (kept for 48 hours). Your provider key is sent to the server over HTTPS for that one job only: it is held in memory, never saved or logged, and dropped when the job ends. Switch this off to run jobs only on this device.' : 'Background jobs need the Pothub server, which is not configured for this build. Jobs run on this device.'}</p>
       </div>
       <div className="panel stack"><h2>Notifications</h2>
         <label className="check"><input type="checkbox" checked={notify && perm === 'granted'} disabled={perm === 'unsupported'} onChange={(e) => void toggleNotify(e.target.checked)} /> Notify me when an answer is ready and I’m not in Pothub</label>
