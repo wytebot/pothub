@@ -718,3 +718,13 @@ input[type='search'] { width: 100%; }
 .site-tool-page .diagnosis-table th, .site-tool-page .diagnosis-table td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid var(--border, #ddd); }
 .site-tool-page .diagnosis-table th { background: color-mix(in srgb, #6366f1 12%, transparent); }
 @media (max-width: 640px) { .site-tool-page .diagnosis-score { align-items: flex-start; } .site-tool-page .diagnosis-bar-row { grid-template-columns: 1fr 1fr 54px; font-size: .78rem; gap: 6px; } }
+
+/* Configured websites: one card per site, extra detail behind the dots button */
+.site-card .site-consent { align-items: flex-start; gap: 10px; }
+.site-card .site-consent input { margin-top: 3px; flex: none; }
+.site-card .site-consent small { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.4; }
+.site-more { border-top: 1px solid var(--border); padding-top: 12px; gap: 16px; }
+.site-more h3 { margin: 0; font-size: 14px; }
+.site-more details { border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; }
+.site-more details summary { cursor: pointer; font-size: 13.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.site-more pre { overflow-x: auto; }
