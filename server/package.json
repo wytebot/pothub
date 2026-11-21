@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
-    "test": "tsx --test src/search.test.ts src/crawl.test.ts src/fileQuota.test.ts src/siteVerify.test.ts",
+    "test": "tsx --test src/search.test.ts src/crawl.test.ts src/fileQuota.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

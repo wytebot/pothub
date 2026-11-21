@@ -196,9 +196,3 @@ export async function crawlSites(urls: string[], o: CrawlOptions = {}): Promise<
 
 /** Kept for older callers: the pages only, one level, no feeds. */
 export const crawlPages = async (urls: string[], maxPages = 5) => (await crawlSites(urls, { depth: 1, maxPages })).pages;
-
-/** Raw HTML of one public page (same safety rules as the crawler: public hosts only, size and time capped). Used to check site ownership tags. */
-export async function fetchRawHtml(raw: string): Promise<{ url: string; body: string } | null> {
-  const c: Ctx = { fetch, resolve: lookupAll, deadline: Date.now() + 9_000, now: Date.now };
-  return fetchLimited(raw, c, { accept: 'text/html,application/xhtml+xml', types: /text\/html|application\/xhtml/i, maxBytes: 400_000 });
-}

@@ -11,7 +11,6 @@ import { Settings } from './pages/Settings';
 import { AppearancePage } from './pages/Appearance';
 import { SiteTools } from './pages/SiteTools';
 import { Codelab } from './pages/Codelab';
-import { CrawlCitations } from './pages/CrawlCitations';
 import { Billing } from './pages/Billing';
 import { getStorageInfo } from './storage/quota';
 import { useMe, signInWithGoogle, signOut } from './auth/session';
@@ -23,11 +22,7 @@ interface Route { path: string; label: string; icon?: IconName; el: ReactNode; }
 const primary: Route[] = [
   { path: '/', label: 'Home', icon: 'home', el: <Home /> },
   { path: '/providers', label: 'AI Providers', icon: 'key', el: <Providers /> },
-  { path: '/sites', label: 'Configured websites', icon: 'link', el: <SiteTools mode="sites" /> },
-  { path: '/sites/backlinks', label: 'Backlink snippets', icon: 'link', el: <SiteTools mode="backlinks" /> },
-  { path: '/sites/diagnosis', label: 'Website diagnosis', icon: 'globe', el: <SiteTools mode="diagnosis" /> },
-  { path: '/sites/diagnosis/results', label: 'Diagnosis results', icon: 'file', el: <SiteTools mode="results" /> },
-  { path: '/sites/crawl-citations', label: 'Crawl & citations', icon: 'globe', el: <CrawlCitations /> },
+  { path: '/sites', label: 'Configured websites', icon: 'link', el: <SiteTools /> },
   { path: '/codelab', label: 'Codelab', icon: 'code', el: <div /> },
   { path: '/billing', label: 'Premium', icon: 'star', el: <Billing /> },
 ];
@@ -61,7 +56,8 @@ export function App() {
   const [guestSignInBusy, setGuestSignInBusy] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
   const touch = useRef<{ y: number; on: boolean } | null>(null);
-  const requestedRoute: Route = all.find((r) => r.path === path.split('?')[0]) ?? (path.startsWith('/legal/') ? { path: '/legal', label: 'Legal documents', el: <Legal id={path.slice(7)} /> } : primary[0]);
+  const routePath = path.split('?')[0].startsWith('/sites/') ? '/sites' : path.split('?')[0]; // the old backlink, diagnosis and crawl pages now live inside Configured websites
+  const requestedRoute: Route = all.find((r) => r.path === routePath) ?? (path.startsWith('/legal/') ? { path: '/legal', label: 'Legal documents', el: <Legal id={path.slice(7)} /> } : primary[0]);
   const guestAccessible = new Set(['/', '/providers', '/legal', '/privacy', '/terms', '/support', '/about']);
   const route: Route = !me && !guestAccessible.has(requestedRoute.path) ? primary[0] : requestedRoute;
 
@@ -83,7 +79,7 @@ export function App() {
       <header className="topbar">
         <button className="icon-btn" aria-label="Open navigation" aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" size={20} /></button>
         <span className="brand">Pothub</span>
-        {!me ? <button className="guest-signin" disabled={guestSignInBusy} onClick={async () => { setGuestSignInBusy(true); const r = await signInWithGoogle(); if (!r.ok && r.message) alert(r.message); setGuestSignInBusy(false); }}>{guestSignInBusy ? 'Signing in…' : 'Sign in'}</button> : <details className="header-tools"><summary>Tools <Icon name="chevron" size={14}/></summary><div className="header-tools-pop"><a href="#/sites">Configured websites</a><a href="#/sites/backlinks">Backlink snippets</a><a href="#/sites/diagnosis">Website diagnosis</a><a href="#/sites/diagnosis/results">Latest diagnosis</a><a href="#/sites/crawl-citations">Crawl & citations</a><a href="#/codelab">Codelab</a><a href="#/billing">Premium & billing</a></div></details>}
+        {!me ? <button className="guest-signin" disabled={guestSignInBusy} onClick={async () => { setGuestSignInBusy(true); const r = await signInWithGoogle(); if (!r.ok && r.message) alert(r.message); setGuestSignInBusy(false); }}>{guestSignInBusy ? 'Signing in…' : 'Sign in'}</button> : <details className="header-tools"><summary>Tools <Icon name="chevron" size={14}/></summary><div className="header-tools-pop"><a href="#/sites">Configured websites</a><a href="#/codelab">Codelab</a><a href="#/billing">Premium & billing</a></div></details>}
       </header>
       {drawer && <div className="drawer-scrim" onClick={() => setDrawer(false)} />}
       <nav className={`sidebar${drawer ? ' open' : ''}`} aria-label="Main">
