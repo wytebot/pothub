@@ -13,7 +13,7 @@ const callbackUrl = (req) => {
 const safeError = (e) => { const message = e instanceof Error ? e.message : String(e || 'unknown error'); return message.replace(/(?:ghp_|github_pat_|Bearer\s+)[A-Za-z0-9_\-]+/gi, '[redacted]').slice(0, 180); };
 
 function makeState(uid) {
-  const payload = Buffer.from(JSON.stringify({ uid, exp: Date.now() + 10 * 60_000, nonce: randomUUID() })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ uid, exp: Date.now() + 30 * 60_000, nonce: randomUUID() })).toString('base64url');
   return `${payload}.${createHmac('sha256', secret()).update(payload).digest('base64url')}`;
 }
 function readState(state) {

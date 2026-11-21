@@ -1,11 +1,7 @@
-Pothub update 0.11.1
-- GitHub OAuth server route reviewed; HMAC state/callback exchange preserved and clearer server config errors retained.
-- Site diagnosis/backlink/crawl navigation is consolidated under Configured websites (not separate menu links).
-- Backend gateway supports configurable env-variable names for provider, API key, model and allowlist.
-- Defaults remain POTHUB_PROVIDER, POTHUB_API_KEY, POTHUB_MODEL, POTHUB_ALLOWED_EMAILS.
-- Optional mappings: POTHUB_PROVIDER_ENV, POTHUB_API_KEY_ENV, POTHUB_MODEL_ENV, POTHUB_ALLOWED_EMAILS_ENV.
-- API info returns only variable names and provider/model status; it never returns key values.
-- Coding prompt now prioritizes production readiness, tests, exact affected files, preserving secrets and newest project source.
-- Package version bumped to 0.11.1 for web update checks.
-- Background job support/pending-job recovery/notifications retained; 48-hour server-side job window.
-- npm install timed out in this environment; build and full tests are not verified.
+# Pothub continuity and GitHub artifact commit
+- Generated artifacts now persist in IndexedDB across chat reloads and can be recovered/downloaded from the message card.
+- Continuity prompts can retrieve recent relevant chats and locally saved generated artifact text for correction without re-upload.
+- Generated file cards now include a GitHub commit picker: select repository, branch, message and commit extracted text files.
+- GitHub OAuth token is retained for the current browser session and Codelab auto-reconnects; OAuth state expiry is extended to 30 minutes.
+- Binary ZIP contents are skipped by the GitHub text API commit flow; this workflow is not a replacement for Git LFS.
+- Run `npm install`, `npm run build`, and `npm test` before deploying. Dependency install could not be completed in this environment.
