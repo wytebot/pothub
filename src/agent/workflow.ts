@@ -225,7 +225,7 @@ ${webBlock}`;
       // final writer receives the complete set of findings, not a truncated prefix.
       const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log, forceSplit) : { files, evidence: [] as string[], notes: [] as string[] };
       notes.push(...chunked.notes);
-      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (text: string) => { partial = text; o.onText(text); } };
+      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t: string) => { partial = t; o.onText(t); } };
       // Jobs run on the Pothub server when they can, so they finish even if the app is closed. If the server cannot take the job, it runs on this device.
       let out: Awaited<ReturnType<typeof generateText>>;
       if (o.job && backgroundOn() && backgroundAvailable()) {
