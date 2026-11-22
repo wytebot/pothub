@@ -499,15 +499,23 @@ input[type='search'] { width: 100%; }
 .cc-rail { z-index: 6; }
 .cc-stage .cv { touch-action: none; }
 
-/* Compact website favicon citations for researched answers */
+/* Compact researched-source favicon strip and expandable page list. */
 .citation-favicon{width:16px;height:16px;vertical-align:-3px;border-radius:3px;display:inline-block;margin:0 2px;}
-
-/* Source sites under a web-researched answer: each is a web icon with the site name, in a rounded chip */
-.web-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
-.web-source { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 10px 5px 8px; border: 1px solid #2f2f2f; border-radius: 999px; background: #1b1b1b; color: #b9cfee; font-size: 12.5px; line-height: 1; text-decoration: none; }
-.web-source svg { flex: none; }
-.web-source span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.web-source:hover, .web-source:focus-visible { border-color: #4a6a9a; color: #dbe8ff; }
+.web-sources { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 0; }
+.web-sources-drawer { margin-top:10px; position:relative; width:max-content; max-width:100%; }
+.web-sources-button { display:flex; width:max-content; max-width:100%; align-items:center; gap:7px; padding:4px 2px; border:0; background:transparent; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; list-style:none; }
+.web-sources-button::-webkit-details-marker { display:none; }
+.source-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:999px; background:var(--surface2); font-size:11px; padding:0 4px; }
+.source-favicon-strip { display:inline-flex; align-items:center; }
+.source-favicon-strip img { width:17px; height:17px; object-fit:contain; border-radius:4px; margin-right:-3px; background:var(--surface); border:1px solid var(--border); }
+.web-sources-list { display:flex; flex-direction:column; gap:2px; padding:7px; margin-top:6px; width:min(420px, calc(100vw - 32px)); max-height:42vh; overflow:auto; border:1px solid var(--border); border-radius:12px; background:var(--surface); box-shadow:0 10px 30px rgba(0,0,0,.25); }
+.web-source-row { display:flex; align-items:center; gap:9px; padding:9px; border-radius:8px; text-decoration:none; color:var(--text); min-width:0; }
+.web-source-row:hover, .web-source-row:focus-visible { background:var(--surface2); }
+.web-source-row img { width:18px; height:18px; object-fit:contain; flex:none; border-radius:3px; }
+.web-source-copy { display:flex; flex-direction:column; min-width:0; flex:1; gap:2px; }
+.web-source-copy strong { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.web-source-copy small { color:var(--muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.web-source-row > svg { color:var(--muted); flex:none; }
 
 /* Codelab: focused GitHub-native coding workspace */
 .codelab .page-head h1 { display:flex; align-items:center; gap:10px; }
