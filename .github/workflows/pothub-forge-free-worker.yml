@@ -1,0 +1,165 @@
+name: Pothub Forge Build Worker
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Public GitHub repository owner/name
+        required: true
+        type: string
+      ref:
+        description: Branch, tag, or commit (optional)
+        required: false
+        type: string
+      project_type:
+        description: Project framework
+        required: true
+        type: choice
+        options: [auto, node, python, go, rust, flutter, android, react-native, capacitor]
+        default: auto
+      output:
+        description: Requested output
+        required: true
+        type: choice
+        options: [auto, web, apk, apk-and-aab]
+        default: auto
+permissions:
+  contents: read
+jobs:
+  build:
+    concurrency:
+      group: pothub-forge-builds
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Validate repository input
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+        run: |
+          python - <<'PY'
+          import os,re,sys
+          if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', os.environ['REPOSITORY'].strip()):
+            sys.exit('Repository must be owner/name (public GitHub repository only).')
+          PY
+      - name: Checkout source (read-only, no persisted credentials)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          path: source
+          persist-credentials: false
+      - name: Detect project and target
+        id: detect
+        run: |
+          type='${{ inputs.project_type }}'; target='${{ inputs.output }}'
+          if [ "$type" = auto ]; then
+            if [ -f source/pubspec.yaml ]; then type=flutter
+            elif [ -f source/package.json ]; then
+              type=node
+              if grep -q '"react-native"' source/package.json; then type=react-native; elif grep -q '"@capacitor/' source/package.json; then type=capacitor; fi
+            elif [ -f source/android/gradlew ] || [ -f source/gradlew ]; then type=android
+            else type=unknown; fi
+          fi
+          if [ "$type" = unknown ]; then echo 'Unsupported or unrecognized project structure.'; exit 1; fi
+          if [ "$target" = auto ]; then
+            if [ "$type" = node ] && [ ! -d source/android ] && [ ! -f source/capacitor.config.ts ] && [ ! -f source/capacitor.config.js ] && [ ! -f source/capacitor.config.json ]; then target=web
+            elif [ "$type" = node ]; then target=apk
+            elif [ "$type" = flutter ] || [ "$type" = android ] || [ "$type" = react-native ] || [ "$type" = capacitor ]; then target=apk-and-aab
+            else target=web; fi
+          fi
+          if [ "$target" = web ] && [ "$type" != node ]; then echo 'Web output is only supported for Node-based web projects.'; exit 1; fi
+          if [ "$target" != web ] && [ "$type" = node ]; then echo 'APK output is not supported for Node-only web projects.'; exit 1; fi
+          echo "type=$type" >> "$GITHUB_OUTPUT"; echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "Detected framework: $type; output: $target"
+      - name: Setup Node
+        if: steps.detect.outputs.type == 'node' || steps.detect.outputs.type == 'react-native' || steps.detect.outputs.type == 'capacitor'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build web output
+        if: steps.detect.outputs.target == 'web'
+        working-directory: source
+        run: |
+          test -f package.json || { echo 'Web build requires package.json'; exit 1; }
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund
+          elif [ -f pnpm-lock.yaml ]; then corepack enable; pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then corepack enable; yarn install --immutable
+          else npm install --no-audit --no-fund; fi
+          npm test --if-present
+          npm run typecheck --if-present
+          npm run lint --if-present
+          npm run build
+          mkdir -p ../artifacts/web
+          if [ -d dist ]; then cp -a dist/. ../artifacts/web/; elif [ -d build ]; then cp -a build/. ../artifacts/web/; elif [ -d out ]; then cp -a out/. ../artifacts/web/; else echo 'Build succeeded but no common web output directory found (dist/build/out).'; exit 1; fi
+      - name: Upload web artifact
+        if: steps.detect.outputs.target == 'web'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pothub-web-build
+          path: artifacts/web
+          if-no-files-found: error
+          retention-days: 7
+      - name: Install JS dependencies for Android wrappers
+        if: steps.detect.outputs.type == 'react-native' || steps.detect.outputs.type == 'capacitor'
+        working-directory: source
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+          if [ '${{ steps.detect.outputs.type }}' = 'capacitor' ]; then npx cap sync android; fi
+      - name: Setup Java for Android
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Android SDK
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        uses: android-actions/setup-android@v3
+      - name: Setup Flutter
+        if: steps.detect.outputs.type == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build Flutter APK and AAB
+        if: steps.detect.outputs.type == 'flutter' && (steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab')
+        working-directory: source
+        run: |
+          flutter pub get
+          flutter analyze --no-pub
+          flutter test --no-pub
+          flutter build apk --debug --no-pub
+          mkdir -p ../artifacts
+          cp build/app/outputs/flutter-apk/*.apk ../artifacts/
+          if flutter build apk --release --no-pub; then cp build/app/outputs/flutter-apk/*release*.apk ../artifacts/ 2>/dev/null || true; else echo 'Release APK build failed; debug APK is retained.'; fi
+          if [ '${{ inputs.output }}' = 'apk-and-aab' ] || [ '${{ inputs.output }}' = 'auto' ]; then if flutter build appbundle --release --no-pub; then cp build/app/outputs/bundle/release/*.aab ../artifacts/ 2>/dev/null || true; else echo 'AAB build failed; see build logs. APK artifact is retained.'; fi; fi
+          find ../artifacts -name '*.apk' -type f -size +0c | grep -q . || { echo 'APK missing'; exit 1; }
+      - name: Build native Android Gradle APK and AAB
+        if: steps.detect.outputs.type != 'flutter' && (steps.detect.outputs.type == 'android' || steps.detect.outputs.type == 'react-native' || steps.detect.outputs.type == 'capacitor') && (steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab')
+        run: |
+          cd source
+          if [ -d android ]; then cd android; elif [ -f gradlew ]; then :; else echo 'No Android Gradle project found'; exit 1; fi
+          chmod +x gradlew
+          ./gradlew test assembleDebug --no-daemon
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          find . -path '*/build/outputs/apk/debug/*.apk' -type f -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \;
+          if ./gradlew assembleRelease --no-daemon; then find . -path '*/build/outputs/apk/release/*.apk' -type f -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \; || true; else echo 'Release APK build failed; debug APK retained.'; fi
+          if [ '${{ inputs.output }}' = 'apk-and-aab' ] || [ '${{ inputs.output }}' = 'auto' ]; then if ./gradlew bundleRelease --no-daemon; then find . -path '*/build/outputs/bundle/release/*.aab' -type f -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \; || true; else echo 'AAB build failed; debug APK retained.'; fi; fi
+          find "$GITHUB_WORKSPACE/artifacts" -name '*.apk' -type f -size +0c | grep -q . || { echo 'APK artifact missing'; exit 1; }
+      - name: Upload Android artifacts
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pothub-android-build
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Unsupported project
+        if: steps.detect.outputs.type == 'unknown'
+        run: echo 'No supported framework detected. Build was not attempted.'
+      - name: Job summary
+        if: always()
+        run: |
+          echo '## Pothub Forge Build' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Source: public repository' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Outputs: APK/AAB or web artifact, according to request' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Android release outputs are unsigned unless the project itself configures signing.' >> "$GITHUB_STEP_SUMMARY"
