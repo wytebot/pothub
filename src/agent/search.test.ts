@@ -9,3 +9,12 @@ describe('smart web research intent', () => {
     for (const prompt of ['Write a birthday poem', 'Explain photosynthesis', 'Make this paragraph clearer', 'Summarize this attached document', 'What is a closure in JavaScript?', 'Explain source code control']) expect(shouldAutoWebSearch(prompt)).toBe(false);
   });
 });
+
+describe('web research for implementation requests', () => {
+  it('searches for current implementation and debugging help', () => {
+    for (const prompt of ['Fix my React app build error', 'Implement OAuth in my website', 'Upgrade Firebase integration in this app', 'Deploy my TypeScript backend']) expect(shouldAutoWebSearch(prompt)).toBe(true);
+  });
+  it('does not research ordinary conversational or stable conceptual prompts', () => {
+    for (const prompt of ['Tell me a joke', 'Explain photosynthesis', 'What is a closure in JavaScript?', 'Write a birthday poem']) expect(shouldAutoWebSearch(prompt)).toBe(false);
+  });
+});

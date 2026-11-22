@@ -170,10 +170,10 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   // Nothing about the search is added to the reply text. When it was used, the source sites are shown under the
   // answer (`sources`); when it was not (nothing found, or it failed), the answer is simply written without it.
   let sent = prompt; let webBlock = ''; let webSources: WebSource[] = [];
-  if (shouldAutoWebSearch(prompt) && !wanted.code && !o.files.length) {
+  if (shouldAutoWebSearch(prompt)) {
     log.step('Searching the web…');
     try {
-      const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const found = await webResearch(q);
+      const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const found = await webResearch(q, (stage) => log.step(stage));
       if (found.hits.length) {
         webBlock = resultsBlock(q, found, today()); webSources = found.sources;
         sent = `${prompt}

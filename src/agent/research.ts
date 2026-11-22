@@ -16,18 +16,21 @@ export const normUrl = (u: string): string => {
 
 const RECENT = /\b(latest|news|updates?|updated|today|tonight|currently|current|now|recent(ly)?|this (week|month|year)|new|newest|releases?|released|price|prices|score|scores|weather|breaking|announce[ds]?|trending|20\d\d)\b/i;
 
-/** Build only intent-matched query variants; avoid broad documentation/troubleshooting queries unless requested. */
+/** Query plan for deep research: original question, targeted variants, official documentation
+ * when technical, and troubleshooting evidence when the request indicates a failure. */
 export function queryVariants(prompt: string): SearchVariant[] {
   const q = prompt.replace(/\s+/g, ' ').trim().slice(0, 200);
   if (!q) return [];
   const recent = RECENT.test(q);
-  const technical = /\b(api|sdk|github|error|exception|build|compile|typescript|react|android|capacitor|python|framework|library|package|documentation|docs|debug|code)\b/i.test(q);
-  const docsIntent = /\b(official documentation|docs|documentation|api reference|how to use|installation guide)\b/i.test(q);
-  const troubleshootIntent = /\b(error|exception|failed|failure|bug|debug|fix|troubleshoot|broken)\b/i.test(q);
-  const out: SearchVariant[] = recent ? [{ q, fresh: 'm' }, { q }] : [{ q }];
-  if (technical && docsIntent && !/\bofficial documentation\b/i.test(q)) out.push({ q: `${q} official documentation`.slice(0, 200) });
-  if (technical && troubleshootIntent && !/\bsolution|troubleshooting\b/i.test(q)) out.push({ q: `${q} solution troubleshooting`.slice(0, 200) });
-  return out.slice(0, 3);
+  const technical = /\b(api|sdk|github|error|exception|build|compile|typescript|react|android|capacitor|python|framework|library|package|documentation|docs|debug|code|app|application|website|backend|frontend|deploy|terminal|npm|firebase|firestore|vercel)\b/i.test(q);
+  const docsIntent = /\b(official documentation|docs|documentation|api reference|how to use|installation guide|implement|build|create|develop|configure|setup|set up|install|integrate|wire|upgrade|fix|debug|troubleshoot|deploy|production)\b/i.test(q);
+  const troubleshootIntent = /\b(error|exception|failed|failure|bug|debug|fix|troubleshoot|broken|not working|doesn't work|cannot|can't)\b/i.test(q);
+  const variants: SearchVariant[] = [{ q, ...(recent ? { fresh: 'm' as const } : {}) }];
+  if (recent) variants.push({ q, fresh: 'y' });
+  if (technical && docsIntent) variants.push({ q: `${q} official documentation current API`.slice(0, 200) });
+  if (technical && troubleshootIntent) variants.push({ q: `${q} error solution issue tracker troubleshooting`.slice(0, 200) });
+  if (technical && !troubleshootIntent) variants.push({ q: `${q} best practices implementation examples`.slice(0, 200) });
+  return variants.slice(0, 5);
 }
 
 /** Interleaves several result lists, drops repeated pages, and keeps at most `perHost` per site. */
@@ -77,12 +80,14 @@ export function applyCrawl(hits: WebHit[], pages: CrawledPage[]): WebHit[] {
   return [...merged, ...deep];
 }
 
-/** One entry per site, in rank order, for everything the model was given. */
+/** Page-level sources, deduplicated by normalized URL and kept in research rank order. */
 export function buildSources(hits: WebHit[], max = 8): WebSource[] {
   const out: WebSource[] = []; const seen = new Set<string>();
   for (const h of hits) {
-    const host = hostOf(h.url); if (!host || seen.has(host) || !/^https?:\/\//i.test(h.url)) continue;
-    seen.add(host); out.push({ url: h.url, title: (h.title || host).slice(0, 120), host }); if (out.length >= max) break;
+    const host = hostOf(h.url); if (!host || !/^https?:\/\//i.test(h.url)) continue;
+    const normalized = h.url.replace(/#.*$/, '').replace(/\/$/, '').toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized); out.push({ url: h.url, title: (h.title || host).slice(0, 120), host }); if (out.length >= max) break;
   }
   return out;
 }

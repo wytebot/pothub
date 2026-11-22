@@ -64,11 +64,12 @@ describe('crawl results', () => {
 });
 
 describe('source sites shown under an answer', () => {
-  it('lists each site once, in rank order, with the www removed', () => {
+  it('lists researched pages in rank order, deduplicated by URL, with the www removed from hosts', () => {
     const s = buildSources([hit('https://www.bbc.com/a', 'BBC A'), hit('https://bbc.com/b', 'BBC B'), hit('https://reuters.com/c', 'Reuters'), hit('ftp://x.org/d', 'ftp'), hit('https://acme.com/e', '')]);
-    expect(s.map((x) => x.host)).toEqual(['bbc.com', 'reuters.com', 'acme.com']);
+    expect(s.map((x) => x.host)).toEqual(['bbc.com', 'bbc.com', 'reuters.com', 'acme.com']);
     expect(s[0]).toEqual({ url: 'https://www.bbc.com/a', title: 'BBC A', host: 'bbc.com' });
-    expect(s[2].title).toBe('acme.com');
+    expect(s[1].url).toBe('https://bbc.com/b');
+    expect(s[3].title).toBe('acme.com');
   });
   it('is empty when there are no results, so nothing is shown', () => {
     expect(buildSources([])).toEqual([]);
