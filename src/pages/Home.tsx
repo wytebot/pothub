@@ -80,14 +80,15 @@ function historyOf(ms: Msg[]): ChatTurn[] {
   return turns.slice(-maxPairs * 2);
 }
 /** On explicit continuity requests, recall relevant recent chats and recover saved artifacts locally. */
-async function recallPreviousChats(prompt: string, currentId: string): Promise<ChatTurn[]> {
+async function recallPreviousChats(prompt: string, currentId: string, log?: RunLog): Promise<ChatTurn[]> {
   if (!/\b(continue|previous|earlier|last time|same project|that project|the app|our app|the code|generated file|the zip|we discussed|we were|resume|pick up|recover|update it|fix it again)\b/i.test(prompt)) return [];
   try {
+    log?.step('Searching previous chats and generated files for continuity…');
     const chats=(await allChats()).filter(c=>c.id!==currentId&&c.messages?.length).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,12);
     const terms=new Set(prompt.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3));
     const ranked=chats.map(c=>{const txt=`${c.title} ${c.messages.map(m=>m.text||'').join(' ')}`.toLowerCase();let score=0;for(const w of terms)if(txt.includes(w))score++;return {c,score};}).sort((a,b)=>b.score-a.score||b.c.updatedAt-a.c.updatedAt).slice(0,3);
     const result:ChatTurn[]=[];let budget=11000;
-    for(const {c} of ranked){result.push({role:'user',text:`[Relevant earlier Pothub chat: ${c.title}]`});for(const m of c.messages.filter(m=>m.state==='done'&&m.text).slice(-5)){if(budget<=0)break;const content=m.text.slice(-Math.min(2500,budget));result.push({role:m.role==='assistant'?'assistant':'user',text:content});budget-=content.length;if(m.role==='assistant'&&m.fileOut&&budget>500){const artifact=await getArtifact(m.id);if(artifact){let recovered='';if(/\.zip$/i.test(artifact.name)){try{const entries=unzipSync(new Uint8Array(await artifact.blob.arrayBuffer()));recovered=Object.entries(entries).filter(([n,b])=>!n.endsWith('/')&&b.length<200000&&!b.some(x=>x===0)).map(([n,b])=>`--- ${n} ---\n${strFromU8(b).slice(0,1600)}`).join('\n\n').slice(0,Math.min(3500,budget));}catch{}}else if(artifact.blob.size<100000)recovered=(await artifact.blob.text()).slice(0,Math.min(3500,budget));if(recovered){result.push({role:'assistant',text:`[Recovered contents from previous generated artifact: ${artifact.name}]\n${recovered}`});budget-=recovered.length;}}}}if(budget<=0)break;}
+    for(const {c} of ranked){log?.step(`Checking earlier chat: ${c.title.slice(0,72)}…`);result.push({role:'user',text:`[Relevant earlier Pothub chat: ${c.title}]`});for(const m of c.messages.filter(m=>m.state==='done'&&m.text).slice(-5)){if(budget<=0)break;const content=m.text.slice(-Math.min(2500,budget));result.push({role:m.role==='assistant'?'assistant':'user',text:content});budget-=content.length;if(m.role==='assistant'&&m.fileOut&&budget>500){log?.step(`Recovering generated file: ${m.fileOut.name}…`);const artifact=await getArtifact(m.id);if(artifact){let recovered='';if(/\.zip$/i.test(artifact.name)){try{const entries=unzipSync(new Uint8Array(await artifact.blob.arrayBuffer()));recovered=Object.entries(entries).filter(([n,b])=>!n.endsWith('/')&&b.length<200000&&!b.some(x=>x===0)).map(([n,b])=>`--- ${n} ---\n${strFromU8(b).slice(0,1600)}`).join('\n\n').slice(0,Math.min(3500,budget));}catch{}}else if(artifact.blob.size<100000)recovered=(await artifact.blob.text()).slice(0,Math.min(3500,budget));if(recovered){log?.step(`Recovered readable content from ${artifact.name}`);result.push({role:'assistant',text:`[Recovered contents from previous generated artifact: ${artifact.name}]\n${recovered}`});budget-=recovered.length;}else log?.step(`No readable content recovered from ${artifact.name}`);}}}if(budget<=0)break;}
     return result;
   }catch{return [];}
 }
@@ -301,7 +302,7 @@ export function Home() {
         return;
       }
       // Recall prior chats and recover locally stored generated files for continuity requests.
-      const recalled = await recallPreviousChats(prompt, idRef.current);
+      const recalled = await recallPreviousChats(prompt, idRef.current, log);
       const contextualHistory = recalled.length ? [...recalled, ...history] : history;
       // Text-only routing: every prompt is handled by a text model, including legacy media prompts.
       let last = 0;
