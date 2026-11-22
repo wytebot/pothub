@@ -7,6 +7,8 @@ import { ENDPOINTS, authHeaders } from './providerInfo';
 export interface TextModel { id: string; provider: ProviderId; name: string; speed: 1 | 2 | 3; quality: 1 | 2 | 3; }
 export interface ChatTurn { role: 'user' | 'assistant'; text: string; }
 export interface TextRequest { model: string; system: string; history: ChatTurn[]; prompt: string; files: Attachment[]; signal?: AbortSignal; /** longest single reply in tokens */ maxTokens?: number; /** called with everything written so far while the answer arrives */ onText?: (soFar: string) => void; }
+/** Longest reply to ask for when the job is code work (a whole project comes back as files). Left unset for OpenAI-style providers, whose defaults already allow a long reply and whose model caps differ. */
+export const codeMaxTokens = (p: ProviderId): number | undefined => (p === 'anthropic' ? 32_000 : p === 'gemini' ? 32_768 : undefined);
 export interface TextResult { text: string; /** true when the provider still stopped at its length limit after every continuation */ truncated: boolean; unread: string[]; }
 export interface ListedLike { id: string; methods: string[]; /** the person's backend fixes this model, so no filtering or ranking applies */ pinned?: boolean; }
 
@@ -141,7 +143,7 @@ async function compatRound(p: Compat, secret: string, r: TextRequest, messages: 
 
 interface Turn { role: 'user' | 'assistant'; content: string; }
 async function anthropicRound(secret: string, r: TextRequest, messages: Turn[], stream: boolean, onDelta: (t: string) => void): Promise<Round> {
-  const res = await call(ENDPOINTS.anthropic.chat, { method: 'POST', signal: r.signal, headers: { ...authHeaders('anthropic', secret), 'Content-Type': 'application/json' }, body: JSON.stringify({ model: r.model, max_tokens: r.maxTokens ?? 8192, system: r.system, messages, ...(stream ? { stream: true } : {}) }) }, secret);
+  const res = await call(ENDPOINTS.anthropic.chat, { method: 'POST', signal: r.signal, headers: { ...authHeaders('anthropic', secret), 'Content-Type': 'application/json' }, body: JSON.stringify({ model: r.model, max_tokens: r.maxTokens ?? 16384, system: r.system, messages, ...(stream ? { stream: true } : {}) }) }, secret);
   if (!res.ok) throw await failure(res, secret);
   let out = ''; let stop = '';
   const take = (j: { type?: string; delta?: { type?: string; text?: string; stop_reason?: string | null }; content?: { type?: string; text?: string }[]; stop_reason?: string | null }) => {
