@@ -1,5 +1,5 @@
 import type { ProviderErr } from '../models/providers';
-import { generateText, rankText, type ChatTurn, type TextModel } from '../models/text';
+import { codeMaxTokens, generateText, rankText, type ChatTurn, type TextModel } from '../models/text';
 import { textOf, type Attachment } from './attachments';
 import { buildFile, systemPrompt, wantedOutput, type OutFile, type Wanted } from './deliver';
 import { buildBundle, bundleSummary } from './bundle';
@@ -234,7 +234,7 @@ ${webBlock}`;
       // final writer receives the complete set of findings, not a truncated prefix.
       const chunked = files.length ? await chunkLargeTextFiles(files, model.provider, secret, model, signal, log, forceSplit) : { files, evidence: [] as string[], notes: [] as string[] };
       notes.push(...chunked.notes);
-      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, onText: (t: string) => { if (!wanted.file) { partial = t; o.onText(t); } } };
+      const req = { model: model.id, system: systemPrompt(wanted, { today: today(), hasFiles: files.length > 0, web: !!webBlock }), history, prompt: sent, files: chunked.files, signal, ...(wanted.code || wanted.format === 'zip' ? { maxTokens: codeMaxTokens(model.provider) } : {}), onText: (t: string) => { if (!wanted.file) { partial = t; o.onText(t); } } };
       // Jobs run on the Pothub server when they can, so they finish even if the app is closed. If the server cannot take the job, it runs on this device.
       let out: Awaited<ReturnType<typeof generateText>>;
       if (o.job && backgroundOn() && backgroundAvailable() && !isGatewayRef(secret)) {
