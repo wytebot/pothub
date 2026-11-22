@@ -85,3 +85,7 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Backend gateway `api/agent/[action].js` + `api/_lib/agent.js`: closed unless `POTHUB_ALLOWED_EMAILS` matches the verified Google email; forwards only chat/model-list calls to the fixed provider address; always substitutes `POTHUB_MODEL`; never returns the key. Pothub's web and Android app origins are allowed by default.
 - App: a backend connection is a reference (`src/models/gatewayRef.ts`) that `call()` sends through `src/models/gateway.ts`; the backend's model is the only model offered (`pinned` in the catalog). Keys on the device move under "Advanced"; `VITE_ALLOW_DEVICE_KEYS=false` removes that option. Backend connections skip background jobs on the API server.
 - Privacy text updated. Tests: `api/_lib/agent.test.js`, `src/models/gatewayRef.test.ts`. Not run against a full install here (no network): run `npm test` and `npm run build` before shipping.
+
+## Continuity artifact recovery timeline
+- Continuity requests now publish live timeline stages while searching previous chats and locally saved generated artifacts, checking earlier chats, recovering artifact contents, and reporting when readable contents cannot be recovered.
+- Uses the existing compact favicon Sources drawer for web research answers: small site icons below the response, expandable page-level links.
