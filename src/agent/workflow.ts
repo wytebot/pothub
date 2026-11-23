@@ -13,7 +13,7 @@ import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, quickCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
 import { NotStarted, addPending, backgroundAvailable, backgroundOn, generateInBackground } from './background';
-import { resultsBlock, webResearch, shouldAutoWebSearch, type WebSource } from './search';
+import { resultsBlock, webResearch, readPromptLinks, extractPromptUrls, shouldAutoWebSearch, type WebSource } from './search';
 import { readyFiles } from './readers';
 import { notifyDone } from '../notify';
 import { budgetFor, groupByBudget, mapLimit, splitTextIntoChunks, withRetry } from './chunking';
@@ -200,22 +200,25 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   // Nothing about the search is added to the reply text. When it was used, the source sites are shown under the
   // answer (`sources`); when it was not (nothing found, or it failed), the answer is simply written without it.
   let sent = prompt; let webBlock = ''; let webSources: WebSource[] = [];
-  if (shouldAutoWebSearch(prompt)) {
-    log.step('Searching the web…');
+  if (shouldAutoWebSearch(prompt) || extractPromptUrls(prompt).length) {
+    log.step(extractPromptUrls(prompt).length ? 'Reading supplied links…' : 'Searching the web…');
     try {
-      const q = prompt.replace(/\s+/g, ' ').slice(0, 200); const found = await webResearch(q, (stage) => log.step(stage));
+      const q = prompt.replace(/\s+/g, ' ').slice(0, 200);
+      const found = extractPromptUrls(prompt).length
+        ? await readPromptLinks(prompt, (stage) => log.step(stage))
+        : await webResearch(q, (stage) => log.step(stage));
       if (found.hits.length) {
         webBlock = resultsBlock(q, found, today()); webSources = found.sources;
         sent = `${prompt}
 
-Use the web results below for current facts. Answer directly and concisely. Do not add a sources list or link icons; do not invent facts.
+Use the page content below as primary source material. Read it carefully and answer with deep understanding of the link, including details, context, structure, implications, and any linked subpages that were crawled. Clearly state if a page could not be accessed; never claim to have read inaccessible content. Do not invent facts.
 
 ---
 ${webBlock}`;
         const read = found.hits.filter((h) => h.text).length; const deep = found.hits.filter((h) => h.via).length;
-        log.say('ok', 'web search', `${found.hits.length} result(s), ${read} page(s) read${deep ? `, ${deep} followed from those sites` : ''}${found.updates.length ? `, ${found.updates.length} recent update(s)` : ''}`);
+        log.say('ok', extractPromptUrls(prompt).length ? 'link reading' : 'web search', `${found.hits.length} page(s), ${read} with readable text${deep ? `, ${deep} followed from supplied links` : ''}`);
       }
-    } catch (e) { log.say('warn', 'web search failed', msg(e)); }
+    } catch (e) { log.say('warn', 'link reading/web search failed', msg(e)); }
   }
   // Every file is made readable on this device first (documents, sheets, slides, archives, unknown formats...), before any provider is chosen.
   let files = o.files;

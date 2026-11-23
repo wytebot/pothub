@@ -26,6 +26,29 @@ export const webRemaining = () => Infinity;
  * best results: their page text and dates, a few relevant pages from the same sites, and each site's newest feed items.
  * `sources` lists the sites that contributed, for showing under the answer. Throws only if every search failed.
  */
+
+/** Extracts explicit URLs from a prompt and reads the linked pages directly before answering. */
+export function extractPromptUrls(prompt: string): string[] {
+  const found = new Set<string>();
+  const re = /https?:\/\/[^\s<>"'`]+/gi;
+  for (const match of prompt.matchAll(re)) {
+    const raw = match[0].replace(/[,.!?;\]}]+$/g, '');
+    try { const u = new URL(raw); if (u.protocol === 'http:' || u.protocol === 'https:') found.add(u.toString()); } catch { /* ignore malformed links */ }
+  }
+  return [...found].slice(0, 8);
+}
+
+export async function readPromptLinks(prompt: string, onStage?: (stage: string) => void): Promise<WebResearch> {
+  const urls = extractPromptUrls(prompt);
+  if (!urls.length) return { hits: [], updates: [], sources: [] };
+  onStage?.(`Reading ${urls.length} link(s) directly and following relevant pages…`);
+  const c = await request<{ pages?: CrawledPage[]; updates?: WebUpdate[] }>('/api/crawl', { urls, query: prompt.slice(0, 300), depth: 2 }, 25_000);
+  const pages = Array.isArray(c.pages) ? c.pages : [];
+  const hits: WebHit[] = pages.map(p => ({ title: p.title || p.url, url: p.finalUrl || p.url, snippet: p.description || '', text: p.text, published: p.published, updated: p.updated, site: p.site, via: p.depth === 2 ? p.via : undefined }));
+  onStage?.(`Read ${pages.length} page(s) from supplied link(s)`);
+  return { hits, updates: Array.isArray(c.updates) ? c.updates : [], sources: buildSources(hits) };
+}
+
 export async function webResearch(query: string, onStage?: (stage: string) => void): Promise<WebResearch> {
   const variants = queryVariants(query);
   onStage?.(`Deep research plan: ${variants.length} targeted searches`);

@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithRedirect, getRedirectResult, signOut as fbSignOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as fbSignOut, type User } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { auth } from '../firebase';
 
@@ -8,6 +8,7 @@ const toMe = (u: User | null): Me | null => (u ? { uid: u.uid, name: u.displayNa
 
 const MESSAGES: Record<string, string> = {
   'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site, then try again.',
+  'auth/popup-closed-by-user': 'The Google sign-in window was closed before sign-in completed. Open it again and finish selecting your account.',
   'auth/internal-error': 'Google sign-in reached Firebase but failed internally. Check Firebase Authorized domains and the Google OAuth redirect URI for pothub-self.vercel.app, then retry.',
   'auth/popup-closed-by-user': '',
   'auth/cancelled-popup-request': '',
@@ -44,18 +45,26 @@ export async function signInWithGoogle(): Promise<SignInResult> {
       if (!idToken) throw Object.assign(new Error('no id token'), { code: 'auth/missing-token' });
       await signInWithCredential(auth, GoogleAuthProvider.credential(idToken, r.credential?.accessToken));
     } else {
-      // Use a top-level browser navigation instead of a popup. This is reliable in
-      // mobile browsers/PWAs where popup windows may be silently suppressed.
+      // A popup returns the Firebase credential immediately and avoids the mobile
+      // redirect round-trip that was intermittently returning without a session.
       const p = new GoogleAuthProvider();
       p.setCustomParameters({ prompt: 'select_account' });
-      sessionStorage.setItem('auth.redirectPending', '1');
-      await signInWithRedirect(auth, p);
-      // The browser leaves this page; Firebase completes the session on return.
-      return { ok: true };
+      try {
+        await signInWithPopup(auth, p);
+        return { ok: true };
+      } catch (popupError) {
+        const popupCode = codeOf(popupError);
+        // If the browser explicitly blocks popups, use the redirect path as a
+        // fallback. Cancellation and provider/config errors should not redirect.
+        if (popupCode !== 'auth/popup-blocked') throw popupError;
+        try { sessionStorage.setItem('auth.redirectPending', '1'); } catch { /* storage may be unavailable */ }
+        await signInWithRedirect(auth, p);
+        return { ok: true };
+      }
     }
     return { ok: true };
   } catch (e) {
-    if (!Capacitor.isNativePlatform()) sessionStorage.removeItem('auth.redirectPending');
+    if (!Capacitor.isNativePlatform()) { try { sessionStorage.removeItem('auth.redirectPending'); } catch { /* storage may be unavailable */ } }
     const c = codeOf(e);
     if (c in MESSAGES) return { ok: false, message: MESSAGES[c] };
     if (c === 'cancelled') return { ok: false, message: '' };
