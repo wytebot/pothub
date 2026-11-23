@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import { browserLocalPersistence, getAuth, indexedDBLocalPersistence, initializeAuth, type Auth } from 'firebase/auth';
+import { browserLocalPersistence, browserPopupRedirectResolver, getAuth, indexedDBLocalPersistence, initializeAuth, type Auth } from 'firebase/auth';
 
 /** Public web-app identifiers (safe to ship; access is controlled by Firebase rules and authorised domains). Override with VITE_FIREBASE_*. */
 const env = import.meta.env as Record<string, string | undefined>;
@@ -24,12 +24,18 @@ export const firebaseConfig = {
 export const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // In the Android WebView the popup/redirect resolver does not exist, so auth is created without it and only
-// receives credentials from the native Google picker. In browsers getAuth() wires the popup resolver.
+// receives credentials from the native Google picker. In browsers the resolver MUST be passed explicitly:
+// initializeAuth() (unlike getAuth()) does not add it, and without it signInWithRedirect()/getRedirectResult()
+// throw auth/argument-error, so Google sign-in never even leaves the page.
 export const auth: Auth = (() => {
   // Explicit local persistence keeps Google sign-in across browser/PWA restarts;
   // Firebase restores it automatically and refreshes tokens until revoked/expired.
-  try { return initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] }); }
-  catch { return getAuth(app); }
+  try {
+    return initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+      ...(Capacitor.isNativePlatform() ? {} : { popupRedirectResolver: browserPopupRedirectResolver }),
+    });
+  } catch { return getAuth(app); }
 })();
 
 /** Analytics is optional and web-only; it must never break startup (blocked by privacy tools, http, native WebView). */

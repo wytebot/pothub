@@ -8,11 +8,13 @@ const toMe = (u: User | null): Me | null => (u ? { uid: u.uid, name: u.displayNa
 
 const MESSAGES: Record<string, string> = {
   'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site, then try again.',
-  'auth/internal-error': 'Sign-in did not complete. Try again.',
+  'auth/internal-error': 'Google sign-in reached Firebase but failed internally. Check Firebase Authorized domains and the Google OAuth redirect URI for pothub-self.vercel.app, then retry.',
   'auth/popup-closed-by-user': '',
   'auth/cancelled-popup-request': '',
   'auth/network-request-failed': 'No connection. Check your internet and try again.',
-  'auth/unauthorized-domain': 'Google sign-in is not enabled for this site yet. Add pothub-self.vercel.app to Firebase Authorized domains and add its /__/auth/handler URL to the Google OAuth client.',
+  'auth/unauthorized-domain': 'This website is not authorized for Google sign-in. In Firebase Authentication, add pothub-self.vercel.app under Authorized domains. In Google Cloud OAuth, ensure https://pothub-self.vercel.app/__/auth/handler is an authorized redirect URI for the web OAuth client.',
+  'auth/argument-error': 'Google sign-in is not set up correctly in this build (missing redirect resolver). Please update the app.',
+  'auth/web-storage-unsupported': 'This browser is blocking storage that sign-in needs. Allow cookies and site data for this site, or leave private mode, then try again.',
   'auth/invalid-api-key': 'Firebase rejected this app configuration. Check the Firebase web app API key.',
   'auth/operation-not-supported-in-this-environment': 'This browser could not start Google sign-in. Open Pothub in Chrome and try again.',
   'auth/operation-not-allowed': 'Google sign-in is temporarily unavailable. Please contact support.',
@@ -59,7 +61,8 @@ export async function signInWithGoogle(): Promise<SignInResult> {
     if (c === 'cancelled') return { ok: false, message: '' };
     if (c === 'auth/missing-token') return { ok: false, message: 'Google did not complete sign-in. Please try again or update the app.' };
     if (/DEVELOPER_ERROR|developer error|ApiException: 10/i.test(String((e as Error)?.message))) return { ok: false, message: 'Google sign-in is not available in this version of the app. Please update the app or contact support.' };
-    return { ok: false, message: 'Sign-in did not complete. Try again.' };
+    console.error('[Pothub Google sign-in]', { code: c, message: e instanceof Error ? e.message : String(e) });
+    return { ok: false, message: `Google sign-in failed (${c || 'unknown error'}). Check the Firebase authorized domain and Google OAuth redirect settings, then try again.` };
   }
 }
 
@@ -145,8 +148,11 @@ export function useMe(): Me | null | undefined {
         if (u) {
           sessionStorage.removeItem('auth.redirectPending');
           setMe(toMe(u));
-        } else if (sessionStorage.getItem('auth.redirectPending') !== '1') {
-          setMe(null);
+        } else {
+          // The redirect came back without a user (cancelled, or Back was pressed on Google's page).
+          // Clear the pending flag and show the signed-out page instead of waiting for the 45 s timeout.
+          sessionStorage.removeItem('auth.redirectPending');
+          setMe(toMe(auth.currentUser));
         }
       });
     }
