@@ -8,6 +8,7 @@ import { FNS } from '../models/providerInfo';
 import { uid } from '../storage/db';
 import { RunLog } from '../agent/log';
 import { FadeStatus } from '../ui/FadeStatus';
+import { Select } from '../ui/Select';
 import { Sources } from '../ui/Sources';
 import { nameFromText } from '../agent/fileNames';
 import { Markdown } from '../ui/Markdown';
@@ -463,7 +464,7 @@ export function Home() {
               onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
               onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !coarse) { e.preventDefault(); send(); } }} />
-            <div className="composer-model-row"><span className="composer-model-caption">Model</span><select aria-label="Choose model" value={modelChoice} onChange={(e) => { const value = e.target.value; setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }}><option value="auto">Auto · smart routing</option>{backendModels.map((k) => <option key={k.id} value={`${k.provider}::${k.model}`}>{k.label} · {k.model}{k.vars?.provider ? ` · ${k.vars.provider}` : ''}{k.vars?.key ? ` / ${k.vars.key}` : ''}{k.vars?.model ? ` / ${k.vars.model}` : ''}</option>)}</select></div>
+            <div className="composer-model-row"><span className="composer-model-caption">Model</span><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto · smart routing' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: `${k.label} · ${k.model}${k.vars?.provider ? ` · ${k.vars.provider}` : ''}${k.vars?.key ? ` / ${k.vars.key}` : ''}${k.vars?.model ? ` / ${k.vars.model}` : ''}` }))]} /></div>
             {working
               ? <button className="send-button stop" aria-label="Stop" onClick={stopAll}><Icon name="stop" size={18} /></button>
               : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><Icon name="send" size={20} /></button>}
