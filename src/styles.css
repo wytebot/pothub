@@ -773,3 +773,38 @@ input[type='search'] { width: 100%; }
 @media(prefers-reduced-motion:no-preference){.forge-page .panel{animation:forge-enter .22s ease-out}@keyframes forge-enter{from{opacity:.75;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}}
 .billing-page .pro-active { border-color: rgba(34,197,94,.45); background: linear-gradient(145deg, rgba(34,197,94,.12), transparent 70%); }
 .billing-page .pro-success { color: #16a34a; font-weight: 750; font-size: 1.05rem; display: inline-flex; align-items: center; gap: .4rem; }
+
+/* Codelab authenticated navigation: repository list and workspace are distinct screens. */
+.codelab-layout:has(.codelab-work) { display:block; }
+.codelab-sidebar { width:100%; }
+.codelab-sidebar .repo-list { max-height:min(68dvh,760px); overflow:auto; }
+.codelab-work { width:100%; }
+.codelab-toolbar-title { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.codelab-back { align-self:flex-start; }
+.codelab-toolbar { align-items:flex-start!important; }
+@media(max-width:760px) { .codelab-toolbar { flex-direction:column!important; align-items:stretch!important; } .codelab-toolbar-title { width:100%; } .codelab-toolbar .row.wrap { width:100%; overflow-x:auto; flex-wrap:nowrap!important; scrollbar-width:thin; padding-bottom:6px; } .codelab-toolbar .row.wrap > * { flex:0 0 auto!important; } .codelab-sidebar .repo-list { max-height:unset; } }
+/* Composer fixes: prevent the text area from collapsing into a narrow vertical strip on mobile. */
+.chat-composer { width:100%; box-sizing:border-box; }
+.composer-row { display:grid; grid-template-columns:40px minmax(0,1fr) 42px; align-items:end; width:100%; min-width:0; gap:8px; }
+.chat-composer textarea { display:block; width:100%; min-width:0; max-width:100%; box-sizing:border-box; flex:none; min-height:42px; max-height:180px; overflow-y:auto; overflow-x:hidden; white-space:pre-wrap; overflow-wrap:anywhere; }
+.composer-model-row { max-width:100%; min-width:0; }
+.composer-model-row select { max-width:100%; min-width:0; }
+@media(max-width:480px) { .composer-row { grid-template-columns:38px minmax(0,1fr) 40px; gap:6px; } .chat-composer textarea { font-size:16px; } }
+.codelab-layout:not(:has(.codelab-work)) { display:block; }
+.composer-row { grid-template-columns:40px minmax(0,1fr) minmax(90px,auto) 42px; }
+.composer-model-row { white-space:nowrap; }
+.composer-model-caption { flex:none; }
+@media(max-width:480px) { .composer-row { grid-template-columns:38px minmax(0,1fr) minmax(76px,auto) 40px; } .composer-model-caption { display:none; } .composer-model-row select { max-width:118px; font-size:11px; } }
+/* Codelab dedicated tool views */
+.codelab-tool-nav { display:flex; flex-wrap:nowrap!important; overflow-x:auto; overscroll-behavior-x:contain; gap:8px; padding:8px 2px 12px; scrollbar-width:thin; }
+.codelab-tool-nav>.btn { flex:0 0 auto; }
+.codelab-tool-nav>.btn.active { border-color:var(--accent,#22c55e); box-shadow:inset 0 0 0 1px var(--accent,#22c55e); }
+.codelab-tool-page { border:1px solid var(--border,rgba(255,255,255,.14)); border-radius:14px; padding:14px; margin:8px 0 14px; min-width:0; }
+.codelab-tool-page>.row:first-child { gap:12px; flex-wrap:wrap; }
+.codelab-tool-page>.row:first-child strong { font-size:1.05rem; }
+.codelab-tool-page .tool-content { display:flex; flex-direction:column; gap:12px; margin-top:14px; min-width:0; }
+.codelab-tool-page .tool-content p { margin:0; line-height:1.55; }
+.codelab-tool-page .tool-content .btn { width:max-content; max-width:100%; }
+.codelab-tool-page label { display:flex; flex-direction:column; gap:6px; }
+.codelab-files.tool-hidden,.codelab-terminal.tool-hidden { display:none!important; }
+@media(max-width:760px){.codelab-tool-page .tool-content .btn{width:100%;}.codelab-tool-page{padding:12px;}}
