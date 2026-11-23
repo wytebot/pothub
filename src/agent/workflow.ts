@@ -72,7 +72,8 @@ export interface TextOutcome { text: string; model: TextModel; file: OutFile | n
 const GOOD = 'agent.text.good.v1'; const BLOCKED = 'agent.text.blocked.v1'; const BLOCK_MS = 45 * 60_000;
 const readJson = <T,>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? '') as T; } catch { return d; } };
 const goodModel = (): string | undefined => readJson<{ id?: string }>(GOOD, {}).id;
-const saveGood = (id: string) => { try { localStorage.setItem(GOOD, JSON.stringify({ id })); } catch { /* storage blocked */ } };
+const modelKey = (m: TextModel) => `${m.provider}::${m.id}`;
+const saveGood = (model: TextModel) => { try { localStorage.setItem(GOOD, JSON.stringify({ id: modelKey(model) })); } catch { /* storage blocked */ } };
 const blockedNow = (): Set<string> => { const all = readJson<Record<string, number>>(BLOCKED, {}); const now = Date.now(); return new Set(Object.entries(all).filter(([, t]) => t > now).map(([id]) => id)); };
 const block = (ids: string[]) => { try { const all = readJson<Record<string, number>>(BLOCKED, {}); const now = Date.now(); for (const k of Object.keys(all)) if (all[k] <= now) delete all[k]; for (const id of ids) all[id] = now + BLOCK_MS; localStorage.setItem(BLOCKED, JSON.stringify(all)); } catch { /* storage blocked */ } };
 const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -234,7 +235,7 @@ ${webBlock}`;
     if (hasZip && codeChange) log.step('Planning the solution from the extracted project…');
   }
   const pref = flags.prefer ?? o.prefer;
-  const skipKeys = new Set<string>(); const tried = new Set<string>(); let lastErr: unknown; let partial = '';
+  const skipKeys = new Set<string>(); const tried = new Set<string>(); const providerFailures = new Map<ProviderId, number>(); let lastErr: unknown; let partial = '';
   // The whole conversation is sent. Only if a model says it cannot hold that much do the oldest turns step aside, and the person is told.
   let history = o.history; let trimmed = false;
   // Set when a provider refuses a request as too large: from then on big files are read in parts instead of whole.
@@ -243,15 +244,15 @@ ${webBlock}`;
   for (let attempt = 0, max = Math.min(10, 6 + defaultKeys('text').length) + 6; attempt < max; attempt++) {
     log.step(attempt === 0 ? 'Choosing the best text model…' : 'Trying another model…');
     const live = new Set(defaultKeys('text', skipKeys).map((k) => k.provider));
-    const usable = catalog.texts.filter((m) => live.has(m.provider) && !tried.has(m.id)); const cool = blockedNow();
-    const pool = usable.filter((m) => !cool.has(m.id)).length ? usable.filter((m) => !cool.has(m.id)) : usable;
+    const usable = catalog.texts.filter((m) => live.has(m.provider) && !tried.has(modelKey(m))); const cool = blockedNow();
+    const pool = usable.filter((m) => !cool.has(modelKey(m)) && !cool.has(m.id)).length ? usable.filter((m) => !cool.has(modelKey(m)) && !cool.has(m.id)) : usable;
     const r = log.start('cmd', `pothub route --task text --prefer ${pref}${files.length ? ` --files ${files.length}` : ''}`);
     const ranked = rankText(pool, pref, { kinds: files.map((f) => f.kind) });
     const want = flags.model ?? (getSettings().textModel !== 'auto' ? getSettings().textModel : undefined);
     const selectedProvider = want?.includes('::') ? want.split('::', 1)[0] : undefined;
     const selectedId = want?.includes('::') ? want.slice(want.indexOf('::') + 2) : want;
     const forced = want ? ranked.find((m) => m.id === selectedId && (!selectedProvider || m.provider === selectedProvider)) : undefined;
-    const model = forced ?? ranked.find((m) => m.id === goodModel()) ?? ranked[0];
+    const model = forced ?? ranked.find((m) => goodModel() === modelKey(m) || goodModel() === m.id) ?? ranked[0];
     if (!model) {
       log.fail(r, 'no model');
       if (lastErr instanceof Error) throw lastErr;
@@ -259,7 +260,7 @@ ${webBlock}`;
       throw new Error('I could not check which models your key can use right now. Try again in a moment.');
     }
     log.done(r, `→ ${model.name}  (${model.id})`);
-    const key = usableKey(model.provider, 'text', skipKeys); if (!key) { tried.add(model.id); continue; }
+    const key = usableKey(model.provider, 'text', skipKeys); if (!key) { tried.add(modelKey(model)); continue; }
     let secret: string; try { secret = await getSecret(key.id); } catch (e) { skipKeys.add(key.id); lastErr = e; log.say('warn', `skipping "${key.label}"`, 'its secret could not be opened'); continue; }
 
     log.step(files.length ? (/\.(zip|tar|tgz|gz)$/i.test(o.files.map((f) => f.name).join(' ')) && /\b(fix|debug|repair|update|edit|amend|refactor|wire|implement|change|remove|add)\b/i.test(prompt) ? 'Applying the fixes and amending other affected files…' : 'Preparing your files and solution…') : wanted.file ? `Writing your ${wanted.format === 'docx' ? 'document' : 'file'}…` : 'Writing your answer…');
@@ -288,7 +289,7 @@ ${webBlock}`;
       if (trimmed) notes.push('This conversation is longer than the model can hold at once, so the oldest messages were left out of this reply.');
       const delivered = engineeringProjectFile ? { file: null as OutFile | null, notes: [] as string[] } : await deliverable(out.text, wanted, prompt, o.files, log); notes.push(...delivered.notes); const file = engineeringProjectFile ?? delivered.file;
       const displayText = engineeringProjectFile ? `${out.text}\n\n${engineeringPatchCount ? engineeringProjectPatchOnly ? `**Patch ZIP attached:** ${engineeringPatchCount} changed file(s). This is a patch-only archive, not your complete source project.` : `**Sanitized project ZIP attached:** ${engineeringPatchCount} file change(s) were merged. Review the validation report and restore excluded dependencies/secrets before replacing your project.` : '**Project ZIP attached:** no complete file patches were detected, so it may contain the original project without code changes. Review the answer before replacing your project.'}` : wanted.file && file ? `**${file.name} is ready.** Download the attached file to review its contents.` : out.text;
-      saveGood(model.id);
+      saveGood(model);
       void notifyDone({ kind: 'text', title: file ? 'Your answer and file are ready' : 'Your answer is ready', body: `${model.name} finished “${q(prompt, 60).slice(1, -1)}”.`, route: '/' });
       return { text: displayText, model, file, notes, ...(webSources.length ? { sources: webSources } : {}) };
     } catch (e) {
@@ -304,12 +305,22 @@ ${webBlock}`;
       if (status === 400 && !forceSplit && CONTEXT_ERR.test(msg(e)) && files.reduce((n, f) => n + (f.kind === 'text' || f.kind === 'docx' ? f.size : 0), 0) > budgetFor(model.provider).chunk) {
         forceSplit = true; log.say('warn', 'files too large to send whole', 'reading them in parts instead'); continue;
       }
-      if (status === 401 || status === 402 || status === 403) { skipKeys.add(key.id); if (status === 401) setStatus(key.id, 'invalid'); log.say('warn', `default key "${key.label}" failed`, 'trying the next default for Text'); log.step('That key did not work. Trying your next one…'); }
-      else {
-        // A quota or rate limit on one model (free keys often have none for the biggest models) says nothing about the key's smaller models: step down to them.
-        tried.add(model.id);
-        if (status === 429) { const same = catalog.texts.filter((m) => m.provider === model.provider && m.quality >= model.quality).map((m) => m.id); same.forEach((id) => tried.add(id)); block(same); }
-        log.say('warn', `falling back after ${model.id} failed`); log.step('That model did not respond. Trying a lighter one…');
+      tried.add(modelKey(model));
+      if (status === 401 || status === 402 || status === 403 || status === 429) {
+        // Invalid credentials, no credit, permission errors, and provider quota are key-level failures.
+        // Do not keep stepping through models on the same unusable key.
+        skipKeys.add(key.id); if (status === 401) setStatus(key.id, 'invalid'); if (status === 429) block([modelKey(model)]);
+        log.say('warn', `default key "${key.label}" failed (${status})`, 'skipping this key and routing to another enabled key');
+        log.step(status === 429 ? 'Provider quota/rate limit reached. Trying another provider…' : 'That provider key failed. Trying another enabled key…');
+      } else {
+        // Transient 5xx and connection failures can be model-specific. Try a different model
+        // Try a different model once, then stop using that provider for this request.
+        const transient = status === undefined || status >= 500 || /network|connection|fetch|timed out|timeout/i.test(msg(e));
+        if (transient) {
+          const failures = (providerFailures.get(model.provider) ?? 0) + 1; providerFailures.set(model.provider, failures);
+          if (failures >= 2) { for (const k of defaultKeys('text')) if (k.provider === model.provider) skipKeys.add(k.id); log.say('warn', `${PROVIDERS[model.provider].name} is temporarily unavailable`, 'skipping this provider for the remainder of this request'); }
+        }
+        log.say('warn', `falling back after ${model.id} failed`); log.step('That model did not respond. Trying another model or provider…');
       }
     }
   }
