@@ -33,6 +33,8 @@ createServer(async (req, res) => {
       const clientId = env.GITHUB_CLIENT_ID; const callback = env.GITHUB_CALLBACK_URL;
       const missing = [['GITHUB_CLIENT_ID', clientId], ['GITHUB_CLIENT_SECRET', githubStateSecret()], ['GITHUB_CALLBACK_URL', callback], ['APP_ORIGIN', ORIGIN]].filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return send(503, { error: `GitHub connection is not set up on the Pothub server yet. Missing server settings: ${missing.join(', ')}.` });
+      // Narrow optional environment values before passing them to URLSearchParams.
+      if (!clientId || !callback) return send(503, { error: 'GitHub OAuth client ID and callback URL are required.' });
       if (!/^https:\/\//i.test(String(callback))) return send(503, { error: 'GITHUB_CALLBACK_URL must be the full https URL of /api/github/oauth/callback on the Pothub server.' });
       const state = makeGithubState(who.uid);
       const authUrl = new URL('https://github.com/login/oauth/authorize'); authUrl.searchParams.set('client_id', clientId); authUrl.searchParams.set('redirect_uri', callback); authUrl.searchParams.set('scope', 'repo'); authUrl.searchParams.set('state', state);
