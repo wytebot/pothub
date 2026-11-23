@@ -28,6 +28,8 @@ export function customNames(raw) {
 /** Which environment variables hold the provider, key, model and allowed emails: the names sent by the app, else the operator's own settings, else the defaults. */
 export function variableNames(env = process.env, custom = {}) { return Object.fromEntries(Object.entries(DEFAULT_VARIABLES).map(([field, fallback]) => [field, custom[field] || safeEnvName(env[VARIABLE_NAME_SETTINGS[field]], fallback)])); }
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/;
+/** Model env values may contain an ordered comma-separated fallback chain. */
+export function modelList(value) { return clean(value).split(',').map(x => x.trim()).filter(Boolean).filter(x => MODEL.test(x)); }
 
 /** What this backend is set up to do, with the names of anything missing. Never includes the key. */
 export function settings(env = process.env, custom = {}) {
@@ -36,9 +38,9 @@ export function settings(env = process.env, custom = {}) {
   const missing = [];
   if (!provider) missing.push(names.provider); else if (!PROVIDER_IDS.includes(provider)) missing.push(`${names.provider} (use one of: ${PROVIDER_IDS.join(', ')})`);
   if (!key) missing.push(names.key);
-  if (!model) missing.push(names.model); else if (!MODEL.test(model)) missing.push(`${names.model} (not a valid model name)`);
+  if (!model) missing.push(names.model); else if (!modelList(model).length || modelList(model).length !== model.split(',').map(x => x.trim()).filter(Boolean).length) missing.push(`${names.model} (use valid model IDs separated by commas)`);
   if (!clean(env[names.allowedEmails])) missing.push(names.allowedEmails);
-  return { provider, key, model, missing, ready: missing.length === 0, variableNames: names };
+  return { provider, key, model, models: modelList(model), missing, ready: missing.length === 0, variableNames: names };
 }
 
 /** Only accounts whose verified Google email is in the allowed-emails variable may use this backend. Closed if the list is empty. */

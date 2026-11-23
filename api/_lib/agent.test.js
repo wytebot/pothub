@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accessFor, authHeaders, customNames, settings, targetFor, withModel, variableNames } from './agent.js';
+import { accessFor, authHeaders, customNames, settings, targetFor, withModel, variableNames, modelList } from './agent.js';
 
 const env = { POTHUB_PROVIDER: 'OpenAI', POTHUB_API_KEY: ' sk-SECRET ', POTHUB_MODEL: 'gpt-4o', POTHUB_ALLOWED_EMAILS: 'Dev@Example.com, other@example.com' };
 
@@ -18,7 +18,7 @@ describe('backend settings', () => {
     expect(settings(custom)).toMatchObject({ provider: 'openai', key: 'sk-test', model: 'gpt-4o-mini', ready: true, missing: [] });
   });
   it('rejects unsafe custom environment-variable names and falls back to defaults', () => { expect(variableNames({ POTHUB_API_KEY_ENV: 'BAD;NAME' }).key).toBe('POTHUB_API_KEY'); });
-  it('rejects odd model names', () => { expect(settings({ ...env, POTHUB_MODEL: 'gpt-4o; drop' }).ready).toBe(false); expect(settings({ ...env, POTHUB_MODEL: 'meta-llama/llama-3.3-70b:free' }).ready).toBe(true); });
+  it('accepts ordered comma-separated fallback models and rejects malformed entries', () => { expect(settings({ ...env, POTHUB_MODEL: 'gemini-4-argon, gemini-2.5-flash, gemini-2.0-flash' })).toMatchObject({ ready: true, models: ['gemini-4-argon', 'gemini-2.5-flash', 'gemini-2.0-flash'] }); expect(modelList('a, , b')).toEqual(['a','b']); expect(settings({ ...env, POTHUB_MODEL: 'gpt-4o; drop' }).ready).toBe(false); expect(settings({ ...env, POTHUB_MODEL: 'meta-llama/llama-3.3-70b:free' }).ready).toBe(true); });
 });
 
 describe('names typed in the app', () => {
