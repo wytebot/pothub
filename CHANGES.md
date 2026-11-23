@@ -95,3 +95,8 @@ Dependencies could not be installed before the environment timeout. TypeScript/V
 - Working responses now show a compact, accessible timeline indicator with the latest plain-language steps. Technical workflow logs remain hidden. Timeline animation respects reduced-motion settings.
 - Updated Premium pricing defaults to USD $7.99 monthly / $70 yearly (approx. 27% less than 12 monthly payments). Billing remains manual renewal.
 - Server defaults and `server/.env.example` updated. Existing deployment environment overrides take precedence, so set `PREMIUM_MONTHLY_AMOUNT=7.99` and `PREMIUM_YEARLY_AMOUNT=70` in the deployment environment before redeploying.
+
+## Vercel build fix (TS6133)
+- Removed the unused `premium` React state declaration from `src/pages/Codelab.tsx`.
+- Removed the unused `setPremium(pro)` state update.
+- Premium status remains evaluated locally in the GitHub repository connection flow (`pro`) and continues to determine repository loading behavior and user messaging. No billing entitlement behavior was removed.
