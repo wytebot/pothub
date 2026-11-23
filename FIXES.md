@@ -1,3 +1,10 @@
+# Pothub 0.11.4 Google sign-in fix
+- Root cause: `src/firebase.ts` created Auth with `initializeAuth()` and no `popupRedirectResolver`. Unlike `getAuth()`, it does not add one, so in the browser `signInWithRedirect()` and `getRedirectResult()` threw `auth/argument-error` and Google sign-in never started. The resolver (`browserPopupRedirectResolver`) is now passed on web; the Android WebView still gets none.
+- Sign-in that returns without a user (cancelled, or Back from Google) no longer leaves the app loading for 45 s; it clears the pending flag and shows the signed-out page.
+- Added readable messages for `auth/argument-error` and `auth/web-storage-unsupported`.
+- Still required in Firebase/Google Cloud (not code): `pothub-self.vercel.app` under Authentication > Authorized domains, and `https://pothub-self.vercel.app/__/auth/handler` as an authorized redirect URI on the web OAuth client. The `/__/auth` rewrite in vercel.json is already correct.
+- Not run here: `npm install`, `npm run build`, `npm test` (no network).
+
 # Pothub 0.11.3 GitHub, backend variables and site tag
 - GitHub: Connect GitHub no longer needs a Pothub sign-in (that is what showed "Your sign-in session has expired" to guests). GitHub's own login/account picker opens (`prompt=select_account`). The sign-in is checked against a state value kept in this browser tab.
 - Disconnect now revokes Pothub's whole authorization on GitHub (`POST /api/github/oauth/revoke`, uses GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET), so connecting again starts at GitHub's login/authorize page. Personal access tokens are only forgotten here and the notice says how to delete them.
