@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldAutoWebSearch } from './search';
+import { shouldAutoWebSearch, extractPromptUrls } from './search';
 
 describe('smart web research intent', () => {
   it('searches for fresh, sourced, or explicitly researched prompts', () => {
@@ -16,5 +16,11 @@ describe('web research for implementation requests', () => {
   });
   it('does not research ordinary conversational or stable conceptual prompts', () => {
     for (const prompt of ['Tell me a joke', 'Explain photosynthesis', 'What is a closure in JavaScript?', 'Write a birthday poem']) expect(shouldAutoWebSearch(prompt)).toBe(false);
+  });
+});
+
+
+describe('direct link extraction', () => {
+  it('finds direct links in user prompts and strips trailing punctuation', () => { expect(extractPromptUrls('Read this deeply: https://example.com/article?x=1. And https://docs.example.org/a(b).')).toEqual(['https://example.com/article?x=1','https://docs.example.org/a(b)']);
   });
 });
