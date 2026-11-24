@@ -49,6 +49,17 @@ export async function readPromptLinks(prompt: string, onStage?: (stage: string) 
   return { hits, updates: Array.isArray(c.updates) ? c.updates : [], sources: buildSources(hits) };
 }
 
+/** Only websites the person explicitly verified and enabled for crawling are added to research. */
+function configuredCrawlUrls(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem('pothub.sites.v1') ?? '[]') as Array<{ url?: unknown; verified?: unknown; crawl?: unknown }>;
+    if (!Array.isArray(raw)) return [];
+    return [...new Set(raw.filter((s) => s && s.verified === true && s.crawl === true && typeof s.url === 'string').map((s) => {
+      try { const u = new URL(s.url as string); return /^https?:$/.test(u.protocol) ? u.toString() : ''; } catch { return ''; }
+    }).filter(Boolean))].slice(0, 5);
+  } catch { return []; }
+}
+
 export async function webResearch(query: string, onStage?: (stage: string) => void): Promise<WebResearch> {
   const variants = queryVariants(query);
   onStage?.(`Deep research plan: ${variants.length} targeted searches`);

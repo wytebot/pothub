@@ -9,7 +9,7 @@ export interface ChatMessage {
   /** assistant messages: a short friendly note under the reply (a problem, or something worth knowing) */
   note?: string; providers?: boolean; notes?: string[];
   /** assistant messages: a file that was built for the person (only lives while the app is open) */
-  fileOut?: { name: string; size: number };
+  fileOut?: { name: string; size: number; mime?: string };
   /** assistant messages: the sites the web research drew on, shown under the reply. Only set when web results were used. */
   sources?: WebSource[];
 }
