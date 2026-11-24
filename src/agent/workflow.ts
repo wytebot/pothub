@@ -12,7 +12,7 @@ import { getSettings } from '../settings';
 import { parseCommands, type Flags } from './commands';
 import { refreshCatalog, quickCatalog, type Catalog } from './detect';
 import type { RunLog } from './log';
-import { NotStarted, addPending, backgroundAvailable, backgroundOn, generateInBackground } from './background';
+import { NotStarted, addPending, backgroundAvailable, generateInBackground } from './background';
 import { resultsBlock, webResearch, readPromptLinks, extractPromptUrls, shouldAutoWebSearch, type WebSource } from './search';
 import { readyFiles } from './readers';
 import { notifyDone } from '../notify';
@@ -274,14 +274,19 @@ ${webBlock}`;
       // Jobs run on the Pothub server when they can, so they finish even if the app is closed. If the server cannot take the job, it runs on this device.
       let out: Awaited<ReturnType<typeof generateText>>;
       const engineering = isEngineeringAgentRequest(prompt);
-      if (engineering) {
+      if (engineering && o.job && !isGatewayRef(secret) && backgroundAvailable() && !o.files.some((f) => f.kind === 'archive' && /\.zip$/i.test(f.name))) {
+        log.step('Engineering agent: handing plan → implement → review to the durable worker…');
+        try { out = await generateInBackground(model.provider, secret, req, { msgId: o.job.msgId, mode: 'agent', onStarted: (id) => { addPending({ id, chatId: o.job!.chatId, msgId: o.job!.msgId, prompt, wanted, modelName: `${model.name} · Engineering Agent`, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Engineering agent is running on the server…'); } }); }
+        catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('warn', 'durable agent could not start', e.message); log.step('Running the engineering agent locally instead…'); out = await runEngineeringAgent(model.provider, secret, req, o.files, log); engineeringProjectFile = (out as EngineeringResult).sandboxProjectFile; engineeringPatchCount = (out as EngineeringResult).sandboxPatchCount ?? 0; engineeringProjectPatchOnly = (out as EngineeringResult).sandboxProjectPatchOnly ?? false; }
+      } else if (engineering) {
         log.step('Engineering agent: plan → implement → second-pass review…');
         out = await runEngineeringAgent(model.provider, secret, req, o.files, log);
         engineeringProjectFile = (out as EngineeringResult).sandboxProjectFile; engineeringPatchCount = (out as EngineeringResult).sandboxPatchCount ?? 0; engineeringProjectPatchOnly = (out as EngineeringResult).sandboxProjectPatchOnly ?? false;
-      } else if (o.job && backgroundOn() && backgroundAvailable() && !isGatewayRef(secret)) {
+      } else if (o.job && !isGatewayRef(secret)) {
         const job = o.job;
+        if (!backgroundAvailable()) throw new NotStarted('The durable job service is not configured. Set VITE_API_URL and deploy the Pothub worker.');
         try { out = await generateInBackground(model.provider, secret, req, { msgId: job.msgId, onStarted: (id: string) => { addPending({ id, chatId: job.chatId, msgId: job.msgId, prompt, wanted, modelName: model.name, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Running in the background…'); } }); }
-        catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('warn', 'background run unavailable', e.message); out = await generateText(model.provider, secret, req); }
+        catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('err', 'durable background job unavailable', e.message); throw new Error(`This request could not be started as a durable background job. ${e.message}`); }
       } else out = await generateText(model.provider, secret, req);
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Attach a text-based document or source file for text analysis.`);
