@@ -1,0 +1,180 @@
+name: Pothub Software Doctor
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Pothub job ID
+        required: true
+        type: string
+      operation:
+        description: Requested operation
+        required: true
+        type: choice
+        options: [diagnose, validate_repair]
+      base_sha:
+        description: Exact source commit SHA
+        required: true
+        type: string
+      source_run_id:
+        description: Failed workflow run ID (optional)
+        required: false
+        type: string
+      base_branch:
+        description: Original target branch for a validated repair
+        required: false
+        type: string
+      repair_title:
+        description: Proposed pull request title
+        required: false
+        type: string
+      repair_body:
+        description: Proposed pull request description
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+concurrency:
+  group: pothub-doctor-${{ github.repository }}-${{ inputs.job_id }}
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Validate dispatch inputs
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          JOB_ID: ${{ inputs.job_id }}
+        run: |
+          [[ "$BASE_SHA" =~ ^[a-fA-F0-9]{40}$ ]] || { echo 'Invalid base SHA'; exit 2; }
+          [[ "$JOB_ID" =~ ^[a-fA-F0-9-]{30,40}$ ]] || { echo 'Invalid job ID'; exit 2; }
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_sha }}
+          fetch-depth: 0
+      - name: Retrieve original failed-run logs
+        if: inputs.source_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          if [[ ! "$SOURCE_RUN_ID" =~ ^[0-9]{1,20}$ ]]; then echo 'Invalid source run ID'; exit 2; fi
+          mkdir -p pothub-doctor-evidence/source-run
+          curl --fail-with-body --location --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/logs" -o /tmp/source-run-logs.zip
+          unzip -oq /tmp/source-run-logs.zip -d pothub-doctor-evidence/source-run
+      - name: Set up Node (if applicable)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+        continue-on-error: true
+      - name: Inspect repository and run declared checks
+        id: checks
+        env:
+          OPERATION: ${{ inputs.operation }}
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          DIAG_EXIT=0
+          mkdir -p pothub-doctor-evidence
+          {
+            echo "Repository: $GITHUB_REPOSITORY"
+            echo "Commit: $(git rev-parse HEAD)"
+            echo "Branch: $GITHUB_REF_NAME"
+            echo "Operation: ${{ inputs.operation }}"
+            echo
+            echo '--- Project manifests ---'
+            find . -maxdepth 3 \( -name package.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lockb -o -name pyproject.toml -o -name requirements.txt -o -name Cargo.toml -o -name go.mod -o -name '*.sln' -o -name '*.csproj' \) -not -path './.git/*' | sort | head -200
+            echo
+            echo '--- Git status ---'
+            git status --short
+          } | tee pothub-doctor-evidence/inspection.txt
+          if [ -f package.json ]; then
+            node -e "const p=require('./package.json'); console.log(JSON.stringify({packageManager:p.packageManager,scripts:p.scripts},null,2))" | tee pothub-doctor-evidence/package-scripts.json
+            if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile 2>&1 | tee pothub-doctor-evidence/install.log; INSTALL=$?; \
+            elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable 2>&1 | tee pothub-doctor-evidence/install.log; INSTALL=$?; \
+            elif [ -f package-lock.json ]; then npm ci 2>&1 | tee pothub-doctor-evidence/install.log; INSTALL=$?; \
+            else npm install --ignore-scripts 2>&1 | tee pothub-doctor-evidence/install.log; INSTALL=$?; fi
+            if [ "${INSTALL:-0}" -eq 0 ]; then
+              node -e "const p=require('./package.json'); console.log(JSON.stringify(p.scripts||{}))" > /tmp/pothub-scripts.json
+              node - <<'NODE'
+          const p=require('./package.json'); const {spawnSync}=require('node:child_process'); const fs=require('node:fs');
+          let failed=false; let ran=0;
+          for(const name of ['typecheck','lint','test','build']) { if(!p.scripts?.[name]) continue; ran++; const cmd=p.scripts[name]; console.log(`\n--- ${name}: ${cmd} ---`); const r=spawnSync(cmd,{shell:true,encoding:'utf8',timeout:12*60*1000,env:process.env}); const out=(r.stdout||'')+(r.stderr||''); console.log(out); fs.appendFileSync('pothub-doctor-evidence/check-results.txt',`${name}: exit ${r.status ?? 'unknown'}\n${out}\n`); if(r.status!==0) failed=true; }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`script_count=${ran}\n`);
+          if(ran===0 && process.env.OPERATION==='validate_repair') { console.error('No supported validation scripts (typecheck, lint, test, build) are defined in package.json.'); failed=true; }
+          if(failed) process.exit(1);
+          NODE
+              if [ "$?" -ne 0 ]; then DIAG_EXIT=1; fi
+            else echo "Dependency installation failed with exit $INSTALL" | tee pothub-doctor-evidence/check-results.txt; DIAG_EXIT=1; fi
+          else
+            echo 'No package.json found. No Node checks were run; inspect the detected manifests and add project-specific commands.' | tee pothub-doctor-evidence/check-results.txt
+          fi
+          echo "diagnostic_exit=$DIAG_EXIT" >> "$GITHUB_OUTPUT"
+      - name: Run detected non-Node project checks
+        id: other_checks
+        shell: bash
+        env:
+          OPERATION: ${{ inputs.operation }}
+          NODE_SCRIPT_COUNT: ${{ steps.checks.outputs.script_count }}
+        run: |
+          set +e
+          RESULT=0
+          FOUND=0
+          if [ -f package.json ] && [ "${NODE_SCRIPT_COUNT:-0}" -gt 0 ]; then FOUND=1; fi
+          if [ -f pyproject.toml ] || [ -f requirements.txt ] || find . -maxdepth 3 -name '*.py' -not -path './.git/*' -print -quit | grep -q .; then
+            FOUND=1
+            python3 -m compileall -q . || RESULT=1
+            if python3 -m pytest --version >/dev/null 2>&1 && find . -maxdepth 4 \( -name 'test_*.py' -o -name '*_test.py' \) -not -path './.git/*' -print -quit | grep -q .; then python3 -m pytest -q || RESULT=1; fi
+          fi
+          if [ -f go.mod ]; then FOUND=1; go test ./... || RESULT=1; fi
+          if [ -f Cargo.toml ]; then FOUND=1; if [ -f Cargo.lock ]; then cargo test --locked || RESULT=1; else cargo test || RESULT=1; fi; fi
+          if [ -f pom.xml ]; then FOUND=1; mvn -B test || RESULT=1; fi
+          if [ -x ./gradlew ]; then FOUND=1; ./gradlew test --no-daemon || RESULT=1; fi
+          if find . -maxdepth 3 \( -name '*.sln' -o -name '*.csproj' \) -not -path './.git/*' -print -quit | grep -q .; then FOUND=1; dotnet test --verbosity minimal || RESULT=1; fi
+          if [ "$FOUND" -eq 0 ] && [ "$OPERATION" = 'validate_repair' ]; then echo 'No supported project manifest or validation command was detected; refusing to open a pull request without validation.'; RESULT=1; fi
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+          exit "$RESULT"
+      - name: Open pull request only after successful validation
+        if: inputs.operation == 'validate_repair' && steps.checks.outputs.diagnostic_exit == '0' && steps.other_checks.outputs.result == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          REPAIR_TITLE: ${{ inputs.repair_title }}
+          REPAIR_BODY: ${{ inputs.repair_body }}
+        run: |
+          if [[ -z "$BASE_BRANCH" ]]; then echo 'Missing original base branch; refusing to open a pull request.'; exit 2; fi
+          EXISTING=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --base "$BASE_BRANCH" --state open --json url --jq '.[0].url' 2>/dev/null || true)
+          if [[ -n "$EXISTING" ]]; then echo "Pull request already exists: $EXISTING"; else gh pr create --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --base "$BASE_BRANCH" --title "${REPAIR_TITLE:-Pothub Software Doctor repair}" --body "${REPAIR_BODY:-Automated checks passed. Review the changes before merging.}"; fi
+      - name: Upload evidence bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pothub-doctor-${{ inputs.job_id }}
+          path: pothub-doctor-evidence/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Fail the workflow when repository checks failed
+        if: steps.checks.outputs.diagnostic_exit != '0' || steps.other_checks.outputs.result != '0'
+        run: exit 1
+      - name: Report job completion to Pothub
+        if: always()
+        env:
+          JOB_ID: ${{ inputs.job_id }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SECRET: ${{ secrets.POTHUB_DOCTOR_WEBHOOK_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+          CALLBACK: ${{ vars.POTHUB_DOCTOR_CALLBACK_URL }}
+          CONCLUSION: ${{ job.status }}
+          SHA: ${{ inputs.base_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SECRET" ] || [ -z "$CALLBACK" ]; then echo 'Pothub callback secret or URL is not configured; evidence remains available as a workflow artifact.'; exit 0; fi
+          PR_URL=$(gh pr view --repo "$GITHUB_REPOSITORY" --json url --jq .url 2>/dev/null || true)
+          BODY=$(jq -nc --arg job_id "$JOB_ID" --arg repo "$REPOSITORY" --arg run_id "$RUN_ID" --arg status "$([ "$CONCLUSION" = success ] && echo completed || echo failed)" --arg stage "diagnosis_finished" --arg message "GitHub Actions ${{ inputs.operation }} workflow finished with status $CONCLUSION. Download the evidence artifact from this run." --arg commit_sha "$SHA" --arg run_url "$RUN_URL" --arg pr_url "$PR_URL" '{job_id:$job_id,repo:$repo,run_id:$run_id,status:$status,stage:$stage,message:$message,commit_sha:$commit_sha,pull_request_url:$pr_url,report:{workflow_run_url:$run_url,artifact_name:("pothub-doctor-"+$job_id)}}')
+          SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print "sha256="$2}')
+          curl --fail-with-body --silent --show-error --max-time 15 -X POST "$CALLBACK" -H 'Content-Type: application/json' -H "X-Pothub-Signature: $SIG" --data "$BODY"
