@@ -55,6 +55,15 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// FCM data/notification push. Show a system notification even when the page is closed.
+self.addEventListener('push', (event) => {
+  let payload = {}; try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || 'Your background task is complete.' }; }
+  const n = payload.notification || payload.data || payload;
+  const title = n.title || 'Your Pothub answer is ready';
+  const options = { body: n.body || 'Your background task is complete.', icon: n.icon || '/icon-192.png', badge: n.badge || '/icon-192.png', tag: n.tag || payload.data?.jobId || 'pothub-job', data: { route: payload.data?.route || n.route || '/' } };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
 // Tapping a "your job is ready" notification brings Pothub forward and opens the right page.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
