@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { unlock, lock, isUnlocked } from '../vault/auth';
-import { addBackendKey, addKey, defaultKeys, getSecret, isDefaultFor, listKeys, removeKey, setBackendModel, setDefault, setStatus, storageKind, updateKey, type KeyMeta, type ProviderId } from '../vault/vault';
+import { addBackendKey, addKey, defaultKeys, getSecret, isDefaultFor, listKeys, removeKey, setBackendModel, setDefault, setStatus, storageKind, updateKey, updateBackendKey, type KeyMeta, type ProviderId } from '../vault/vault';
 import { testKey } from '../models/providers';
 import { FNS, FN_LABEL, PROVIDERS, PROVIDER_IDS, fieldsOf, fnsOf, joinSecret, splitSecret } from '../models/providerInfo';
 import { fetchInfo } from '../models/gateway';
@@ -34,10 +34,27 @@ export function Providers() {
   const [connecting, setConnecting] = useState(false);
   const [connErr, setConnErr] = useState('');
   const [connOk, setConnOk] = useState('');
+  const [backendEdit, setBackendEdit] = useState<KeyMeta | null>(null);
+  const [backendForm, setBackendForm] = useState<{ label: string; gateway: string; provider: string; key: string; model: string; allowedEmails: string }>({ label: '', gateway: '', provider: '', key: '', model: '', allowedEmails: '' });
   /** One set of variable names per connection to make; the person can add as many as they like. */
   const [sets, setSets] = useState<VarNames[]>([{}]);
   const refresh = () => { dropCatalogCache(); setKeys(listKeys()); };
-  const close = () => { setVals({}); setDlg(null); setErr(''); };
+  const close = () => { setVals({}); setDlg(null); setBackendEdit(null); setErr(''); };
+  const startBackendEdit = (k: KeyMeta) => { setErr(''); setBackendEdit(k); setBackendForm({ label: k.label, gateway: k.gateway ?? '', provider: k.vars?.provider ?? '', key: k.vars?.key ?? '', model: k.vars?.model ?? '', allowedEmails: k.vars?.allowedEmails ?? '' }); };
+  const saveBackendEdit = async () => {
+    if (!backendEdit) return; setErr(''); setBusy(backendEdit.id);
+    try {
+      const gateway = backendUrl(backendForm.gateway);
+      const raw = { provider: backendForm.provider, key: backendForm.key, model: backendForm.model, allowedEmails: backendForm.allowedEmails };
+      const bad = (Object.keys(raw) as (keyof typeof raw)[]).find((f) => varNameProblem(raw[f]));
+      if (bad) throw new Error(varNameProblem(raw[bad]) || 'Invalid environment variable name.');
+      const vars = pickVars(raw); const info = await fetchInfo(gateway, vars);
+      if (!info.ready) throw new Error(`Backend is missing: ${info.missing.join(', ')}. Update its environment variables and redeploy.`);
+      updateBackendKey(backendEdit.id, { label: backendForm.label, gateway, provider: info.provider as ProviderId, model: info.model, vars });
+      close(); refresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update this connection.'); }
+    finally { setBusy(''); }
+  };
 
   useEffect(() => () => { setVals({}); }, []);
 
@@ -94,13 +111,16 @@ export function Providers() {
   const test = async (k: KeyMeta) => {
     setBusy(k.id); setMsg(null);
     try {
+      let activeProvider = k.provider;
       if (isBackend(k)) {
-        // The backend's model can change; read it again so the app uses the current one.
+        // Refresh both provider and model: backend environment settings may have changed since this connection was saved.
         const info = await fetchInfo(k.gateway ?? '', k.vars);
-        if (info.model && info.model !== k.model) setBackendModel(k.id, info.model);
         if (!info.ready) throw new Error(`The backend is missing: ${info.missing.join(', ')}.`);
+        if (!PROVIDER_IDS.includes(info.provider as ProviderId)) throw new Error(`The backend reported an unsupported provider: ${info.provider}.`);
+        activeProvider = info.provider as ProviderId;
+        if (info.model && (info.model !== k.model || activeProvider !== k.provider)) setBackendModel(k.id, info.model, activeProvider);
       }
-      const r = await testKey(k.provider, await getSecret(k.id));
+      const r = await testKey(activeProvider, await getSecret(k.id));
       setStatus(k.id, r.status); setMsg({ id: k.id, text: isBackend(k) && r.status === 'ok' ? 'Connected. Your backend reached the provider with its key.' : r.message, error: r.status !== 'ok' });
     } catch (e) { setMsg({ id: k.id, text: e instanceof Error ? e.message : 'Test failed.', error: true }); }
     finally { setBusy(''); refresh(); }
@@ -173,7 +193,7 @@ export function Providers() {
                 <div className="grow"><div className="title">{k.label}</div><div className="muted small">{PROVIDERS[k.provider].name}{isBackend(k) ? ` · ${k.model ?? 'model set on backend'} · ${hostOf(k.gateway)}` : ` · •••• ${k.last4} · on this device`}</div></div>
                 <span className={`chip ${k.status}`}>{badge[k.status]}</span>
                 <button className="btn" disabled={busy === k.id} onClick={() => test(k)}>{busy === k.id ? 'Testing…' : 'Test'}</button>
-                {!isBackend(k) && <button className="btn" onClick={() => startEdit(k)}>Edit</button>}
+                <button className="btn" onClick={() => isBackend(k) ? startBackendEdit(k) : void startEdit(k)}>Edit</button>
                 <button className="btn" onClick={() => setRemoving(k)}>{isBackend(k) ? 'Disconnect' : 'Remove'}</button>
                 <div className="full row wrap small">
                   <span className="muted">Default for:</span>
@@ -197,6 +217,20 @@ export function Providers() {
             <button className="btn" onClick={() => void startDevice(devProvider)}>Add key to this device</button>
           </div>
         </details>
+      )}
+
+      {backendEdit && (
+        <Dialog title="Edit AI backend connection" onClose={close} actions={<>
+          <button className="btn" onClick={close}>Cancel</button>
+          <button className="btn primary" disabled={!!busy} onClick={() => void saveBackendEdit()}>{busy === backendEdit.id ? 'Checking…' : 'Save changes'}</button>
+        </>}>
+          <label className="field">Connection name<input value={backendForm.label} maxLength={40} onChange={(e) => setBackendForm({ ...backendForm, label: e.target.value })} /></label>
+          <label className="field">Backend URL<input type="url" autoCapitalize="none" value={backendForm.gateway} onChange={(e) => setBackendForm({ ...backendForm, gateway: e.target.value })} /></label>
+          <p className="muted small">Optional environment-variable names. Leave blank to use the backend defaults. API secrets remain on your backend and are never displayed here.</p>
+          {([['provider','Provider variable'],['key','API key variable'],['model','Model variable'],['allowedEmails','Allowed emails variable']] as const).map(([f, label]) => <label className="field" key={f}>{label}<input value={backendForm[f]} autoCapitalize="characters" autoComplete="off" onChange={(e) => setBackendForm({ ...backendForm, [f]: e.target.value })} placeholder="Use backend default" /></label>)}
+          <p className="muted small">Saving rechecks the backend and refreshes the provider/model shown on this connection. Change the actual API key or model in the backend's environment settings.</p>
+          {err && <p className="error-text" role="alert">{err}</p>}
+        </Dialog>
       )}
 
       {dlg && (
