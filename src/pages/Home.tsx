@@ -446,6 +446,13 @@ export function Home() {
             </div>
           )}
           <div className="composer-row">
+            <div className="composer-input-row">
+            <textarea ref={input} value={idea} rows={1} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, research or code…'} aria-label="Message"
+              onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
+              onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !coarse) { e.preventDefault(); send(); } }} />
+            </div>
+            <div className="composer-controls-row">
             <div className="plus-wrap" ref={plus}>
               <button className="plus-button" type="button" aria-label="Attach text or documents" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES || (!!serverQuota && !serverQuota.premium && (serverQuota.remaining ?? 0) <= 0)} onClick={() => setMenu((o) => !o)}><Icon name="plus" size={22} /></button>
               {menu && (
@@ -460,14 +467,11 @@ export function Home() {
               )}
               <input ref={fileIn} type="file" accept="*/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
-            <textarea ref={input} value={idea} rows={1} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, research or code…'} aria-label="Message"
-              onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
-              onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !coarse) { e.preventDefault(); send(); } }} />
-            <div className="composer-model-row"><span className="composer-model-caption">Model</span><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto · smart routing' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: `${k.label} · ${k.model}${k.vars?.provider ? ` · ${k.vars.provider}` : ''}${k.vars?.key ? ` / ${k.vars.key}` : ''}${k.vars?.model ? ` / ${k.vars.model}` : ''}` }))]} /></div>
+            <div className="composer-model-row"><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: k.model }))]} /></div>
             {working
               ? <button className="send-button stop" aria-label="Stop" onClick={stopAll}><Icon name="stop" size={18} /></button>
               : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><Icon name="send" size={20} /></button>}
+            </div>
           </div>
         </div>
       </div>

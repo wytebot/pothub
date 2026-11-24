@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { getSettings, saveSettings, type Settings as S } from '../settings';
-import { backgroundAvailable, backgroundOn, setBackground } from '../agent/background';
+import { backgroundAvailable } from '../agent/background';
 import { disableNotifications, enableNotifications, notifyPermission, notifyWanted, type NotifyPermission } from '../notify';
 
 export function Settings() {
   const [s, setS] = useState<S>(getSettings());
   const [notify, setNotify] = useState(notifyWanted());
-  const [bg, setBg] = useState(backgroundOn());
   const [perm, setPerm] = useState<NotifyPermission>('default');
   useEffect(() => { void notifyPermission().then(setPerm); }, []);
   const toggleNotify = async (on: boolean) => {
@@ -22,8 +21,8 @@ export function Settings() {
         <label className="check"><input type="checkbox" checked={s.terminal} onChange={(e) => set({ terminal: e.target.checked })} /> Show the live step-by-step terminal while the assistant works</label>
       </div>
       <div className="panel stack"><h2>Background jobs</h2>
-        <label className="check"><input type="checkbox" checked={bg && backgroundAvailable()} disabled={!backgroundAvailable()} onChange={(e) => { setBackground(e.target.checked); setBg(e.target.checked); }} /> Keep jobs running when I leave the app</label>
-        <p className="muted small">{backgroundAvailable() ? 'Answers are written by the Pothub server, so they finish even if you close the app or lose signal, and are waiting for you when you come back (kept for 48 hours). Leaving the app does not cancel an active job; it continues on the server and is picked up when you return. Your provider key is sent to the server over HTTPS for that one job only: it is held in memory, never saved or logged, and dropped when the job ends. Switch this off to run jobs only on this device.' : 'Background jobs need the Pothub server, which is not configured for this build. Jobs run on this device.'}</p>
+        <div className="notice"><strong>Background processing is always enabled.</strong><p>Chat answers are handed to the durable server job queue so they can continue when you leave the chat or app. This requires the configured job service and worker to be online.</p>{!backgroundAvailable()&&<p className="error">Background job service is not configured in this build.</p>}</div>
+        <p className="muted small">{backgroundAvailable() ? 'Answers are saved by the Pothub durable job service and can continue while you leave the app. Completed results are retained for up to 30 days. Your provider key is sent over HTTPS for the job, encrypted for queue storage, never logged, and erased when the job completes.' : 'Durable background jobs are unavailable in this build. Configure VITE_API_URL and deploy the Pothub job service and worker before sending requests; otherwise answers cannot be guaranteed to continue after you leave.'}</p>
       </div>
       <div className="panel stack"><h2>Notifications</h2>
         <label className="check"><input type="checkbox" checked={notify && perm === 'granted'} disabled={perm === 'unsupported'} onChange={(e) => void toggleNotify(e.target.checked)} /> Notify me when an answer is ready and I’m not in Pothub</label>
