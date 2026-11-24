@@ -467,7 +467,7 @@ export function Home() {
               )}
               <input ref={fileIn} type="file" accept="*/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
-            <div className="composer-model-row"><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: k.model }))]} /></div>
+            <div className="composer-model-row"><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: k.model ?? k.provider }))]} /></div>
             {working
               ? <button className="send-button stop" aria-label="Stop" onClick={stopAll}><Icon name="stop" size={18} /></button>
               : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><Icon name="send" size={20} /></button>}
