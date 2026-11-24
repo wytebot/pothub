@@ -3,7 +3,7 @@ import { Icon } from './Icon';
 import { useOutside } from './useOutside';
 
 interface Opt<T extends string> { value: T; label: string; }
-export function Select<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: Opt<T>[]; onChange: (v: T) => void }) {
+export function Select<T extends string>({ label, value, options, onChange, className = '' }: { label: string; value: T; options: Opt<T>[]; onChange: (v: T) => void; className?: string }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const root = useRef<HTMLDivElement>(null);
@@ -24,7 +24,7 @@ export function Select<T extends string>({ label, value, options, onChange }: { 
   };
 
   return (
-    <div className="select" ref={root}>
+    <div className={`select ${className}`} ref={root}>
       <button type="button" className="select-btn" role="combobox" aria-label={label} aria-expanded={open} aria-haspopup="listbox" aria-controls={id} aria-activedescendant={open ? `${id}-${active}` : undefined}
         onClick={() => { setActive(Math.max(0, options.findIndex((o) => o.value === value))); setOpen((o) => !o); }} onKeyDown={onKey}>
         <span>{cur?.label}</span><Icon name="chevron" size={14} />
