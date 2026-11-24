@@ -100,7 +100,7 @@ createServer(async (req, res) => {
       if (await rateLimited(`search:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
       const q = (url.searchParams.get('q') ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
       if (q.length < 2) return send(400, { error: 'Type something to search for.' });
-      try { return send(200, { results: await ddgSearch(q, 8, parseFresh(url.searchParams.get('fresh'))) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
+      try { return send(200, { results: await ddgSearch(q, 10, parseFresh(url.searchParams.get('fresh'))) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
     }
     if (url.pathname === '/api/publishers/crawl' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in before publishing crawl results.' });
@@ -134,7 +134,7 @@ createServer(async (req, res) => {
       const urls = Array.isArray(body.urls) ? body.urls.filter((x): x is string => typeof x === 'string').slice(0, 8) : [];
       if (!urls.length) return send(400, { error: 'Provide at least one web URL to crawl.' });
       const query = typeof body.query === 'string' ? body.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
-      return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 11 }));
+      return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 12, budgetMs: 20_000 }));
     }
     if (url.pathname === '/api/push/register' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to enable remote notifications.' });

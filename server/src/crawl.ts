@@ -176,12 +176,18 @@ export async function crawlSites(urls: string[], o: CrawlOptions = {}): Promise<
     return { page, links: x.links, feeds: x.feeds };
   };
   type Got = NonNullable<Awaited<ReturnType<typeof get>>>;
-  const level1 = (await Promise.all([...new Set(urls)].slice(0, Math.min(6, cap)).map((u) => get(u, 1)))).filter((x): x is Got => !!x);
+  const level1 = (await Promise.all([...new Set(urls)].slice(0, Math.min(8, cap)).map((u) => get(u, 1)))).filter((x): x is Got => !!x);
   const pages = level1.map((x) => x.page); const seen = new Set(level1.flatMap((x) => [normUrl(x.page.url), normUrl(x.page.finalUrl)]));
   const deepJobs: Promise<Got | null>[] = []; const feedJobs: Promise<FeedItem[]>[] = [];
   if ((o.depth ?? 2) >= 2) {
     let room = Math.max(0, cap - pages.length);
-    for (const x of level1.slice(0, 3)) for (const l of pickDeepLinks(x.links, terms, seen, 2)) { if (room-- <= 0) break; seen.add(normUrl(l.url)); deepJobs.push(get(l.url, 2, x.page.finalUrl)); }
+    for (const x of level1.slice(0, 4)) {
+      if (room <= 0) break;
+      for (const l of pickDeepLinks(x.links, terms, seen, Math.min(3, room))) {
+        if (room <= 0) break;
+        room--; seen.add(normUrl(l.url)); deepJobs.push(get(l.url, 2, x.page.finalUrl));
+      }
+    }
     for (const x of level1.slice(0, 3)) {
       const f = x.feeds[0]; if (!f || !sameSite(f, x.page.finalUrl)) continue;
       feedJobs.push(fetchLimited(f, c, { accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml', types: /xml|rss|atom/i, maxBytes: 300_000 }).then((r) => (r ? parseFeed(r.body, r.url, 4) : [])).catch(() => []));

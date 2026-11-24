@@ -43,11 +43,25 @@ export async function ddgSearch(query: string, max = 6, fresh?: Fresh): Promise<
     if (r.ok) hits = parseDdg(await r.text());
   } catch { /* try the fallback below */ }
   if (!hits.length) {
-    const r = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(9_000) });
-    if (!r.ok) throw new Error('search unavailable');
-    const j = await r.json() as { AbstractText?: string; AbstractURL?: string; Heading?: string; RelatedTopics?: { Text?: string; FirstURL?: string }[] };
-    if (j.AbstractText && j.AbstractURL) hits.push({ title: j.Heading || query, url: j.AbstractURL, snippet: j.AbstractText.slice(0, 400) });
-    for (const t of j.RelatedTopics ?? []) if (t.Text && t.FirstURL && hits.length < 8) hits.push({ title: t.Text.slice(0, 80), url: t.FirstURL, snippet: t.Text.slice(0, 300) });
+    try {
+      const r = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(7_000) });
+      if (r.ok) {
+        const j = await r.json() as { AbstractText?: string; AbstractURL?: string; Heading?: string; RelatedTopics?: { Text?: string; FirstURL?: string }[] };
+        if (j.AbstractText && j.AbstractURL) hits.push({ title: j.Heading || query, url: j.AbstractURL, snippet: j.AbstractText.slice(0, 400) });
+        for (const t of j.RelatedTopics ?? []) if (t.Text && t.FirstURL && hits.length < 8) hits.push({ title: t.Text.slice(0, 80), url: t.FirstURL, snippet: t.Text.slice(0, 300) });
+      }
+    } catch { /* continue to independent search provider */ }
+  }
+  if (!hits.length) {
+    // Independent HTML fallback prevents a DuckDuckGo outage/block from disabling research entirely.
+    const r = await fetch(`https://www.google.com/search?q=${encodeURIComponent(query)}&num=10`, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, signal: AbortSignal.timeout(8_000) });
+    if (r.ok) {
+      const html = await r.text(); const seen = new Set<string>();
+      for (const m of html.matchAll(/<a\s[^>]*href=\"(https?:[^\"]+)\"[^>]*>([\s\S]*?)<\/a>/gi)) {
+        let url = ''; try { const u = new URL(m[1]); if (!/^https?:$/.test(u.protocol) || /google\./i.test(u.hostname)) continue; url = u.toString(); } catch { continue; }
+        const title = text(m[2]); if (title.length < 8 || seen.has(url)) continue; seen.add(url); hits.push({ title: title.slice(0, 160), url, snippet: '' }); if (hits.length >= 8) break;
+      }
+    }
   }
   cache.set(key, { at: Date.now(), hits });
   return hits.slice(0, max);
