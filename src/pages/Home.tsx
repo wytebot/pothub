@@ -55,7 +55,6 @@ const GLYPH: Record<string, string> = { pdf: 'PDF', docx: 'DOC', text: 'TXT', of
 /** Messages as they come back from storage: files built last time are gone, and a request that was still running is checked against the job list. */
 function revive(all: Msg[]): Msg[] {
   return all.map((m) => {
-    if (m.fileOut) m = { ...m, fileOut: undefined }; // the built file only lives while the app is open
     if (m.state !== 'working') return m;
     if (pendingFor(m.id)) return m; // still running on the server: it is picked up again below
     return { ...m, state: 'error' as const, note: 'This request was interrupted. Send it again.' };
@@ -102,6 +101,17 @@ function Chip({ a, onRemove }: { a: Attachment; onRemove?: () => void }) {
       {onRemove && <button className="attach-x" aria-label={`Remove ${a.name}`} onClick={onRemove}><Icon name="close" size={12} /></button>}
     </span>
   );
+}
+
+function ImageArtifact({ file }: { file?: OutFile }) {
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    if (!file?.mime?.startsWith('image/')) { setSrc(''); return; }
+    const url = URL.createObjectURL(file.blob); setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  if (!src) return null;
+  return <a className="generated-image-preview" href={src} target="_blank" rel="noopener noreferrer" aria-label="Open generated image"><img src={src} alt={file?.name || 'Generated image'} loading="lazy" /></a>;
 }
 
 function Reply({ m }: { m: Msg }) {
@@ -152,6 +162,7 @@ export function Home() {
 
   // ---- conversations live in IndexedDB: no size cap, and every chat stays in the History menu ----
   const loadChat = useCallback(async (id: string) => {
+    outFiles.clear();
     let msgs: Msg[] = []; let cid = id; created.current = 0;
     try {
       const c = id ? await getChat(id) : undefined;
@@ -168,6 +179,9 @@ export function Home() {
       }
     } catch { msgs = []; cid = ''; }
     idRef.current = cid; setCurrentChatId(cid); fromLoad.current = msgs; setMessages(msgs); setReady(true);
+    // Restore generated artifacts from IndexedDB so image previews and downloads survive chat reloads.
+    await Promise.all(msgs.filter((m) => m.fileOut).map(async (m) => { const saved = await getArtifact(m.id).catch(() => undefined); if (saved) outFiles.set(m.id, { blob: saved.blob, name: saved.name, mime: saved.mime }); }));
+    tick((n) => n + 1);
   }, []);
   useEffect(() => { void loadChat(currentChatId()); }, [loadChat]);
   useEffect(() => { const prompt = takeCodelabPrompt(); if(prompt) { setIdea(prompt); setFiles([]); } }, []);
@@ -187,7 +201,7 @@ export function Home() {
     const save = () => {
       flush.current = null;
       const first = messages.find((m) => m.role === 'user'); const now = Date.now();
-      void putChat({ id, title: titleFrom(first?.text || first?.files?.[0]?.name || ''), createdAt: created.current || now, updatedAt: now, messages: messages.map((m) => (m.fileOut ? { ...m, fileOut: undefined } : m)) }).then(() => announceChats()).catch(() => {});
+      void putChat({ id, title: titleFrom(first?.text || first?.files?.[0]?.name || ''), createdAt: created.current || now, updatedAt: now, messages }).then(() => announceChats()).catch(() => {});
     };
     flush.current = save; const t = setTimeout(save, 500);
     return () => clearTimeout(t);
@@ -265,7 +279,7 @@ export function Home() {
           const del = here ? await deliverable(r.text, p.wanted, p.prompt, []) : { file: null, notes: p.wanted.file ? ['You were in another chat when this finished, so the file was not built. Ask me to make it from this answer.'] : [] };
           if (del.file) keepArtifact(p.msgId, del.file);
           const notes = [...p.notes, ...del.notes, ...(r.truncated ? ['The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.'] : [])];
-          await settle(p, { state: 'done', kind: 'text', text: p.wanted.file && del.file ? `**${del.file.name} is ready.** Download the attached file to review its contents.` : r.text, notes: notes.length ? notes : undefined, sources: p.sources, fileOut: del.file ? { name: del.file.name, size: del.file.blob.size } : undefined });
+          await settle(p, { state: 'done', kind: 'text', text: p.wanted.file && del.file ? `**${del.file.name} is ready.** Download the attached file to review its contents.` : r.text, notes: notes.length ? notes : undefined, sources: p.sources, fileOut: del.file ? { name: del.file.name, size: del.file.blob.size, mime: del.file.mime } : undefined });
           dropPending(p.msgId); log.say('ok', 'done');
           void notifyDone({ kind: 'text', title: 'Your answer is ready', body: `${p.modelName} finished “${titleFrom(p.prompt, 'your request').slice(0, 60)}”.`, route: '/' });
         } catch (e) {
@@ -301,7 +315,7 @@ export function Home() {
         const lr = log.start('cmd', `local ${local.kind} --to ${local.format}`);
         const out = await runLocal(local, atts); log.done(lr, `${out.file.name} · ${sizeLabel(out.file.blob.size)}`); log.say('ok', 'done');
         keepArtifact(id, out.file);
-        patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: { name: out.file.name, size: out.file.blob.size } });
+        patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: { name: out.file.name, size: out.file.blob.size, mime: out.file.mime } });
         return;
       }
       // Recall prior chats and recover locally stored generated files for continuity requests.
@@ -314,7 +328,7 @@ export function Home() {
       }});
       if (out.file) keepArtifact(id, out.file);
       log.say('ok', 'done');
-      patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, sources: out.sources?.length ? out.sources : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size } : undefined });
+      patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, sources: out.sources?.length ? out.sources : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size, mime: out.file.mime } : undefined });
       return;
     } catch (e) {
       log.settle('failed');
@@ -412,6 +426,7 @@ export function Home() {
           <div key={m.id} className="chat-message assistant">
             <div className="assistant-body">
               <Reply m={m} />
+              <ImageArtifact file={outFiles.get(m.id)} />
               {m.state === 'working' && <FadeStatus log={logs.get(m.id)} fallback={'Getting started…'} />}
               {m.state !== 'working' && (
                 <div className="msg-actions">
@@ -467,7 +482,7 @@ export function Home() {
               )}
               <input ref={fileIn} type="file" accept="*/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
-            <div className="composer-model-row"><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: k.model ?? k.provider }))]} /></div>
+            <div className="composer-model-row"><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: k.model || k.provider || 'Connected model' }))]} /></div>
             {working
               ? <button className="send-button stop" aria-label="Stop" onClick={stopAll}><Icon name="stop" size={18} /></button>
               : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><Icon name="send" size={20} /></button>}
