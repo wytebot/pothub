@@ -10,7 +10,6 @@ const MESSAGES: Record<string, string> = {
   'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site, then try again.',
   'auth/popup-closed-by-user': 'The Google sign-in window was closed before sign-in completed. Open it again and finish selecting your account.',
   'auth/internal-error': 'Google sign-in reached Firebase but failed internally. Check Firebase Authorized domains and the Google OAuth redirect URI for pothub-self.vercel.app, then retry.',
-  'auth/popup-closed-by-user': '',
   'auth/cancelled-popup-request': '',
   'auth/network-request-failed': 'No connection. Check your internet and try again.',
   'auth/unauthorized-domain': 'This website is not authorized for Google sign-in. In Firebase Authentication, add pothub-self.vercel.app under Authorized domains. In Google Cloud OAuth, ensure https://pothub-self.vercel.app/__/auth/handler is an authorized redirect URI for the web OAuth client.',
