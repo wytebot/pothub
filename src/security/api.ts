@@ -40,6 +40,12 @@ async function call<T>(base: string, path: string, body: unknown, timeoutMs: num
 
 /** Calls the Pothub API server (search, crawl, background jobs, billing). */
 export async function request<T>(path: string, body?: unknown, timeoutMs = 15_000): Promise<T> {
+  // Live search and page crawling are shipped as first-party Vercel functions with the web app.
+  // Keep account/agent/billing/other API calls on the configured backend, but never send these
+  // browser-facing research calls to a backend that may not deploy the matching routes.
+  if (/^\/api\/(?:search|crawl)(?:\?|$)/.test(path)) {
+    return call<T>(webBase, path, body, timeoutMs, 'Pothub live research service');
+  }
   if (!API) throw new Error('The secure Pothub service is not configured. Contact the app administrator.');
   return call<T>(API, path, body, timeoutMs, 'The Pothub API server');
 }
