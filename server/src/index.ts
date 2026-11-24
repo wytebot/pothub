@@ -9,6 +9,7 @@ import { cancelJob, jobView, startJob, validate } from './jobs';
 import { billingConfig, billingStatus, handleWebhook, startCheckout, verifyCheckout } from './billing';
 import { fileQuotaStatus, consumeFileQuota } from './fileQuota';
 import { consumeAnalysisQuota } from './analysisQuota';
+import { registerPushToken, removePushToken } from './push';
 
 const env = process.env; const PORT = Number(env.PORT ?? 8787); const ORIGIN = (env.APP_ORIGIN ?? '').replace(/\/$/, '');
 const ORIGINS = new Set([ORIGIN, 'https://localhost', 'capacitor://localhost', ...String(env.EXTRA_ORIGINS ?? '').split(',').map((x) => x.trim().replace(/\/$/, '')).filter(Boolean)].filter(Boolean));
@@ -134,6 +135,17 @@ createServer(async (req, res) => {
       if (!urls.length) return send(400, { error: 'Provide at least one web URL to crawl.' });
       const query = typeof body.query === 'string' ? body.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
       return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 11 }));
+    }
+    if (url.pathname === '/api/push/register' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to enable remote notifications.' });
+      const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { token?: unknown; platform?: unknown };
+      if (typeof body.token !== 'string' || body.token.length < 50 || body.token.length > 4_000) return send(400, { error: 'Invalid push token.' });
+      await registerPushToken(who.uid, body.token, typeof body.platform === 'string' ? body.platform.slice(0, 30) : 'web'); return send(200, { registered: true });
+    }
+    if (url.pathname === '/api/push/remove' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to manage notifications.' });
+      const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { token?: unknown };
+      if (typeof body.token === 'string') await removePushToken(who.uid, body.token); return send(200, { removed: true });
     }
     if (url.pathname === '/api/jobs' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to run jobs in the background.' });

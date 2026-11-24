@@ -24,11 +24,11 @@ const ENDPOINTS: Record<string, { api: Api; chat: string; tokens?: string }> = {
 
 export type JobStatus = 'running' | 'done' | 'error' | 'cancelled';
 interface Job { id: string; uid: string; status: JobStatus; text: string; error?: string; httpStatus?: number; pauseReason?: string; truncated: boolean; provider: string; model: string; created: number; updated: number; ctl: AbortController; encryptedPayload?: string; leaseOwner?: string; leaseUntil?: number; }
-export interface JobInput { provider: string; model: string; secret: string; system: string; history: { role: 'user' | 'assistant'; text: string }[]; prompt: string; maxTokens?: number; }
+export interface JobInput { provider: string; model: string; secret: string; system: string; history: { role: 'user' | 'assistant'; text: string }[]; prompt: string; maxTokens?: number; mode?: 'text' | 'agent'; }
 export interface JobView { status: JobStatus | 'queued' | 'paused'; length: number; chunk: string; error?: string; httpStatus?: number; pauseReason?: string; truncated?: boolean; }
 
 const jobs = new Map<string, Job>();
-const KEEP_MS = 48 * 3_600_000; const MAX_RUN_MS = KEEP_MS; const MAX_ROUNDS = 10;
+const KEEP_MS = 30 * 24 * 3_600_000; const MAX_RUN_MS = 7 * 24 * 3_600_000; const MAX_ROUNDS = 10;
 const MAX_PER_USER = 4; const MAX_TOTAL = 150;
 const CONTINUE = 'Continue exactly where you stopped. Do not repeat anything already written, do not add an introduction, and keep the same structure and format.';
 
@@ -65,7 +65,7 @@ export function validate(b: unknown): JobInput | string {
   const history = Array.isArray(x.history) ? x.history.filter((h) => h && (h.role === 'user' || h.role === 'assistant') && typeof h.text === 'string') : [];
   const size = x.prompt.length + (x.system?.length ?? 0) + history.reduce((n, h) => n + h.text.length, 0);
   if (size > 6_000_000) return 'This request is too large to run in the background.';
-  return { provider: x.provider, model: x.model, secret: x.secret, system: typeof x.system === 'string' ? x.system : '', history, prompt: x.prompt, maxTokens: typeof x.maxTokens === 'number' && x.maxTokens > 0 ? Math.min(x.maxTokens, 128_000) : undefined };
+  return { provider: x.provider, model: x.model, secret: x.secret, system: typeof x.system === 'string' ? x.system : '', history, prompt: x.prompt, maxTokens: typeof x.maxTokens === 'number' && x.maxTokens > 0 ? Math.min(x.maxTokens, 128_000) : undefined, mode: x.mode === 'agent' ? 'agent' : 'text' };
 }
 
 export async function startJob(uid: string, input: JobInput): Promise<{ id: string } | { error: string; status: number }> {
@@ -114,12 +114,12 @@ async function events(r: Response, onData: (d: string) => void) {
 interface Round { text: string; truncated: boolean; }
 type Once = (messages: { role: 'user' | 'assistant'; content: string }[], push: (t: string) => void) => Promise<Round>;
 
-function makeOnce(job: Job, i: JobInput): Once {
-  const ep = ENDPOINTS[i.provider]; const sig = job.ctl.signal; const secret = i.secret;
+function makeOnce(job: Job, i: JobInput, systemOverride?: string): Once {
+  const ep = ENDPOINTS[i.provider]; const system = systemOverride ?? i.system; const sig = job.ctl.signal; const secret = i.secret;
   const post = (url: string, headers: Record<string, string>, body: unknown) => fetch(url, { method: 'POST', signal: sig, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
   if (ep.api === 'gemini') return async (messages, push) => {
     const contents = messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
-    const res = await post(`${ep.chat}/models/${i.model}:streamGenerateContent?alt=sse`, { 'x-goog-api-key': secret }, { systemInstruction: { parts: [{ text: i.system }] }, contents, generationConfig: { temperature: 0.7, ...(i.maxTokens ? { maxOutputTokens: i.maxTokens } : {}) } });
+    const res = await post(`${ep.chat}/models/${i.model}:streamGenerateContent?alt=sse`, { 'x-goog-api-key': secret }, { systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { temperature: 0.7, ...(i.maxTokens ? { maxOutputTokens: i.maxTokens } : {}) } });
     if (!res.ok) throw await failed(res, secret);
     let out = ''; let finish = '';
     await events(res, (d) => { try { const j = JSON.parse(d); const c = j.candidates?.[0]; if (c?.finishReason) finish = c.finishReason; const add = (c?.content?.parts ?? []).filter((x: any) => !x.thought).map((x: any) => x.text ?? '').join(''); if (add) { out += add; push(add); } } catch { /* partial */ } });
@@ -127,14 +127,14 @@ function makeOnce(job: Job, i: JobInput): Once {
     return { text: out, truncated: finish === 'MAX_TOKENS' };
   };
   if (ep.api === 'anthropic') return async (messages, push) => {
-    const res = await post(ep.chat, { 'x-api-key': secret, 'anthropic-version': '2023-06-01' }, { model: i.model, max_tokens: i.maxTokens ?? 8192, system: i.system, messages, stream: true });
+    const res = await post(ep.chat, { 'x-api-key': secret, 'anthropic-version': '2023-06-01' }, { model: i.model, max_tokens: i.maxTokens ?? 8192, system, messages, stream: true });
     if (!res.ok) throw await failed(res, secret);
     let out = ''; let stop = '';
     await events(res, (d) => { try { const j = JSON.parse(d); if (j.type === 'content_block_delta' && j.delta?.text) { out += j.delta.text; push(j.delta.text); } else if (j.type === 'message_delta' && j.delta?.stop_reason) stop = j.delta.stop_reason; } catch { /* partial */ } });
     return { text: out, truncated: stop === 'max_tokens' };
   };
   return async (messages, push) => {
-    const body = { model: i.model, messages: [{ role: 'system', content: i.system }, ...messages], stream: true, ...(i.maxTokens ? { [ep.tokens ?? 'max_tokens']: i.maxTokens } : {}) };
+    const body = { model: i.model, messages: [{ role: 'system', content: system }, ...messages], stream: true, ...(i.maxTokens ? { [ep.tokens ?? 'max_tokens']: i.maxTokens } : {}) };
     const res = await post(ep.chat, { Authorization: `Bearer ${secret}` }, body);
     if (!res.ok) throw await failed(res, secret);
     let out = ''; let finish = '';
@@ -182,9 +182,33 @@ export async function run(job: Job, input: JobInput) {
   } catch (e) {
     if (job.status === 'cancelled') return;
     job.status = 'error'; job.httpStatus = e instanceof ProviderError ? e.status : undefined;
-    job.error = job.ctl.signal.aborted ? 'This job exceeded the 48 hour processing window and was stopped. Its saved partial answer is still available for recovery.' : scrub(e instanceof ProviderError ? e.message : 'Could not reach the provider. Try again.', input.secret);
+    job.error = job.ctl.signal.aborted ? 'This job exceeded the 7 day processing window and was stopped. Its saved partial answer is still available for recovery.' : scrub(e instanceof ProviderError ? e.message : 'Could not reach the provider. Try again.', input.secret);
   } finally { clearInterval(persistTimer); job.updated = Date.now(); job.encryptedPayload = undefined; save(job); }
 }
+
+/** Durable engineering-agent plan/implement/review. Stage outputs remain private until the final review is saved. */
+export async function runAgent(job: Job, input: JobInput): Promise<void> {
+  const baseMessages = [...input.history.map(h => ({ role: h.role, content: h.text })), { role: 'user' as const, content: input.prompt }];
+  const stages = [
+    { label: 'PLAN', system: `${input.system}\n\nYou are the PLAN stage of a guarded engineering agent. Analyze the request and provided context. Produce a concise actionable plan, goals, relevant files, dependencies, risks, acceptance criteria, and verification steps. Do not reveal hidden chain-of-thought.`, instruction: 'Create the implementation plan.' },
+    { label: 'IMPLEMENT', system: `${input.system}\n\nYou are the IMPLEMENT stage of a guarded engineering agent. Follow the plan. Return complete, usable changes and full contents of changed/new files when code is requested. Make minimal changes, preserve unrelated behavior, and never claim to edit files or run tests. Avoid placeholders.`, instruction: 'Implement the request fully using the plan and original context.' },
+    { label: 'REVIEW', system: `${input.system}\n\nYou are the critical REVIEW and FINALIZATION stage. Inspect the implementation against the task and plan, correct defects and missing requirements, and return the complete final deliverable. Include a verification checklist and clearly state tests/builds not actually run. Do not expose hidden chain-of-thought.`, instruction: 'Critically review, correct, and finalize the implementation.' },
+  ];
+  const outputs: string[] = []; const persistTimer = setInterval(() => save(job), 2_000); persistTimer.unref();
+  try {
+    for (const stage of stages) {
+      if (job.status !== 'running' || job.ctl.signal.aborted) throw new Error('Cancelled.');
+      const messages: { role: 'user' | 'assistant'; content: string }[] = [...baseMessages, ...outputs.map((content, idx) => ({ role: 'assistant' as const, content: `Internal stage ${idx + 1} output:\n${content}` })), { role: 'user' as const, content: `${stage.instruction}\n\n${outputs.length ? `Prior stage outputs:\n${outputs.join('\n\n')}` : ''}` }];
+      let stageText = ''; await makeOnce(job, input, stage.system)(messages, (chunk) => { stageText += chunk; });
+      if (!stageText.trim()) throw new ProviderError(`Agent ${stage.label.toLowerCase()} stage returned no content.`);
+      outputs.push(stageText.trim()); job.updated = Date.now(); save(job);
+    }
+    if (job.status === 'running') { job.text = outputs[2]; job.status = 'done'; job.truncated = false; }
+  } catch (e) {
+    if (job.status !== 'cancelled') { job.status = 'error'; job.httpStatus = e instanceof ProviderError ? e.status : undefined; job.error = scrub(e instanceof ProviderError ? e.message : 'Engineering agent workflow failed.', input.secret); }
+  } finally { clearInterval(persistTimer); job.updated = Date.now(); job.encryptedPayload = undefined; save(job); }
+}
+
 
 /** Atomically claims a queued job for the dedicated worker process. */
 export async function claimNextJob(workerId: string): Promise<{ job: Job; input: JobInput } | null> {

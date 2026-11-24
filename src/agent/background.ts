@@ -20,7 +20,7 @@ export const backgroundOn = (): boolean => { try { return localStorage.getItem(P
 export const setBackground = (on: boolean) => { try { localStorage.setItem(PREF, on ? 'on' : 'off'); } catch { /* storage blocked */ } };
 
 export interface PendingJob { id: string; chatId: string; msgId: string; prompt: string; wanted: Wanted; modelName: string; notes: string[]; sources?: WebSource[]; started: number; }
-const readPending = (): PendingJob[] => { try { const rows = JSON.parse(localStorage.getItem(PENDING) ?? '[]') as PendingJob[]; return rows.filter((r) => Date.now() - r.started < 47 * 3_600_000); } catch { return []; } };
+const readPending = (): PendingJob[] => { try { const rows = JSON.parse(localStorage.getItem(PENDING) ?? '[]') as PendingJob[]; return rows.filter((r) => Date.now() - r.started < 29 * 24 * 3_600_000); } catch { return []; } };
 const writePending = (rows: PendingJob[]) => { try { localStorage.setItem(PENDING, JSON.stringify(rows)); } catch { /* storage blocked */ } };
 export const pendingJobs = (): PendingJob[] => readPending();
 export const pendingFor = (msgId: string): PendingJob | undefined => readPending().find((p) => p.msgId === msgId);
@@ -59,11 +59,11 @@ export async function follow(id: string, o: { signal?: AbortSignal; onText?: (so
 }
 
 /** Runs one text request on the server and follows it. Same result shape as generateText. */
-export async function generateInBackground(provider: ProviderId, secret: string, r: TextRequest, ctx: { msgId?: string; onStarted?: (id: string) => void } = {}): Promise<TextResult> {
+export async function generateInBackground(provider: ProviderId, secret: string, r: TextRequest, ctx: { msgId?: string; onStarted?: (id: string) => void; mode?: 'text' | 'agent' } = {}): Promise<TextResult> {
   const skip = unreadable(provider, r.files); let blocks = '';
   for (const f of r.files as Attachment[]) { if (skip.includes(f)) continue; if (f.kind === 'text' || f.kind === 'docx') blocks += `File: ${f.name}\n\`\`\`\n${await textOf(f)}\n\`\`\`\n\n`; }
   let id: string;
-  try { id = (await request<{ id: string }>('/api/jobs', { provider, model: r.model, secret, system: r.system, history: r.history, prompt: `${blocks}${r.prompt}`, maxTokens: r.maxTokens }, 60_000)).id; }
+  try { id = (await request<{ id: string }>('/api/jobs', { provider, model: r.model, secret, system: r.system, history: r.history, prompt: `${blocks}${r.prompt}`, maxTokens: r.maxTokens, mode: ctx.mode ?? 'text' }, 60_000)).id; }
   catch (e) { throw new NotStarted(e instanceof Error ? e.message : 'Could not start a background job.'); }
   ctx.onStarted?.(id);
   try {
