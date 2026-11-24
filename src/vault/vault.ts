@@ -111,7 +111,14 @@ export async function addBackendKey(label: string, gateway: string, info: { prov
   return meta;
 }
 /** The backend's model can change on the backend; keep the saved copy in step. */
-export function setBackendModel(id: string, model: string) { writeMeta(readMeta().map((k) => (k.id === id && k.source === 'backend' ? { ...k, model } : k))); }
+export function setBackendModel(id: string, model: string, provider?: ProviderId) { writeMeta(readMeta().map((k) => (k.id === id && k.source === 'backend' ? { ...k, model, ...(provider ? { provider } : {}) } : k))); }
+/** Update the saved pointer to a user's backend. No backend secret is stored in Pothub. */
+export function updateBackendKey(id: string, patch: { label?: string; gateway?: string; provider?: ProviderId; model?: string; vars?: VarNames }): KeyMeta {
+  const rows = readMeta(); const cur = rows.find((k) => k.id === id && k.source === 'backend');
+  if (!cur) throw new Error('This backend connection could not be found. Reload and try again.');
+  const next: KeyMeta = { ...cur, ...patch, label: patch.label?.trim() || cur.label, status: 'untested', testedAt: undefined };
+  writeMeta(rows.map((k) => k.id === id ? next : k)); return next;
+}
 /** Change the name and/or the secret of a saved key. Ticked defaults are kept. Leave `secret` out to keep the stored secret. */
 export async function updateKey(id: string, o: { label?: string; secret?: string }): Promise<KeyMeta> {
   const rows = readMeta(); const cur = rows.find((k) => k.id === id);
