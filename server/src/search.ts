@@ -53,15 +53,32 @@ export async function ddgSearch(query: string, max = 6, fresh?: Fresh): Promise<
     } catch { /* continue to independent search provider */ }
   }
   if (!hits.length) {
-    // Independent HTML fallback prevents a DuckDuckGo outage/block from disabling research entirely.
-    const r = await fetch(`https://www.google.com/search?q=${encodeURIComponent(query)}&num=10`, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, signal: AbortSignal.timeout(8_000) });
-    if (r.ok) {
-      const html = await r.text(); const seen = new Set<string>();
-      for (const m of html.matchAll(/<a\s[^>]*href=\"(https?:[^\"]+)\"[^>]*>([\s\S]*?)<\/a>/gi)) {
-        let url = ''; try { const u = new URL(m[1]); if (!/^https?:$/.test(u.protocol) || /google\./i.test(u.hostname)) continue; url = u.toString(); } catch { continue; }
-        const title = text(m[2]); if (title.length < 8 || seen.has(url)) continue; seen.add(url); hits.push({ title: title.slice(0, 160), url, snippet: '' }); if (hits.length >= 8) break;
+    // Independent provider fallback: Google's HTML can be blocked by region or bot checks.
+    try {
+      const r = await fetch(`https://www.google.com/search?q=${encodeURIComponent(query)}&num=10`, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, signal: AbortSignal.timeout(8_000) });
+      if (r.ok) {
+        const html = await r.text(); const seen = new Set<string>();
+        for (const m of html.matchAll(/<a\s[^>]*href=\"(https?:[^\"]+)\"[^>]*>([\s\S]*?)<\/a>/gi)) {
+          let url = ''; try { const u = new URL(m[1]); if (!/^https?:$/.test(u.protocol) || /google\./i.test(u.hostname)) continue; url = u.toString(); } catch { continue; }
+          const title = text(m[2]); if (title.length < 8 || seen.has(url)) continue; seen.add(url); hits.push({ title: title.slice(0, 160), url, snippet: '' }); if (hits.length >= 8) break;
+        }
       }
-    }
+    } catch { /* try Bing below */ }
+  }
+  if (!hits.length) {
+    try {
+      const r = await fetch(`https://www.bing.com/search?q=${encodeURIComponent(query)}&count=10`, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9', Accept: 'text/html' }, signal: AbortSignal.timeout(8_000) });
+      if (r.ok) {
+        const html = await r.text(); const seen = new Set<string>();
+        for (const block of html.split(/<li\s+class=\"b_algo\"/i).slice(1)) {
+          const a = /<h2[^>]*>\s*<a[^>]*href=\"(https?:[^\"]+)\"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
+          if (!a) continue; let url = ''; try { const u = new URL(a[1]); if (!/^https?:$/.test(u.protocol) || /bing\./i.test(u.hostname)) continue; url = u.toString(); } catch { continue; }
+          const title = text(a[2]); if (title.length < 5 || seen.has(url)) continue; seen.add(url);
+          const snippet = text(/<p[^>]*>([\s\S]*?)<\/p>/i.exec(block)?.[1] ?? '');
+          hits.push({ title: title.slice(0, 160), url, snippet: snippet.slice(0, 400) }); if (hits.length >= 10) break;
+        }
+      }
+    } catch { /* all providers unavailable */ }
   }
   cache.set(key, { at: Date.now(), hits });
   return hits.slice(0, max);

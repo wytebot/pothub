@@ -3,7 +3,7 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyIdToken } from './identity';
 import { distributedLimit } from './securityStore';
 import { ddgSearch, parseFresh } from './search';
-import { crawlSites } from './crawl';
+import { crawlSites, safeUrl } from './crawl';
 import { publishCrawl, searchPublisherIndex, removePublisher } from './publisherIndex';
 import { cancelJob, jobView, startJob, validate } from './jobs';
 import { billingConfig, billingStatus, handleWebhook, startCheckout, verifyCheckout } from './billing';
@@ -95,12 +95,56 @@ createServer(async (req, res) => {
       try { const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { transactionId?: unknown; txRef?: unknown }; return send(200, await verifyCheckout(who, body)); }
       catch (e) { return send(400, { error: e instanceof Error ? e.message : 'Payment verification failed.' }); }
     }
+    if (url.pathname === '/api/sites/verify-token' && req.method === 'GET') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to create a site verification tag.' });
+      const rawSite = url.searchParams.get('site') || '';
+      const target = await safeUrl(rawSite);
+      if (!target) return send(400, { error: 'Enter a public HTTP or HTTPS website URL.' });
+      const secret = env.SITE_VERIFY_SECRET || env.POTHUB_SITE_VERIFY_SECRET || env.GITHUB_CLIENT_SECRET;
+      if (!secret || secret.length < 32) return send(503, { error: 'Site verification is not configured on this server. Set POTHUB_SITE_VERIFY_SECRET to a random secret of at least 32 characters.' });
+      const siteKey = `${target.protocol}//${target.host}`;
+      const token = createHmac('sha256', secret).update(`${who.uid}:${siteKey}`).digest('hex');
+      return send(200, { tag: `<meta name="pothub-site-verification" content="${token}">`, token, site: siteKey });
+    }
+    if (url.pathname === '/api/sites/verify' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to verify your site.' });
+      const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { url?: unknown };
+      if (typeof body.url !== 'string') return send(400, { error: 'Provide the website URL to verify.' });
+      const target = await safeUrl(body.url); if (!target) return send(400, { error: 'The site must be a public HTTP or HTTPS website.' });
+      const secret = env.SITE_VERIFY_SECRET || env.POTHUB_SITE_VERIFY_SECRET || env.GITHUB_CLIENT_SECRET;
+      if (!secret || secret.length < 32) return send(503, { error: 'Site verification is not configured on this server. Set POTHUB_SITE_VERIFY_SECRET to a random secret of at least 32 characters.' });
+      const siteKey = `${target.protocol}//${target.host}`;
+      const token = createHmac('sha256', secret).update(`${who.uid}:${siteKey}`).digest('hex');
+      let current: URL | null = target; let html = ''; let status = 0;
+      for (let hop = 0; hop < 4 && current; hop++) {
+        const safe = await safeUrl(current.toString()); if (!safe) return send(400, { error: 'The website redirected to a non-public or unsupported address.' });
+        const response = await fetch(safe, { redirect: 'manual', headers: { 'User-Agent': 'PothubSiteVerifier/1.0', Accept: 'text/html' }, signal: AbortSignal.timeout(10_000) });
+        status = response.status;
+        if ([301,302,303,307,308].includes(status)) { const loc = response.headers.get('location'); if (!loc) break; try { current = new URL(loc, safe); } catch { current = null; } continue; }
+        if (!response.ok) return send(502, { error: `Could not read the website homepage (HTTP ${status}).` });
+        html = (await response.text()).slice(0, 2_000_000); current = null; break;
+      }
+      const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const meta = new RegExp(`<meta\\b(?=[^>]*\\bname\\s*=\\s*["']pothub-site-verification["'])(?=[^>]*\\bcontent\\s*=\\s*["']${escaped}["'])[^>]*>`, 'i');
+      if (!meta.test(html)) return send(400, { error: 'Verification tag not found in the homepage HTML. Place the exact Pothub meta tag inside the live homepage <head>, save and deploy index.html, then retry.' });
+      return send(200, { verified: true, site: siteKey });
+    }
     if (url.pathname === '/api/search' && req.method === 'GET') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to use web search.' });
       if (await rateLimited(`search:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
       const q = (url.searchParams.get('q') ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
       if (q.length < 2) return send(400, { error: 'Type something to search for.' });
       try { return send(200, { results: await ddgSearch(q, 10, parseFresh(url.searchParams.get('fresh'))) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
+    }
+    if (url.pathname === '/api/sites/diagnose' && req.method === 'POST') {
+      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to diagnose this website.' });
+      if (await rateLimited(`site-diagnose:${who.uid}`, 10)) return send(429, { error: 'Too many site diagnoses. Wait a moment.' });
+      const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { url?: unknown };
+      if (typeof body.url !== 'string') return send(400, { error: 'Provide the website URL to diagnose.' });
+      const target = await safeUrl(body.url); if (!target) return send(400, { error: 'The site must be a public HTTP or HTTPS website.' });
+      const crawled = await crawlSites([target.toString()], { depth: 2, maxPages: 8, budgetMs: 18_000 });
+      if (!crawled.pages.length) return send(502, { error: 'The site could not be crawled. Check that its homepage is public and does not block automated requests.' });
+      return send(200, { pages: crawled.pages.slice(0, 8).map(p => ({ url: p.finalUrl || p.url, title: p.title || '', text: p.text || '' })) });
     }
     if (url.pathname === '/api/publishers/crawl' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in before publishing crawl results.' });
@@ -131,10 +175,10 @@ createServer(async (req, res) => {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to crawl pages.' });
       if (await rateLimited(`crawl:${who.uid}`, 12)) return send(429, { error: 'Too many crawl requests. Wait a moment.' });
       const body = JSON.parse((await raw(req)).toString('utf8') || '{}') as { urls?: unknown; query?: unknown; depth?: unknown };
-      const urls = Array.isArray(body.urls) ? body.urls.filter((x): x is string => typeof x === 'string').slice(0, 8) : [];
+      const urls = Array.isArray(body.urls) ? body.urls.filter((x): x is string => typeof x === 'string').slice(0, 12) : [];
       if (!urls.length) return send(400, { error: 'Provide at least one web URL to crawl.' });
       const query = typeof body.query === 'string' ? body.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
-      return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 12, budgetMs: 20_000 }));
+      return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 20, budgetMs: 35_000 }));
     }
     if (url.pathname === '/api/push/register' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to enable remote notifications.' });
