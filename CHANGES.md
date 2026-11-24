@@ -1,3 +1,10 @@
+# Codelab redesign (0.12.0)
+
+- Codelab is now three screens: Repos (continue card, stats, filter chips, repo cards, new repo), Workspace (folder/file tree with expandable folders, horizontal tool bar, commit bar) and Editor (opens inside the workspace with the editing tool bar and file tabs).
+- Vercel, GitHub, branches, pull requests, quality, sandbox, export, settings, add license and delete actions moved into one more menu.
+- Wired to the existing GitHub, staging, commit, sandbox and Capacitor logic; no behavior was removed.
+- Typechecked Codelab.tsx for syntax and unused variables only (dependencies are not installed here); run npm run build before deploying.
+
 # Codelab tool navigation wiring
 
 - Added dedicated workspace tool views for Files & editor, Branches, Pull request, Upload files, Copy/Export, Quality & review, Sandbox and Repository settings.
