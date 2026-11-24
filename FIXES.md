@@ -26,3 +26,11 @@
 - GitHub OAuth token is retained for the current browser session and Codelab auto-reconnects; OAuth state expiry is extended to 30 minutes.
 - Binary ZIP contents are skipped by the GitHub text API commit flow; this workflow is not a replacement for Git LFS.
 - Run `npm install`, `npm run build`, and `npm test` before deploying. Dependency install could not be completed in this environment.
+
+## Durable engineering agent + remote completion notifications
+
+- Engineering-agent plan/implement/review requests now use the durable server worker when `VITE_API_URL` is configured, except project ZIP requests that must remain local for sandbox/patch delivery.
+- Agent intermediate stages are kept private; only the reviewed final stage is returned to the job status endpoint.
+- The server can run API + worker together via `cd server && npm install && npm start` on a persistent host. This is not a Vercel serverless function; a long-lived host must run it.
+- Remote FCM completion notifications are wired to opted-in web/PWA and Android tokens. Add `VITE_FIREBASE_VAPID_KEY` to the frontend build environment for web push. Firebase Admin credentials must be configured on the server. Android builds must run `npm install && npx cap sync android` after the Push Notifications plugin is added.
+- Full build and closed-app push delivery are not verified in this environment because dependencies were unavailable.
