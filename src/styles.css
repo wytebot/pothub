@@ -923,3 +923,7 @@ html, body, #root { overflow: hidden; overscroll-behavior: none; }
 .cl2 .cl-bar{position:sticky;bottom:0;z-index:5;display:flex;gap:10px;margin-top:12px;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--border)}
 .cl2 .cl-bar input{flex:1;height:46px;border-radius:13px!important;padding:0 14px!important}
 .cl2 .history-list{display:flex;flex-direction:column;gap:8px}
+
+/* Generated image artifacts are previewed inline and remain downloadable. */
+.generated-image-preview { display: inline-flex; max-width: min(100%, 680px); margin: 10px 0 4px; border: 1px solid var(--line, #333); border-radius: 14px; overflow: hidden; background: var(--panel, #151515); }
+.generated-image-preview img { display: block; width: auto; max-width: 100%; max-height: 620px; object-fit: contain; }
