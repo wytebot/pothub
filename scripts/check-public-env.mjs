@@ -1,7 +1,7 @@
 // Vite exposes every VITE_* variable to the browser. Reject secret-looking names before bundling.
 import { existsSync, readFileSync } from 'node:fs';
 const forbidden = /(?:SECRET|PRIVATE|PASSWORD|TOKEN|CREDENTIAL|SERVICE_ACCOUNT|ENCRYPTION_KEY|WEBHOOK_HASH|API_KEY|ACCESS_KEY|(?:OPENAI|GEMINI|ANTHROPIC|FLUTTERWAVE|STRIPE|PAYPAL).*KEY|(?:^|_)KEY$)/i;
-const explicitlyPublic = new Set(['VITE_POTHUB_WEB_PUSH_VAPID_KEY']);
+const explicitlyPublic = new Set(['VITE_FIREBASE_API_KEY']);
 const keys = new Set(Object.keys(process.env));
 for (const file of ['.env', '.env.local', '.env.production', '.env.production.local', '.env.development', '.env.development.local']) {
   if (!existsSync(file)) continue;

@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",
-    "tsx": "^4.19.0",
-    "fflate": "^0.8.2"
+    "tsx": "^4.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
