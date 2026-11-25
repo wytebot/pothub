@@ -1,0 +1,11 @@
+# Pothub remaining-work update
+- Added a dedicated Ask Pothub route and wired Doctor/Codelab handoffs into the existing local chat engine.
+- Added GitHub workflow log archive extraction with size and text bounds; logs now accompany Doctor follow-up context.
+- Added pagination for GitHub repository discovery and authorization checks for log access.
+- Repair branches are validated by GitHub Actions before a pull request is opened; retries reuse an existing open PR.
+- Expanded validation workflow for Node, Python, Go, Rust, Maven, Gradle and .NET projects.
+- Removed chat file-upload, paste-file and drag/drop entry points; chat works from text and connected GitHub/Vercel context.
+- Updated setup documentation with GitHub Actions permissions and current capability boundaries.
+- Run: `npm run typecheck && npm run build && npm test`.
+- Run server checks: `cd server && npm test && npm run typecheck`.
+- Android: `npm run android:sync` then build the Android project with Gradle.
