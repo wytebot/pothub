@@ -1,0 +1,104 @@
+name: Deploy Pothub sandbox runner
+on:
+  workflow_run:
+    workflows: [Publish Pothub sandbox images]
+    types: [completed]
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check optional mobile deployment secrets
+        id: config
+        env:
+          HOST: ${{ secrets.SANDBOX_HOST }}
+          USER: ${{ secrets.SANDBOX_USER }}
+          KEY: ${{ secrets.SANDBOX_SSH_KEY }}
+          HOST_KEYS: ${{ secrets.SANDBOX_KNOWN_HOSTS }}
+          DOMAIN: ${{ secrets.SANDBOX_DOMAIN }}
+          RUNNER_TOKEN: ${{ secrets.ENGINE_RUNNER_TOKEN }}
+          PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+        shell: bash
+        run: |
+          if [[ -n "$HOST" && -n "$USER" && -n "$KEY" && -n "$HOST_KEYS" && -n "$DOMAIN" && -n "$RUNNER_TOKEN" && -n "$PULL_TOKEN" && -n "$GHCR_USERNAME" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Runner deploy skipped. Add all SANDBOX_* secrets, ENGINE_RUNNER_TOKEN and GHCR_PULL_TOKEN to enable remote deployment." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Prepare SSH and deployment files
+        if: steps.config.outputs.ready == 'true'
+        env:
+          SSH_KEY: ${{ secrets.SANDBOX_SSH_KEY }}
+          HOST_KEYS: ${{ secrets.SANDBOX_KNOWN_HOSTS }}
+          GHCR_OWNER: ${{ github.repository_owner }}
+          RUNNER_TOKEN: ${{ secrets.ENGINE_RUNNER_TOKEN }}
+          DOMAIN: ${{ secrets.SANDBOX_DOMAIN }}
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.ssh" deploy
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$HOST_KEYS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          printf 'GHCR_OWNER=%s\nENGINE_RUNNER_TOKEN=%s\nRUNNER_DOMAIN=%s\n' "$(echo "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')" "$RUNNER_TOKEN" "$DOMAIN" > deploy/.env
+          cp sandbox/runner/docker-compose.yml deploy/docker-compose.yml
+          cp sandbox/runner/Caddyfile deploy/Caddyfile
+      - name: Provision Docker on dedicated Ubuntu host
+        if: steps.config.outputs.ready == 'true'
+        env:
+          HOST: ${{ secrets.SANDBOX_HOST }}
+          USER: ${{ secrets.SANDBOX_USER }}
+        shell: bash
+        run: |
+          target="$USER@$HOST"
+          ssh -i "$HOME/.ssh/deploy_key" -o BatchMode=yes "$target" 'if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sudo -n sh; fi && sudo systemctl enable --now docker && sudo docker version >/dev/null && sudo docker compose version'
+      - name: Copy deployment config to host
+        if: steps.config.outputs.ready == 'true'
+        env:
+          HOST: ${{ secrets.SANDBOX_HOST }}
+          USER: ${{ secrets.SANDBOX_USER }}
+        shell: bash
+        run: |
+          target="$USER@$HOST"
+          ssh -i "$HOME/.ssh/deploy_key" -o BatchMode=yes "$target" 'mkdir -p ~/pothub-runner'
+          scp -i "$HOME/.ssh/deploy_key" deploy/docker-compose.yml deploy/Caddyfile deploy/.env "$target:~/pothub-runner/"
+      - name: Pull and start runner on host
+        if: steps.config.outputs.ready == 'true'
+        env:
+          HOST: ${{ secrets.SANDBOX_HOST }}
+          USER: ${{ secrets.SANDBOX_USER }}
+          GHCR_USER: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        shell: bash
+        run: |
+          target="$USER@$HOST"
+          printf '%s' "$GHCR_TOKEN" | ssh -i "$HOME/.ssh/deploy_key" -o BatchMode=yes "$target" "sudo docker login ghcr.io --username $GHCR_USER --password-stdin"
+          ssh -i "$HOME/.ssh/deploy_key" -o BatchMode=yes "$target" 'cd ~/pothub-runner && sudo docker compose pull && sudo docker compose up -d && sudo docker compose ps' 
+      - name: Verify public runner health
+        if: steps.config.outputs.ready == 'true'
+        env:
+          DOMAIN: ${{ secrets.SANDBOX_DOMAIN }}
+        shell: bash
+        run: |
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent --show-error "https://$DOMAIN/health"; then
+              echo "Runner health endpoint returned success." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Runner was deployed but HTTPS health verification did not pass in 3 minutes. Check DNS, host firewall, Caddy logs, and Docker health." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - name: Deployment result
+        if: steps.config.outputs.ready == 'true'
+        env:
+          DOMAIN: ${{ secrets.SANDBOX_DOMAIN }}
+        run: echo "Runner deployment attempted. Configure ENGINE_RUNNER_URL=https://$DOMAIN on the Pothub API backend and run a health check." >> "$GITHUB_STEP_SUMMARY"
