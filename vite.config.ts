@@ -24,7 +24,11 @@ const versioning = () => ({
 // Vite exposes every VITE_* variable to the browser. Refuse to build when a secret-looking name uses that prefix.
 // (Lives here, not in scripts/, so the build can never fail because a helper file is missing from Git.)
 const FORBIDDEN = /(?:SECRET|PRIVATE|PASSWORD|TOKEN|CREDENTIAL|SERVICE_ACCOUNT|ENCRYPTION_KEY|WEBHOOK_HASH|API_KEY|ACCESS_KEY|(?:OPENAI|GEMINI|ANTHROPIC|FLUTTERWAVE|STRIPE|PAYPAL).*KEY|(?:^|_)KEY$)/i;
-const PUBLIC_OK = new Set(['VITE_POTHUB_WEB_PUSH_VAPID_KEY']);
+const PUBLIC_OK = new Set([
+  'VITE_POTHUB_WEB_PUSH_VAPID_KEY',
+  // Firebase Web API keys identify the Firebase project; they are public client config, not Admin credentials.
+  'VITE_FIREBASE_API_KEY',
+]);
 const publicEnvGuard = () => ({
   name: 'pothub-public-env-guard',
   apply: 'build' as const,
