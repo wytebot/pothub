@@ -26,17 +26,11 @@ export function queryVariants(prompt: string): SearchVariant[] {
   const docsIntent = /\b(official documentation|docs|documentation|api reference|how to use|installation guide|implement|build|create|develop|configure|setup|set up|install|integrate|wire|upgrade|fix|debug|troubleshoot|deploy|production)\b/i.test(q);
   const troubleshootIntent = /\b(error|exception|failed|failure|bug|debug|fix|troubleshoot|broken|not working|doesn't work|cannot|can't)\b/i.test(q);
   const variants: SearchVariant[] = [{ q, ...(recent ? { fresh: 'm' as const } : {}) }];
-  // Keep a non-filtered search immediately after the fresh-results search.
-  if (recent) variants.push({ q });
-  // Broaden recall beyond near-duplicate query repetition: exact phrase/entity plus independent evidence angles.
-  if (!technical) variants.push({ q: `${q} reliable sources background analysis`.slice(0, 200) });
-  if (/\b(compare|versus|vs\.?|difference|best|top|recommend)\b/i.test(q)) variants.push({ q: `${q} comparison review pros cons`.slice(0, 200) });
-  if (/\b(why|how|impact|effect|cause|history|explain)\b/i.test(q)) variants.push({ q: `${q} primary sources evidence explanation`.slice(0, 200) });
   if (recent) variants.push({ q, fresh: 'y' });
-  if (technical && docsIntent && !troubleshootIntent) variants.push({ q: `${q} official documentation current API`.slice(0, 200) });
+  if (technical && docsIntent) variants.push({ q: `${q} official documentation current API`.slice(0, 200) });
   if (technical && troubleshootIntent) variants.push({ q: `${q} error solution issue tracker troubleshooting`.slice(0, 200) });
-  if (technical && !troubleshootIntent && !recent) variants.push({ q: `${q} best practices implementation examples`.slice(0, 200) });
-  return variants.slice(0, 6);
+  if (technical && !troubleshootIntent) variants.push({ q: `${q} best practices implementation examples`.slice(0, 200) });
+  return variants.slice(0, 5);
 }
 
 /** Interleaves several result lists, drops repeated pages, and keeps at most `perHost` per site. */
@@ -87,7 +81,7 @@ export function applyCrawl(hits: WebHit[], pages: CrawledPage[]): WebHit[] {
 }
 
 /** Page-level sources, deduplicated by normalized URL and kept in research rank order. */
-export function buildSources(hits: WebHit[], max = 16): WebSource[] {
+export function buildSources(hits: WebHit[], max = 8): WebSource[] {
   const out: WebSource[] = []; const seen = new Set<string>();
   for (const h of hits) {
     const host = hostOf(h.url); if (!host || !/^https?:\/\//i.test(h.url)) continue;
@@ -98,7 +92,7 @@ export function buildSources(hits: WebHit[], max = 16): WebSource[] {
   return out;
 }
 
-const PAGE_CAP = 7_000; const DEEP_CAP = 3_500; const TOTAL = 48_000;
+const PAGE_CAP = 6_000; const DEEP_CAP = 3_000; const TOTAL = 40_000;
 /** Lays the findings out for the model: results with their page text and dates, pages followed from them, then each site's newest feed items. */
 export function resultsBlock(query: string, r: { hits: WebHit[]; updates?: WebUpdate[] }, today: string): string {
   let left = TOTAL;
