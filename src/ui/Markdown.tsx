@@ -2,7 +2,6 @@ import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { parseMarkdown, type Block, type Inline } from '../agent/markdown';
 import { platform } from '../platform';
 import { snippetName } from '../agent/fileNames';
-import { SyntaxCode } from './SyntaxCode';
 
 const EXT: Record<string, string> = { js: 'js', javascript: 'js', jsx: 'jsx', ts: 'ts', typescript: 'ts', tsx: 'tsx', python: 'py', py: 'py', html: 'html', css: 'css', json: 'json', csv: 'csv', sql: 'sql', bash: 'sh', sh: 'sh', shell: 'sh', java: 'java', kotlin: 'kt', swift: 'swift', go: 'go', rust: 'rs', c: 'c', cpp: 'cpp', csharp: 'cs', php: 'php', ruby: 'rb', yaml: 'yml', yml: 'yml', xml: 'xml', md: 'md', markdown: 'md', dart: 'dart' };
 
@@ -14,7 +13,7 @@ function Code({ lang, code }: { lang: string; code: string }) {
   return (
     <div className="md-code">
       <div className="md-code-bar"><span>{lang || 'code'}</span><span className="md-code-actions"><button onClick={() => void copy()}>{done || 'Copy'}</button><button onClick={() => void save()}>Save</button></span></div>
-      <SyntaxCode code={code} />
+      <pre><code>{code}</code></pre>
     </div>
   );
 }
