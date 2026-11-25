@@ -19,3 +19,8 @@
 ## Build + home scroll fix
 - Codelab.tsx: removed `repo?.id` comparison in the repo list (repo is narrowed to null there, TS2339) and wired `createFolder` to a "New folder" button beside "New file" (TS6133).
 - styles.css: locked page-level scroll (html/body/#root/.shell); `.main` holding the chat home or welcome screen no longer scrolls, so only `.chat-thread` scrolls.
+
+## 0.12.1
+- Build: `VITE_FIREBASE_VAPID_KEY` (the public web-push key) was rejected by the public-env guard in `vite.config.ts` because its name ends in `_KEY`, so setting it in Vercel made `npm run build` fail with "Refusing to build". It is now allow-listed next to `VITE_FIREBASE_API_KEY` and documented in `.env.example`.
+- Removed the unused duplicate `security/api.ts` at the project root (the app uses `src/security/api.ts`).
+- Package layout: files sit at the zip root (no wrapping folder), so Vercel finds `package.json` at the repository root.

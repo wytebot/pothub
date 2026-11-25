@@ -11,9 +11,9 @@ Set these values on the server deployment (never in VITE_ variables or the clien
 - `FLW_SECRET_KEY`: Flutterwave test key initially; rotate before go-live if exposed.
 - `FLW_WEBHOOK_HASH`: strong random value configured as Flutterwave webhook secret hash.
 - `APP_ORIGIN`: exact canonical app origin, no trailing slash.
-- `PRO_MONTHLY_AMOUNT`: Pro monthly amount (default USD 5.99).
-- `PRO_PLUS_MONTHLY_AMOUNT`: Pro+ monthly amount (default USD 9.99).
-- `PREMIUM_CURRENCY`: defaults to USD; must be supported by your Flutterwave merchant account. Each payment grants 30 days.
+- `PREMIUM_MONTHLY_AMOUNT`: monthly Premium amount (default 4.99).
+- `PREMIUM_YEARLY_AMOUNT`: yearly Premium amount (default 45).
+- `PREMIUM_CURRENCY`: defaults to USD; must be supported by your Flutterwave merchant account. Monthly access is 30 days; annual access is 365 days.
 - Firebase Admin credentials via `FIREBASE_SERVICE_ACCOUNT` or `GOOGLE_APPLICATION_CREDENTIALS`.
 
 

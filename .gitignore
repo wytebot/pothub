@@ -4,5 +4,3 @@ android
 .env
 server/.env
 *.local
-functions/node_modules
-functions/lib

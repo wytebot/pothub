@@ -164,7 +164,7 @@ Codelab supports repository browsing, folder navigation, file filtering, multi-t
 
 Crawl & Citations offers an opt-in shared publisher index. It stores only compact page metadata/excerpts in Firestore (up to 6 pages per domain, 1,200 characters of page text each, 3 publisher domains per account, 12 documents read per search, and 30-day expiry metadata). Search results are relevance-filtered before being added to research citations. Configure Firestore TTL for `publisherSites.expiresAt`, `jobs.expiresAt`, `rateLimits.expiresAt`, and pending `billingTransactions.expiresAt` as described in `BILLING-SETUP.md`; expiration metadata alone is not automatic deletion. Site ownership verification is not yet implemented.
 
-Pothub plans are Free (two repositories), Pro ($5.99/month, ten repositories), and Pro+ ($9.99/month, unlimited repositories). Configure `PRO_MONTHLY_AMOUNT`, `PRO_PLUS_MONTHLY_AMOUNT`, and `PREMIUM_CURRENCY` on the server. Repository analysis is ten per free account before a five-hour cooldown; paid plans have no Pothub analysis quota. The Flutterwave merchant account must support the configured currency before live checkout.
+Premium pricing defaults to **$4.99/month** or **$45/year** (annual savings approximately 25%), with manual renewal. Configure `PREMIUM_MONTHLY_AMOUNT`, `PREMIUM_YEARLY_AMOUNT`, and `PREMIUM_CURRENCY` on the server. The Flutterwave merchant account must support the configured currency before live checkout.
 
 ## Server-authoritative file-analysis quota
 
@@ -183,14 +183,3 @@ Pothub's Engineering Agent can prepare a sanitized copy of an uploaded ZIP, over
 ## Phone-only deployment of the isolated engineering sandbox
 
 The sandbox runner is deployed by GitHub Actions when the repository's runner files are pushed. Follow [`sandbox/runner/MOBILE_DEPLOY.md`](sandbox/runner/MOBILE_DEPLOY.md) from GitHub mobile to configure the optional SSH-based deployment secrets and the Vercel backend URL/token. CI checks the app, API and runner. A dedicated Docker host and DNS domain are still required for secure project execution; this is not a free serverless Docker deployment.
-
-
-## Software Doctor validation workflow
-
-Install `templates/pothub-doctor.yml` in each connected repository at `.github/workflows/pothub-doctor.yml`. Configure the repository secret `POTHUB_DOCTOR_WEBHOOK_SECRET` and repository variable `POTHUB_DOCTOR_CALLBACK_URL` to the matching Pothub callback. Diagnosis and repair validation execute on GitHub Actions; repair pull requests are opened only after detected checks pass. Supported checks include package scripts, Python syntax/tests when pytest is available, Go tests, Cargo tests, Maven, Gradle and .NET tests. Repositories without a recognized validation command are not eligible for automated repair PR creation.
-
-The Ask Pothub page stores conversation history locally in IndexedDB. Server-side Firestore stores integration tokens, selected repository names, billing records, push tokens, webhook deduplication records and job metadata. Active background jobs may temporarily retain encrypted execution payloads so work can resume after navigation or app closure; completed job payloads are cleared.
-
-## Autonomous repository coding
-
-Codelab includes a GitHub-backed autonomous repair workflow. Open a connected repository, describe the required fix, and use **Autonomous repair agent** to let the selected Text model inspect relevant repository files, implement complete-file changes, and perform a second-pass review. Review the proposed files and diffs before staging. Create or switch to a repair branch before committing; Pothub blocks commits directly to the default branch. See [AUTONOMOUS-AGENT.md](./AUTONOMOUS-AGENT.md) for the safety model and validation boundaries.
