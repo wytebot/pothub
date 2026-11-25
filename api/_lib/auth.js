@@ -3,7 +3,7 @@ import { createPublicKey, verify } from 'node:crypto';
 
 const KEYS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 let cache = { keys: [], at: 0 };
-const projectId = () => process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'pothub-ca2a1';
+const projectId = () => process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'pothub-ca2a1';
 const json = (part) => JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
 
 async function keys(force = false) {

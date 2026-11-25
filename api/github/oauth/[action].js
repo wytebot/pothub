@@ -39,7 +39,7 @@ export default async function handler(req, res) {
       if (callback.protocol !== 'https:' || callback.pathname.replace(/\/$/, '') !== '/api/github/oauth/callback') return reply(req, res, 503, { error: 'GitHub callback must be HTTPS and end in /api/github/oauth/callback.' });
       const u = new URL('https://github.com/login/oauth/authorize');
       u.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID); u.searchParams.set('redirect_uri', cb);
-      u.searchParams.set('scope', 'repo workflow admin:repo_hook'); u.searchParams.set('state', makeState());
+      u.searchParams.set('scope', 'repo'); u.searchParams.set('state', makeState());
       u.searchParams.set('prompt', 'select_account'); // always show GitHub's own account picker / login, even right after a disconnect
       return reply(req, res, 200, { authUrl: u.toString() });
     }
