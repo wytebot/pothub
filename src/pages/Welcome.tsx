@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { signInWithGoogle } from '../auth/session';
 
-const lines = ['Diagnose failed builds with real repository evidence.', 'Repair code safely through reviewed GitHub pull requests.', 'Monitor GitHub Actions and Vercel deployments.', 'Choose the AI model that works best for your codebase.'];
+const lines = ['Code, research and writing in one workspace.', 'Bring your own model keys.', 'Build, debug and understand projects.', 'Read files locally. Keep your work private.'];
 
-export function Welcome({ onExplore }: { onExplore: () => void }) {
+export function Welcome() {
   const [line, setLine] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(() => sessionStorage.getItem('auth.redirectError') ?? '');
@@ -18,7 +18,6 @@ export function Welcome({ onExplore }: { onExplore: () => void }) {
     if (busy) return;
     setBusy(true);
     setError('');
-    try { localStorage.setItem('pothub.welcome.seen','1'); } catch { /* continue without persistent preference */ }
     try {
       const r = await signInWithGoogle();
       if (!r.ok) setError(r.message);
@@ -35,9 +34,9 @@ export function Welcome({ onExplore }: { onExplore: () => void }) {
       <main className="welcome-content welcome-ide">
         <div className="welcome-mark"><span>&lt;/&gt;</span><strong>Pothub</strong></div>
         <div className="welcome-codecard" aria-hidden="true"><div className="welcome-codebar"><i/><i/><i/><span>workspace.ts</span></div><pre><b>const</b> workspace = {'{'}<br/>  <em>mode</em>: <q>developer</q>,<br/>  <em>research</em>: <q>web + sources</q>,<br/>  <em>models</em>: <q>your keys, your choice</q><br/>{'}'};<br/><br/><b>await</b> pothub.build(workspace);</pre></div>
-        <h1>Your software doctor.</h1>
+        <h1>Think. Build. Ship.</h1>
         <p className="welcome-rotating" aria-live="polite"><span key={line}>{lines[line]}</span></p>
-        <div className="welcome-actions"><button className="start" onClick={start} disabled={busy}>{busy ? 'Opening Google…' : 'Continue with Google'}</button><button className="btn" onClick={()=>{try{localStorage.setItem('pothub.welcome.seen','1')}catch{}onExplore()}}>Explore without signing in</button><small>GitHub-first debugging · Verified repairs · Vercel monitoring</small></div>
+        <div className="welcome-actions"><button className="start" onClick={start} disabled={busy}>{busy ? 'Opening Google…' : 'Continue with Google'}</button><small>Text-first AI workspace · BYOK · Developer tools</small></div>
         {error && <p className="error-text small" role="alert">{error}</p>}
       </main>
     </div>
