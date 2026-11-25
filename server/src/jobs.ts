@@ -182,7 +182,7 @@ export async function run(job: Job, input: JobInput) {
   } catch (e) {
     if (job.status === 'cancelled') return;
     job.status = 'error'; job.httpStatus = e instanceof ProviderError ? e.status : undefined;
-    job.error = job.ctl.signal.aborted ? 'This background task exceeded its execution window and was stopped. Its saved partial answer is still available for recovery.' : scrub(e instanceof ProviderError ? e.message : 'Could not reach the provider. Try again.', input.secret);
+    job.error = job.ctl.signal.aborted ? 'This job exceeded the 7 day processing window and was stopped. Its saved partial answer is still available for recovery.' : scrub(e instanceof ProviderError ? e.message : 'Could not reach the provider. Try again.', input.secret);
   } finally { clearInterval(persistTimer); job.updated = Date.now(); job.encryptedPayload = undefined; save(job); }
 }
 
@@ -209,36 +209,6 @@ export async function runAgent(job: Job, input: JobInput): Promise<void> {
   } finally { clearInterval(persistTimer); job.updated = Date.now(); job.encryptedPayload = undefined; save(job); }
 }
 
-
-/** Atomically claims one specific Firestore job for an event/task-queue worker. */
-export async function claimJobById(jobId: string, workerId: string): Promise<{ job: Job; input: JobInput } | null> {
-  if (!/^[a-f0-9-]{20,80}$/i.test(jobId)) return null;
-  const ref = db().doc(`jobs/${jobId}`);
-  const now = Date.now();
-  const claimed = await db().runTransaction(async tx => {
-    const snap = await tx.get(ref);
-    const d = snap.data();
-    if (!d || d.status === 'done' || d.status === 'error' || d.status === 'cancelled') return null;
-    if (d.status === 'running' && Number(d.leaseUntil ?? 0) > now && d.leaseOwner !== workerId) return null;
-    if (d.status !== 'queued' && d.status !== 'running') return null;
-    tx.update(ref, { status: 'running', leaseOwner: workerId, leaseUntil: now + 90_000, updatedAt: now });
-    return d;
-  });
-  if (!claimed) return null;
-  if (!claimed.encryptedPayload) {
-    await ref.update({ status: 'error', error: 'Queued task payload is missing. Submit the request again.', leaseOwner: null, leaseUntil: null, updatedAt: now });
-    return null;
-  }
-  try {
-    const input = decryptPayload(String(claimed.encryptedPayload));
-    const job: Job = { id: jobId, uid: String(claimed.uid), status: 'running', text: String(claimed.text ?? ''), truncated: !!claimed.truncated, provider: String(claimed.provider), model: String(claimed.model), created: Number(claimed.createdAt ?? now), updated: now, ctl: new AbortController(), encryptedPayload: String(claimed.encryptedPayload), leaseOwner: workerId, leaseUntil: now + 90_000 };
-    jobs.set(job.id, job);
-    return { job, input };
-  } catch {
-    await ref.update({ status: 'error', error: 'Could not decrypt queued task. Check BACKGROUND_JOB_ENCRYPTION_KEY.', encryptedPayload: null, leaseOwner: null, leaseUntil: null, updatedAt: now });
-    return null;
-  }
-}
 
 /** Atomically claims a queued job for the dedicated worker process. */
 export async function claimNextJob(workerId: string): Promise<{ job: Job; input: JobInput } | null> {

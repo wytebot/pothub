@@ -1,20 +1,17 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyIdToken } from './identity';
 import { distributedLimit } from './securityStore';
 import { ddgSearch, parseFresh } from './search';
-import { crawlSites, safeUrl } from './crawl';
+import { crawlSites } from './crawl';
 import { publishCrawl, searchPublisherIndex, removePublisher } from './publisherIndex';
 import { cancelJob, jobView, startJob, validate } from './jobs';
 import { billingConfig, billingStatus, handleWebhook, startCheckout, verifyCheckout } from './billing';
 import { fileQuotaStatus, consumeFileQuota } from './fileQuota';
 import { consumeAnalysisQuota } from './analysisQuota';
 import { registerPushToken, removePushToken } from './push';
-import { acceptDoctorWebhook, createRepairPullRequest, doctorJob, doctorLogs, doctorRepositories, doctorRuns, startDoctorJob, getDoctorRepoSelection, setDoctorRepoSelection, assertDoctorRepoSelected } from './doctor';
-import { handleGithubWebhook } from './githubWebhook';
-import { vercelOAuthCallback, vercelOAuthStart, vercelConnectionStatus, vercelProjects, vercelDeploymentsForUser, disconnectVercel, vercelEnvironmentVariables, writeVercelEnvironmentVariable, deleteVercelEnvironmentVariable } from './vercelOAuth';
 
-const env = process.env; const ORIGIN = (env.APP_ORIGIN ?? '').replace(/\/$/, '');
+const env = process.env; const PORT = Number(env.PORT ?? 8787); const ORIGIN = (env.APP_ORIGIN ?? '').replace(/\/$/, '');
 const ORIGINS = new Set([ORIGIN, 'https://localhost', 'capacitor://localhost', ...String(env.EXTRA_ORIGINS ?? '').split(',').map((x) => x.trim().replace(/\/$/, '')).filter(Boolean)].filter(Boolean));
 const raw = (req: IncomingMessage, max = 12_000) => new Promise<Buffer>((resolve, reject) => { const chunks: Buffer[] = []; let size = 0; req.on('data', (chunk: Buffer) => { size += chunk.length; if (size > max) { reject(new Error('Request too large')); req.destroy(); } else chunks.push(chunk); }); req.on('end', () => resolve(Buffer.concat(chunks))); req.on('error', reject); });
 const githubStateSecret = () => env.GITHUB_CLIENT_SECRET || '';
@@ -24,58 +21,14 @@ const burst = new Map<string, number[]>();
 function limit(key: string, max: number) { const now = Date.now(); const times = (burst.get(key) ?? []).filter(t => now - t < 60_000); times.push(now); burst.set(key, times); return times.length > max; }
 async function rateLimited(key: string, max: number) { try { if (await distributedLimit(key, max)) return true; } catch { /* process-local fallback if Firestore isn't configured */ } return limit(key, max); }
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+createServer(async (req, res) => {
   const origin = String(req.headers.origin ?? '');
-  const send = (status: number, body: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': ORIGINS.has(origin) ? origin : ORIGIN, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-GitHub-Token, X-GitHub-Event', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
+  const send = (status: number, body: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': ORIGINS.has(origin) ? origin : ORIGIN, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
   try {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (req.method === 'OPTIONS') return send(204, {});
     if (url.pathname === '/health') return send(200, { status: 'ok', service: 'pothub-text-research' });
     if (url.pathname === '/api/billing/config' && req.method === 'GET') return send(200, billingConfig());
-    if (url.pathname === '/api/webhooks/github' && req.method === 'POST') {
-      const bytes=await raw(req,2_000_000);const result=await handleGithubWebhook(bytes,req.headers['x-hub-signature-256'] as string|undefined,env.GITHUB_WEBHOOK_SECRET||'',String(req.headers['x-github-event']||''),String(req.headers['x-github-delivery']||''));return send(200,result);
-    }
-    if (url.pathname === '/api/vercel/oauth/callback' && req.method === 'GET') {
-      const code=String(url.searchParams.get('code')||'');const state=String(url.searchParams.get('state')||'');
-      try { await vercelOAuthCallback(code,state); res.writeHead(302,{Location:`${ORIGIN}/#/vercel?connected=1`,'Cache-Control':'no-store'});res.end();return; }
-      catch(e){res.writeHead(302,{Location:`${ORIGIN}/#/vercel?oauth_error=${encodeURIComponent(e instanceof Error?e.message:'Vercel authorization failed.')}`,'Cache-Control':'no-store'});res.end();return;}
-    }
-    if (url.pathname.startsWith('/api/vercel/')) {
-      const who=await verifyIdToken(req.headers.authorization);if(!who)return send(401,{error:'Sign in to manage your Vercel connection.'});
-      if(url.pathname==='/api/vercel/oauth/start'&&req.method==='POST')return send(200,await vercelOAuthStart(who));
-      if(url.pathname==='/api/vercel/status'&&req.method==='GET')return send(200,await vercelConnectionStatus(who.uid));
-      if(url.pathname==='/api/vercel/projects'&&req.method==='GET')return send(200,{projects:await vercelProjects(who.uid)});
-      if(url.pathname==='/api/vercel/deployments'&&req.method==='GET')return send(200,{deployments:await vercelDeploymentsForUser(who.uid,String(url.searchParams.get('project_id')||''),String(url.searchParams.get('team_id')||''))});
-      if(url.pathname==='/api/vercel/env'&&req.method==='GET')return send(200,{variables:await vercelEnvironmentVariables(who.uid,String(url.searchParams.get('project_id')||''),String(url.searchParams.get('team_id')||''))});
-      if(url.pathname==='/api/vercel/env'&&req.method==='POST'){const b=JSON.parse((await raw(req,80000)).toString('utf8')||'{}') as any;return send(201,await writeVercelEnvironmentVariable(who.uid,String(b.projectId||''),{key:String(b.key||''),value:String(b.value??''),target:Array.isArray(b.target)?b.target:[],gitBranch:typeof b.gitBranch==='string'?b.gitBranch:undefined,teamId:typeof b.teamId==='string'?b.teamId:undefined}));}
-      if(url.pathname==='/api/vercel/env/delete'&&req.method==='POST'){const b=JSON.parse((await raw(req,8000)).toString('utf8')||'{}') as any;return send(200,await deleteVercelEnvironmentVariable(who.uid,String(b.projectId||''),String(b.variableId||''),typeof b.teamId==='string'?b.teamId:undefined));}
-      if(url.pathname==='/api/vercel/disconnect'&&req.method==='POST')return send(200,await disconnectVercel(who.uid));
-      return send(404,{error:'Unknown Vercel endpoint.'});
-    }
-    if (url.pathname === '/api/doctor/webhook' && req.method === 'POST') {
-      const bytes = await raw(req, 2_000_000); await acceptDoctorWebhook(bytes, req.headers['x-pothub-signature'] as string | undefined, env.DOCTOR_WEBHOOK_SECRET || ''); return send(200,{received:true});
-    }
-    if (url.pathname.startsWith('/api/doctor/')) {
-      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401,{error:'Sign in before using Software Doctor.'});
-      const ghToken = String(req.headers['x-github-token'] || '');
-      if (url.pathname === '/api/doctor/repositories' && req.method === 'GET') return send(200,{repositories:await doctorRepositories(ghToken)});
-      if (url.pathname === '/api/doctor/selection' && req.method === 'GET') return send(200,await getDoctorRepoSelection(who.uid));
-      if (url.pathname === '/api/doctor/selection' && req.method === 'POST') { const b=JSON.parse((await raw(req,16000)).toString('utf8')||'{}') as any; return send(200,await setDoctorRepoSelection(who.uid,ghToken,b.repositories)); }
-      if (url.pathname === '/api/doctor/runs' && req.method === 'GET') { const repo=String(url.searchParams.get('repo')||''); await assertDoctorRepoSelected(who.uid,repo); return send(200,await doctorRuns(who.uid,ghToken,repo)); }
-      if (url.pathname === '/api/doctor/logs' && req.method === 'GET') { const repo=String(url.searchParams.get('repo')||''); await assertDoctorRepoSelected(who.uid,repo); return send(200,await doctorLogs(ghToken,repo,String(url.searchParams.get('run_id')||''))); }
-      if (url.pathname === '/api/doctor/jobs' && req.method === 'POST') {
-        if(await rateLimited(`doctor-job:${who.uid}`,6))return send(429,{error:'Too many Software Doctor jobs. Wait before starting another.'});
-        const b=JSON.parse((await raw(req,8_000)).toString('utf8')||'{}') as any;
-        if(!['diagnose','validate_repair'].includes(b.operation)||typeof b.repo!=='string'||typeof b.baseSha!=='string')return send(400,{error:'Provide operation, repository and exact base SHA.'});
-        await assertDoctorRepoSelected(who.uid,b.repo);
-        if (b.operation === 'diagnose') { try { await consumeAnalysisQuota(who); } catch (e) { if (e instanceof Error && e.message === 'ANALYSIS_QUOTA_REACHED') return send(429,{error:'Your free repository-analysis allowance is used. Pothub remains available for other questions; repository analysis will reset after the five-hour cooldown.',quota:(e as {quota?:unknown}).quota}); throw e; } }
-        return send(202,await startDoctorJob(who.uid,ghToken,b.repo,b.operation,b.baseSha,typeof b.runId==='string'?b.runId:undefined));
-      }
-      if(url.pathname.startsWith('/api/doctor/jobs/')&&req.method==='GET'){const item=await doctorJob(who.uid,url.pathname.split('/').pop()||'');return item?send(200,item):send(404,{error:'Doctor job not found.'});}
-      if(url.pathname === '/api/doctor/repairs' && req.method==='POST'){if(await rateLimited(`doctor-repair:${who.uid}`,3))return send(429,{error:'Repair limit reached. Try again later.'});const b=JSON.parse((await raw(req,2_000_000)).toString('utf8')||'{}') as any;if(typeof b.repo!=='string'||typeof b.baseSha!=='string'||!Array.isArray(b.files))return send(400,{error:'Provide repository, base SHA and proposed changed files.'});await assertDoctorRepoSelected(who.uid,b.repo);return send(202,await createRepairPullRequest(who.uid,ghToken,b.repo,b.baseSha,b.files,String(b.title||''),String(b.body||'')));}
-      return send(404,{error:'Unknown Software Doctor endpoint.'});
-    }
-
     if (url.pathname === '/api/github/oauth/start' && req.method === 'GET') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again before connecting GitHub.' });
       const clientId = env.GITHUB_CLIENT_ID; const callback = env.GITHUB_CALLBACK_URL;
@@ -85,7 +38,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (!clientId || !callback) return send(503, { error: 'GitHub OAuth client ID and callback URL are required.' });
       if (!/^https:\/\//i.test(String(callback))) return send(503, { error: 'GITHUB_CALLBACK_URL must be the full https URL of /api/github/oauth/callback on the Pothub server.' });
       const state = makeGithubState(who.uid);
-      const authUrl = new URL('https://github.com/login/oauth/authorize'); authUrl.searchParams.set('client_id', clientId); authUrl.searchParams.set('redirect_uri', callback); authUrl.searchParams.set('scope', 'repo workflow admin:repo_hook'); authUrl.searchParams.set('state', state);
+      const authUrl = new URL('https://github.com/login/oauth/authorize'); authUrl.searchParams.set('client_id', clientId); authUrl.searchParams.set('redirect_uri', callback); authUrl.searchParams.set('scope', 'repo'); authUrl.searchParams.set('state', state);
       return send(200, { authUrl: authUrl.toString() });
     }
     if (url.pathname === '/api/github/oauth/callback' && req.method === 'GET') {
@@ -142,56 +95,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       try { const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { transactionId?: unknown; txRef?: unknown }; return send(200, await verifyCheckout(who, body)); }
       catch (e) { return send(400, { error: e instanceof Error ? e.message : 'Payment verification failed.' }); }
     }
-    if (url.pathname === '/api/sites/verify-token' && req.method === 'GET') {
-      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to create a site verification tag.' });
-      const rawSite = url.searchParams.get('site') || '';
-      const target = await safeUrl(rawSite);
-      if (!target) return send(400, { error: 'Enter a public HTTP or HTTPS website URL.' });
-      const secret = env.SITE_VERIFY_SECRET || env.POTHUB_SITE_VERIFY_SECRET || env.GITHUB_CLIENT_SECRET;
-      if (!secret || secret.length < 32) return send(503, { error: 'Site verification is not configured on this server. Set POTHUB_SITE_VERIFY_SECRET to a random secret of at least 32 characters.' });
-      const siteKey = `${target.protocol}//${target.host}`;
-      const token = createHmac('sha256', secret).update(`${who.uid}:${siteKey}`).digest('hex');
-      return send(200, { tag: `<meta name="pothub-site-verification" content="${token}">`, token, site: siteKey });
-    }
-    if (url.pathname === '/api/sites/verify' && req.method === 'POST') {
-      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to verify your site.' });
-      const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { url?: unknown };
-      if (typeof body.url !== 'string') return send(400, { error: 'Provide the website URL to verify.' });
-      const target = await safeUrl(body.url); if (!target) return send(400, { error: 'The site must be a public HTTP or HTTPS website.' });
-      const secret = env.SITE_VERIFY_SECRET || env.POTHUB_SITE_VERIFY_SECRET || env.GITHUB_CLIENT_SECRET;
-      if (!secret || secret.length < 32) return send(503, { error: 'Site verification is not configured on this server. Set POTHUB_SITE_VERIFY_SECRET to a random secret of at least 32 characters.' });
-      const siteKey = `${target.protocol}//${target.host}`;
-      const token = createHmac('sha256', secret).update(`${who.uid}:${siteKey}`).digest('hex');
-      let current: URL | null = target; let html = ''; let status = 0;
-      for (let hop = 0; hop < 4 && current; hop++) {
-        const safe = await safeUrl(current.toString()); if (!safe) return send(400, { error: 'The website redirected to a non-public or unsupported address.' });
-        const response = await fetch(safe, { redirect: 'manual', headers: { 'User-Agent': 'PothubSiteVerifier/1.0', Accept: 'text/html' }, signal: AbortSignal.timeout(10_000) });
-        status = response.status;
-        if ([301,302,303,307,308].includes(status)) { const loc = response.headers.get('location'); if (!loc) break; try { current = new URL(loc, safe); } catch { current = null; } continue; }
-        if (!response.ok) return send(502, { error: `Could not read the website homepage (HTTP ${status}).` });
-        html = (await response.text()).slice(0, 2_000_000); current = null; break;
-      }
-      const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const meta = new RegExp(`<meta\\b(?=[^>]*\\bname\\s*=\\s*["']pothub-site-verification["'])(?=[^>]*\\bcontent\\s*=\\s*["']${escaped}["'])[^>]*>`, 'i');
-      if (!meta.test(html)) return send(400, { error: 'Verification tag not found in the homepage HTML. Place the exact Pothub meta tag inside the live homepage <head>, save and deploy index.html, then retry.' });
-      return send(200, { verified: true, site: siteKey });
-    }
     if (url.pathname === '/api/search' && req.method === 'GET') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to use web search.' });
       if (await rateLimited(`search:${who.uid}`, 30)) return send(429, { error: 'Too many searches. Wait a moment.' });
       const q = (url.searchParams.get('q') ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
       if (q.length < 2) return send(400, { error: 'Type something to search for.' });
-      try { return send(200, { results: await ddgSearch(q, 10, parseFresh(url.searchParams.get('fresh'))) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
-    }
-    if (url.pathname === '/api/sites/diagnose' && req.method === 'POST') {
-      const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to diagnose this website.' });
-      if (await rateLimited(`site-diagnose:${who.uid}`, 10)) return send(429, { error: 'Too many site diagnoses. Wait a moment.' });
-      const body = JSON.parse((await raw(req, 4_000)).toString('utf8') || '{}') as { url?: unknown };
-      if (typeof body.url !== 'string') return send(400, { error: 'Provide the website URL to diagnose.' });
-      const target = await safeUrl(body.url); if (!target) return send(400, { error: 'The site must be a public HTTP or HTTPS website.' });
-      const crawled = await crawlSites([target.toString()], { depth: 2, maxPages: 8, budgetMs: 18_000 });
-      if (!crawled.pages.length) return send(502, { error: 'The site could not be crawled. Check that its homepage is public and does not block automated requests.' });
-      return send(200, { pages: crawled.pages.slice(0, 8).map(p => ({ url: p.finalUrl || p.url, title: p.title || '', text: p.text || '' })) });
+      try { return send(200, { results: await ddgSearch(q, 8, parseFresh(url.searchParams.get('fresh'))) }); } catch { return send(502, { error: 'Web search is busy right now. Try again shortly.' }); }
     }
     if (url.pathname === '/api/publishers/crawl' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in before publishing crawl results.' });
@@ -222,10 +131,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in again to crawl pages.' });
       if (await rateLimited(`crawl:${who.uid}`, 12)) return send(429, { error: 'Too many crawl requests. Wait a moment.' });
       const body = JSON.parse((await raw(req)).toString('utf8') || '{}') as { urls?: unknown; query?: unknown; depth?: unknown };
-      const urls = Array.isArray(body.urls) ? body.urls.filter((x): x is string => typeof x === 'string').slice(0, 12) : [];
+      const urls = Array.isArray(body.urls) ? body.urls.filter((x): x is string => typeof x === 'string').slice(0, 8) : [];
       if (!urls.length) return send(400, { error: 'Provide at least one web URL to crawl.' });
       const query = typeof body.query === 'string' ? body.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
-      return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 20, budgetMs: 35_000 }));
+      return send(200, await crawlSites(urls, { query, depth: body.depth === 1 ? 1 : 2, maxPages: 11 }));
     }
     if (url.pathname === '/api/push/register' && req.method === 'POST') {
       const who = await verifyIdToken(req.headers.authorization); if (!who) return send(401, { error: 'Sign in to enable remote notifications.' });
@@ -243,6 +152,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (await rateLimited(`job:${who.uid}`, 12)) return send(429, { error: 'Too many jobs started. Wait a minute and retry.' });
       const input = validate(JSON.parse((await raw(req, 8_000_000)).toString('utf8') || '{}'));
       if (typeof input === 'string') return send(400, { error: input });
+      try { await consumeAnalysisQuota(who); } catch (e) { if (e instanceof Error && e.message === 'ANALYSIS_QUOTA_REACHED') return send(429, { error: 'Free background analysis allowance reached (30 per 24-hour inactivity window).', quota: (e as { quota?: unknown }).quota }); throw e; }
       const started = await startJob(who.uid, input); return 'error' in started ? send(started.status, { error: started.error }) : send(202, started);
     }
     if (url.pathname === '/api/jobs/status' && req.method === 'GET') {
@@ -274,9 +184,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   } catch (e) {
     if (e instanceof SyntaxError) return send(400, { error: 'Invalid request.' });
     if (e instanceof Error && e.message === 'Request too large') return send(413, { error: 'This request is too large to run in the background.' });
-    if (e instanceof Error && e.message === 'Invalid webhook signature.') return send(401, { error: 'Webhook signature is invalid.' });
-    const status = Number((e as { status?: number })?.status);
-    if (Number.isInteger(status) && status >= 400 && status < 500) return send(status, { error: e instanceof Error ? e.message : 'Request rejected.' });
     console.error('research api request failed'); return send(500, { error: 'Something went wrong.' });
   }
-}
+}).listen(PORT, () => console.log(`Pothub text research API on :${PORT}`));

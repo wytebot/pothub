@@ -13,9 +13,9 @@ import type { WebSource } from './research';
  */
 const PREF = 'jobs.background';
 const PENDING = 'jobs.pending.v1';
-// Vercel functions are request-scoped; durable processing needs a separate worker.
-// Keep background mode disabled until a Vercel-native queue/worker is configured.
-export const backgroundAvailable = (): boolean => false;
+const API = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+
+export const backgroundAvailable = (): boolean => !!API;
 export const backgroundOn = (): boolean => { try { return localStorage.getItem(PREF) !== 'off'; } catch { return true; } };
 export const setBackground = (on: boolean) => { try { localStorage.setItem(PREF, on ? 'on' : 'off'); } catch { /* storage blocked */ } };
 

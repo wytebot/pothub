@@ -26,8 +26,3 @@ export async function sendJobNotification(uid: string, jobId: string, provider: 
     }
   }
 }
-export async function sendBuildNotification(uid:string,repo:string,conclusion:string,branch:string,runUrl:string){
-  const snap=await db().collection(`pushTokens/${uid}/tokens`).get();if(snap.empty)return;
-  const succeeded=conclusion==='success';const title=succeeded?'Build succeeded':'Build failed';const body=`${repo} · ${branch} · ${succeeded?'Deployment checks passed':'Needs attention'}`;
-  for(const doc of snap.docs){const token=String(doc.data().token||'');if(!token)continue;try{await getMessaging(adminApp()).send({token,notification:{title,body},data:{route:'/',repo,runUrl,conclusion},webpush:{notification:{title,body,icon:'/icon-192.png',badge:'/icon-192.png',tag:`pothub-build-${repo}-${branch}`,renotify:false},fcmOptions:{link:runUrl}}})}catch(e){const code=(e as {code?:string}).code||'';if(/registration-token-not-registered|invalid-registration-token/i.test(code))await doc.ref.delete().catch(()=>undefined)}}
-}
