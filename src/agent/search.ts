@@ -49,17 +49,6 @@ export async function readPromptLinks(prompt: string, onStage?: (stage: string) 
   return { hits, updates: Array.isArray(c.updates) ? c.updates : [], sources: buildSources(hits) };
 }
 
-/** Only websites the person explicitly verified and enabled for crawling are added to research. */
-function configuredCrawlUrls(): string[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem('pothub.sites.v1') ?? '[]') as Array<{ url?: unknown; verified?: unknown; crawl?: unknown }>;
-    if (!Array.isArray(raw)) return [];
-    return [...new Set(raw.filter((s) => s && s.verified === true && s.crawl === true && typeof s.url === 'string').map((s) => {
-      try { const u = new URL(s.url as string); return /^https?:$/.test(u.protocol) ? u.toString() : ''; } catch { return ''; }
-    }).filter(Boolean))].slice(0, 5);
-  } catch { return []; }
-}
-
 export async function webResearch(query: string, onStage?: (stage: string) => void): Promise<WebResearch> {
   const variants = queryVariants(query);
   onStage?.(`Deep research plan: ${variants.length} targeted searches`);
@@ -70,19 +59,15 @@ export async function webResearch(query: string, onStage?: (stage: string) => vo
     return result;
   }));
   if (runs.every((r) => r.status === 'rejected')) throw (runs[0] as PromiseRejectedResult).reason;
-  const hits = rankHits(query, mergeHits(runs.map((r) => (r.status === 'fulfilled' && Array.isArray(r.value.results) ? r.value.results : [])), 36, 4), 18);
-  // Configured, ownership-verified sites are first-class research sources, not merely a separate diagnosis feature.
-  const configured = configuredCrawlUrls();
-  if (!hits.length && !configured.length) { onStage?.('Live search returned no usable results.'); return { hits: [], updates: [], sources: [] }; }
-  onStage?.(`Reading ${Math.min(8, hits.length)} search results and ${configured.length} configured site(s)…`);
+  const hits = rankHits(query, mergeHits(runs.map((r) => (r.status === 'fulfilled' && Array.isArray(r.value.results) ? r.value.results : [])), 30, 3), 14);
+  if (!hits.length) { onStage?.('Research found no usable results'); return { hits: [], updates: [], sources: [] }; }
+  onStage?.(`Reading ${Math.min(6, hits.length)} high-relevance pages and following related links…`);
   let pages: CrawledPage[] = []; let updates: WebUpdate[] = [];
-  const crawlUrls = [...new Set([...configured, ...hits.slice(0, 8).map((h) => h.url)])].slice(0, 12);
   try {
-    const c = await request<{ pages?: CrawledPage[]; updates?: WebUpdate[] }>('/api/crawl', { urls: crawlUrls, query, depth: 2 }, 35_000);
-    pages = Array.isArray(c.pages) ? c.pages : []; updates = Array.isArray(c.updates) ? c.updates : []; onStage?.(`Read ${pages.length} live page(s)${updates.length ? ` and collected ${updates.length} recent updates` : ''}`);
-  } catch (e) { onStage?.(`Page crawling was unavailable; retaining search snippets (${e instanceof Error ? e.message : 'request failed'}).`); }
+    const c = await request<{ pages?: CrawledPage[]; updates?: WebUpdate[] }>('/api/crawl', { urls: hits.slice(0, 6).map((h) => h.url), query, depth: 2 }, 18_000);
+    pages = Array.isArray(c.pages) ? c.pages : []; updates = Array.isArray(c.updates) ? c.updates : []; onStage?.(`Read ${pages.length} page(s)${updates.length ? ` and collected ${updates.length} recent updates` : ''}`);
+  } catch { /* the search results still stand without page text */ }
   const all = applyCrawl(hits, pages);
-  for (const page of pages) if (configured.some((u) => { try { return new URL(u).hostname === new URL(page.url).hostname; } catch { return false; } }) && !all.some((h) => h.url === page.url)) all.push({ title: page.title || page.url, url: page.url, snippet: page.description || '', text: page.text, published: page.published, updated: page.updated, site: page.site });
   // Opt-in publisher excerpts are shared, compact, expiring, and relevance-scored server-side.
   try { const pub = await request<{results?: WebHit[]}>(`/api/publishers/search?q=${encodeURIComponent(query)}`, undefined, 5_000); const publisherHits = Array.isArray(pub.results) ? pub.results.slice(0, 8) : []; const byUrl = new Map(publisherHits.map(h => [h.url.replace(/\/$/, '').toLowerCase(), h])); const enriched = all.map(h => { const p = byUrl.get(h.url.replace(/\/$/, '').toLowerCase()); return p ? { ...h, text: h.text || p.text, snippet: h.snippet || p.snippet, site: h.site || p.site } : h; }); const merged = mergeHits([enriched, publisherHits], 16, 3); const ranked = rankHits(query, merged, 16); return { hits: ranked, updates, sources: buildSources(ranked) }; } catch { return { hits: all, updates, sources: buildSources(all) }; }
 }
