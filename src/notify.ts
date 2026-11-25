@@ -12,7 +12,7 @@ export type NotifyKind = 'text';
 export interface NotifyInput { kind: NotifyKind; title: string; body: string; /** hash route to open when tapped, e.g. '/video' */ route?: string; }
 
 const PREF = 'notify.enabled';
-const VAPID = (import.meta.env.VITE_POTHUB_WEB_PUSH_VAPID_KEY as string | undefined)?.trim();
+const VAPID = (import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined)?.trim();
 const TOKEN_KEY = 'notify.fcm.token';
 const CHANNEL = 'pothub-jobs';
 const native = Capacitor.isNativePlatform();

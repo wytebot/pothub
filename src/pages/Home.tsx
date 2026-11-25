@@ -18,7 +18,8 @@ import { DETACH, dropPending, follow, pendingFor, pendingJobs, type PendingJob }
 import { notifyDone } from '../notify';
 import { parseCommands } from '../agent/commands';
 import { friendlyNote } from '../agent/friendly';
-import { meta, sizeLabel, type Attachment } from '../agent/attachments';
+import { MAX_FILES, meta, sizeLabel, toAttachments, type Attachment } from '../agent/attachments';
+import { consumeFileQuota, FILE_ANALYSIS_LIMIT, formatQuotaReset, getFileQuota, type FileQuota } from '../agent/fileQuota';
 import type { OutFile } from '../agent/deliver';
 import type { ChatTurn } from '../models/text';
 import { getSettings, saveSettings } from '../settings';
@@ -54,6 +55,7 @@ const GLYPH: Record<string, string> = { pdf: 'PDF', docx: 'DOC', text: 'TXT', of
 /** Messages as they come back from storage: files built last time are gone, and a request that was still running is checked against the job list. */
 function revive(all: Msg[]): Msg[] {
   return all.map((m) => {
+    if (m.fileOut) m = { ...m, fileOut: undefined }; // the built file only lives while the app is open
     if (m.state !== 'working') return m;
     if (pendingFor(m.id)) return m; // still running on the server: it is picked up again below
     return { ...m, state: 'error' as const, note: 'This request was interrupted. Send it again.' };
@@ -102,17 +104,6 @@ function Chip({ a, onRemove }: { a: Attachment; onRemove?: () => void }) {
   );
 }
 
-function ImageArtifact({ file }: { file?: OutFile }) {
-  const [src, setSrc] = useState('');
-  useEffect(() => {
-    if (!file?.mime?.startsWith('image/')) { setSrc(''); return; }
-    const url = URL.createObjectURL(file.blob); setSrc(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-  if (!src) return null;
-  return <a className="generated-image-preview" href={src} target="_blank" rel="noopener noreferrer" aria-label="Open generated image"><img src={src} alt={file?.name || 'Generated image'} loading="lazy" /></a>;
-}
-
 function Reply({ m }: { m: Msg }) {
   const isText = m.kind === 'text' && !!m.text;
   return (
@@ -137,8 +128,11 @@ export function Home() {
   const [idea, setIdea] = useState('');
   const [modelChoice, setModelChoice] = useState(() => getSettings().textModel);
   const [files, setFiles] = useState<Attachment[]>([]);
+  const [fileNote, setFileNote] = useState('');
+  const [serverQuota, setServerQuota] = useState<FileQuota | null>(null);
   const [editing, setEditing] = useState<{ userId: string; assistantId: string; before: Msg[] } | null>(null);
   const [menu, setMenu] = useState(false);
+  const [drag, setDrag] = useState(false);
   const [copied, setCopied] = useState('');
   const [active, setActive] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -148,6 +142,7 @@ export function Home() {
   const thread = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
   const plus = useRef<HTMLDivElement>(null);
+  const fileIn = useRef<HTMLInputElement>(null);
   const prompts = useMemo(() => [...PROMPTS].sort(() => Math.random() - 0.5), []);
   const providerCount = new Set(FNS.flatMap((f) => defaultKeys(f).map((k) => k.provider))).size;
   const backendModels = useMemo(() => listKeys().filter((k) => k.source === 'backend' && k.model && k.defaults?.text !== undefined), [tick]);
@@ -157,7 +152,6 @@ export function Home() {
 
   // ---- conversations live in IndexedDB: no size cap, and every chat stays in the History menu ----
   const loadChat = useCallback(async (id: string) => {
-    outFiles.clear();
     let msgs: Msg[] = []; let cid = id; created.current = 0;
     try {
       const c = id ? await getChat(id) : undefined;
@@ -174,9 +168,6 @@ export function Home() {
       }
     } catch { msgs = []; cid = ''; }
     idRef.current = cid; setCurrentChatId(cid); fromLoad.current = msgs; setMessages(msgs); setReady(true);
-    // Restore generated artifacts from IndexedDB so image previews and downloads survive chat reloads.
-    await Promise.all(msgs.filter((m) => m.fileOut).map(async (m) => { const saved = await getArtifact(m.id).catch(() => undefined); if (saved) outFiles.set(m.id, { blob: saved.blob, name: saved.name, mime: saved.mime }); }));
-    tick((n) => n + 1);
   }, []);
   useEffect(() => { void loadChat(currentChatId()); }, [loadChat]);
   useEffect(() => { const prompt = takeCodelabPrompt(); if(prompt) { setIdea(prompt); setFiles([]); } }, []);
@@ -184,7 +175,7 @@ export function Home() {
     const f = (e: Event) => {
       abort.current?.abort(runningId.current && pendingFor(runningId.current) ? DETACH : undefined);
       outFiles.clear(); sent.clear();
-      setIdea(''); setFiles([]); setMenu(false);
+      setIdea(''); setFiles([]); setFileNote(''); setMenu(false);
       void loadChat((e as CustomEvent<{ id: string | null }>).detail?.id ?? '');
     };
     window.addEventListener(CHAT_OPEN, f); return () => window.removeEventListener(CHAT_OPEN, f);
@@ -196,7 +187,7 @@ export function Home() {
     const save = () => {
       flush.current = null;
       const first = messages.find((m) => m.role === 'user'); const now = Date.now();
-      void putChat({ id, title: titleFrom(first?.text || first?.files?.[0]?.name || ''), createdAt: created.current || now, updatedAt: now, messages }).then(() => announceChats()).catch(() => {});
+      void putChat({ id, title: titleFrom(first?.text || first?.files?.[0]?.name || ''), createdAt: created.current || now, updatedAt: now, messages: messages.map((m) => (m.fileOut ? { ...m, fileOut: undefined } : m)) }).then(() => announceChats()).catch(() => {});
     };
     flush.current = save; const t = setTimeout(save, 500);
     return () => clearTimeout(t);
@@ -237,6 +228,23 @@ export function Home() {
 
   const patch = (id: string, p: Partial<Msg>) => setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, ...p } : m)));
 
+  // ---- attachments (+ button, paste, drop) ----
+  const addFiles = (list: FileList | File[] | null | undefined) => {
+    const picked = Array.from(list ?? []); if (!picked.length) return;
+    const quota = serverQuota;
+    const room = Math.max(0, Math.min(MAX_FILES - files.length, quota?.premium ? MAX_FILES : quota?.remaining ?? MAX_FILES));
+    const { added, skipped } = toAttachments(picked.slice(0, room), files);
+    if (added.length) setFiles((f) => [...f, ...added]);
+    const quotaNote = quota && !quota.premium && quota.remaining === 0 && quota.resetAt ? `File-analysis allowance used. You can attach and analyze files again after ${formatQuotaReset(quota.resetAt)}.` : picked.length > room ? (quota?.resetAt ? `Only ${room} file(s) can be added now. Your allowance resets ${formatQuotaReset(quota.resetAt)}.` : `Only ${room} file(s) can be added to this message; the per-message limit is ${MAX_FILES}.`) : '';
+    setFileNote([quotaNote, skipped.length ? `${skipped.slice(0, 2).join('. ')}${skipped.length > 2 ? ` (and ${skipped.length - 2} more)` : ''}.` : ''].filter(Boolean).join(' '));
+    setMenu(false); input.current?.focus();
+  };
+  useEffect(() => { if (!fileNote || /allowance|analysis/i.test(fileNote)) return; const t = setTimeout(() => setFileNote(''), 7000); return () => clearTimeout(t); }, [fileNote]);
+  // The server owns quota and Premium status; refresh the display and expiry without trusting local storage.
+  const refreshFileQuota = useCallback(async () => { try { const q = await getFileQuota(); setServerQuota(q); if (q.premium || (q.remaining !== null && q.remaining > 0)) setFileNote((n) => /allowance|analysis/i.test(n) ? '' : n); } catch { setServerQuota(null); } }, []);
+  useEffect(() => { void refreshFileQuota(); const t = setInterval(() => { tick((n) => n + 1); void refreshFileQuota(); }, 60_000); return () => clearInterval(t); }, [refreshFileQuota]);
+  const pick = (el: HTMLInputElement | null) => { setMenu(false); if (el) { el.value = ''; el.click(); } };
+
   // ---- jobs that kept running on the server while the app was closed, or while another chat was open ----
   const live = useRef(new Set<string>());
   const following = useRef(new Map<string, AbortController>());
@@ -257,7 +265,7 @@ export function Home() {
           const del = here ? await deliverable(r.text, p.wanted, p.prompt, []) : { file: null, notes: p.wanted.file ? ['You were in another chat when this finished, so the file was not built. Ask me to make it from this answer.'] : [] };
           if (del.file) keepArtifact(p.msgId, del.file);
           const notes = [...p.notes, ...del.notes, ...(r.truncated ? ['The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.'] : [])];
-          await settle(p, { state: 'done', kind: 'text', text: p.wanted.file && del.file ? `**${del.file.name} is ready.** Download the attached file to review its contents.` : r.text, notes: notes.length ? notes : undefined, sources: p.sources, fileOut: del.file ? { name: del.file.name, size: del.file.blob.size, mime: del.file.mime } : undefined });
+          await settle(p, { state: 'done', kind: 'text', text: p.wanted.file && del.file ? `**${del.file.name} is ready.** Download the attached file to review its contents.` : r.text, notes: notes.length ? notes : undefined, sources: p.sources, fileOut: del.file ? { name: del.file.name, size: del.file.blob.size } : undefined });
           dropPending(p.msgId); log.say('ok', 'done');
           void notifyDone({ kind: 'text', title: 'Your answer is ready', body: `${p.modelName} finished “${titleFrom(p.prompt, 'your request').slice(0, 60)}”.`, route: '/' });
         } catch (e) {
@@ -293,7 +301,7 @@ export function Home() {
         const lr = log.start('cmd', `local ${local.kind} --to ${local.format}`);
         const out = await runLocal(local, atts); log.done(lr, `${out.file.name} · ${sizeLabel(out.file.blob.size)}`); log.say('ok', 'done');
         keepArtifact(id, out.file);
-        patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: { name: out.file.name, size: out.file.blob.size, mime: out.file.mime } });
+        patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, fileOut: { name: out.file.name, size: out.file.blob.size } });
         return;
       }
       // Recall prior chats and recover locally stored generated files for continuity requests.
@@ -306,7 +314,7 @@ export function Home() {
       }});
       if (out.file) keepArtifact(id, out.file);
       log.say('ok', 'done');
-      patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, sources: out.sources?.length ? out.sources : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size, mime: out.file.mime } : undefined });
+      patch(id, { state: 'done', kind: 'text', text: out.text, notes: out.notes.length ? out.notes : undefined, sources: out.sources?.length ? out.sources : undefined, fileOut: out.file ? { name: out.file.name, size: out.file.blob.size } : undefined });
       return;
     } catch (e) {
       log.settle('failed');
@@ -330,16 +338,28 @@ export function Home() {
   const send = async (value = idea) => {
     const prompt = value.trim(); if ((!prompt && !files.length) || active) return;
     const atts = files;
+    let postSendQuotaNote = '';
+    if (atts.length) {
+      try {
+        const quota = await consumeFileQuota(atts.length); setServerQuota(quota);
+        if (!quota.premium && quota.remaining === 0 && quota.resetAt) postSendQuotaNote = `You have used all ${FILE_ANALYSIS_LIMIT} file analyses for this 24-hour inactivity window. You can come back after ${formatQuotaReset(quota.resetAt)}.`;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'File allowance could not be verified.';
+        try { const latest = await getFileQuota(); setServerQuota(latest); if (!latest.premium) setFileNote(latest.remaining === 0 && latest.resetAt ? `Free file-analysis allowance reached. You can come back after ${formatQuotaReset(latest.resetAt)}.` : message); else setFileNote(message); }
+        catch { setFileNote(message); }
+        return;
+      }
+    }
     if (editing) { begin(prompt, atts, { id: editing.assistantId, before: editing.before, userId: editing.userId }); setEditing(null); }
     else begin(prompt, atts);
-    setIdea(''); setFiles([]); setMenu(false);
+    setIdea(''); setFiles([]); setFileNote(postSendQuotaNote); setMenu(false);
   };
   /** Regenerate / retry / resend: run the same request again where it stands. */
   const redo = (assistantId: string) => {
     if (active) return; const i = messages.findIndex((m) => m.id === assistantId); const u = messages[i - 1];
     if (i < 1 || u?.role !== 'user') return;
     const atts = sent.get(u.id) ?? [];
-    if (u.files?.length && !atts.length) { setIdea(u.text); input.current?.focus(); return; }
+    if (u.files?.length && !atts.length) { setIdea(u.text); setFileNote('Those files are no longer in memory. Attach them again, then send.'); input.current?.focus(); return; }
     begin(u.text, atts, { id: assistantId, before: messages.slice(0, i - 1) });
   };
   const flash = (k: string) => { setCopied(k); setTimeout(() => setCopied((c) => (c === k ? '' : c)), 1500); };
@@ -356,7 +376,10 @@ export function Home() {
   const canSend = !!idea.trim() || files.length > 0;
 
   return (
-    <section className="chat-home" style={{ '--kb': `${lift}px` } as CSSProperties}>
+    <section className={`chat-home${drag ? ' dragging' : ''}`} style={{ '--kb': `${lift}px` } as CSSProperties}
+      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true); } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setDrag(false); }}
+      onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } setDrag(false); }}>
       <header className="chat-top">
         <div className="usage"><span className="muted">{messages.length ? 'Chat' : 'New chat'}</span></div>
         {messages.length > 0 && <button className="chat-new" aria-label="New chat" title="New chat" onClick={newChat}><Icon name="newChat" size={18} /></button>}
@@ -389,7 +412,6 @@ export function Home() {
           <div key={m.id} className="chat-message assistant">
             <div className="assistant-body">
               <Reply m={m} />
-              <ImageArtifact file={outFiles.get(m.id)} />
               {m.state === 'working' && <FadeStatus log={logs.get(m.id)} fallback={'Getting started…'} />}
               {m.state !== 'working' && (
                 <div className="msg-actions">
@@ -416,6 +438,7 @@ export function Home() {
           </div>
         )}
         {editing && <div className="notice" role="status">Editing this request. Sending will update its existing reply instead of adding a new conversation entry. <button className="btn" onClick={() => { setEditing(null); setIdea(''); setFiles([]); }}>Cancel edit</button></div>}
+        {fileNote && <p className="attach-note" role="status">{fileNote}</p>}
         <div className="chat-composer">
           {files.length > 0 && (
             <div className="attach-row" aria-label="Attached files">
@@ -426,13 +449,15 @@ export function Home() {
             <div className="composer-input-row">
             <textarea ref={input} value={idea} rows={1} enterKeyHint="send" placeholder={files.length ? 'Add a message about your files…' : 'Ask, write, research or code…'} aria-label="Message"
               onChange={(e) => setIdea(e.target.value)} onFocus={() => { setFocused(true); setTimeout(() => toEnd(), 250); }} onBlur={() => setFocused(false)}
+              onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !coarse) { e.preventDefault(); send(); } }} />
             </div>
             <div className="composer-controls-row">
             <div className="plus-wrap" ref={plus}>
-              <button className="plus-button" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((o) => !o)}><Icon name="plus" size={22} /></button>
+              <button className="plus-button" type="button" aria-label="Attach text or documents" aria-haspopup="menu" aria-expanded={menu} disabled={files.length >= MAX_FILES || (!!serverQuota && !serverQuota.premium && (serverQuota.remaining ?? 0) <= 0)} onClick={() => setMenu((o) => !o)}><Icon name="plus" size={22} /></button>
               {menu && (
                 <div className="plus-menu" role="menu">
+                  <button role="menuitem" onClick={() => pick(fileIn.current)}><b aria-hidden="true"><Icon name="file" size={18} /></b><span>Attach files<small>Code, text and documents</small></span></button>
                   <button role="menuitem" onClick={() => { setIdea((v) => `${v ? `${v}\n\n` : ''}Research this thoroughly using current web sources. Compare reliable sources, verify key claims, include dates and cite every factual claim.`); setMenu(false); input.current?.focus(); }}><b aria-hidden="true"><Icon name="globe" size={18} /></b><span>Deep research<small>Search, verify and cite sources</small></span></button>
                   <button role="menuitem" onClick={() => { setIdea((v) => `${v ? `${v}\n\n` : ''}Act as a senior software engineer. Inspect all relevant context, plan first, solve root causes, deliver complete working code for every changed file, include setup commands and explain decisions. Do not omit or truncate code.`); setMenu(false); input.current?.focus(); }}><b aria-hidden="true"><Icon name="code" size={18} /></b><span>Developer mode<small>Complete code, tests and explanations</small></span></button>
                   <button role="menuitem" onClick={() => { setIdea((v) => `${v ? `${v}\n\n` : ''}Use Engineering Agent workflow. First inspect the full relevant project context and existing conventions. Diagnose the root cause before editing. Make a concise plan listing affected files, dependencies, risks, and acceptance criteria. Execute the plan with coordinated, minimal changes; avoid unrelated rewrites and conflicting edits. Review your own diff for regressions and security issues. Run the available type checks, tests, and build commands; fix failures caused by your changes and rerun checks. If a check cannot run, explain the exact blocker and never claim it passed. Deliver a clear summary, files changed, checks actually run, and remaining risks. Keep internal reasoning hidden; show only concise task progress and useful conclusions.`); setMenu(false); input.current?.focus(); }}><b aria-hidden="true"><Icon name="star" size={18} /></b><span>Engineering agent<small>Plan · implement · verify · report</small></span></button>
@@ -440,8 +465,9 @@ export function Home() {
                   <a role="menuitem" href="#/codelab" onClick={() => setMenu(false)}><b aria-hidden="true"><Icon name="code" size={18} /></b><span>Codelab<small>Edit and commit GitHub projects</small></span></a>
                 </div>
               )}
+              <input ref={fileIn} type="file" accept="*/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </div>
-            <div className="composer-model-row"><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: k.model || k.provider || 'Connected model' }))]} /></div>
+            <div className="composer-model-row"><Select label="Choose model" value={modelChoice} onChange={(value) => { setModelChoice(value); saveSettings({ ...getSettings(), textModel: value }); }} options={[{ value: 'auto', label: 'Auto' }, ...backendModels.map((k) => ({ value: `${k.provider}::${k.model}`, label: k.model ?? k.provider }))]} /></div>
             {working
               ? <button className="send-button stop" aria-label="Stop" onClick={stopAll}><Icon name="stop" size={18} /></button>
               : <button className="send-button" aria-label="Send" disabled={!canSend} onClick={() => send()}><Icon name="send" size={20} /></button>}
