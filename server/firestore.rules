@@ -1,7 +1,0 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Billing records are read and written only by the server (Admin SDK bypasses these rules).
-    match /{document=**} { allow read, write: if false; }
-  }
-}
