@@ -1,0 +1,255 @@
+name: Pothub Forge Build Worker
+run-name: Forge ${{ inputs.repository }}@${{ inputs.ref || 'default' }} · ${{ inputs.output }}
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: GitHub repository owner/name (public or token-accessible private)
+        required: true
+        type: string
+      ref:
+        description: Branch, tag, or commit (optional)
+        required: false
+        type: string
+      project_type:
+        description: Project framework
+        required: true
+        type: choice
+        options: [auto, node, python, go, rust, flutter, android, react-native, capacitor]
+        default: auto
+      output:
+        description: Requested output
+        required: true
+        type: choice
+        options: [auto, web, apk, apk-and-aab]
+        default: apk-and-aab
+      native_features:
+        description: Optional comma-separated native capabilities
+        required: false
+        type: string
+      quality_options:
+        description: Comma-separated quality checks
+        required: false
+        type: string
+      request_summary:
+        description: User request context
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    concurrency:
+      group: pothub-forge-builds
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Validate repository input
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+        run: |
+          python - <<'PY'
+          import os,re,sys
+          if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', os.environ['REPOSITORY'].strip()):
+            sys.exit('Repository must be owner/name (public GitHub repository only).')
+          PY
+      - name: Verify source repository access
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+          SOURCE_TOKEN: ${{ secrets.POTHUB_FORGE_GITHUB_TOKEN }}
+        run: |
+          if [ -n "$SOURCE_TOKEN" ]; then auth=( -H "Authorization: Bearer $SOURCE_TOKEN" ); else auth=(); fi
+          status=$(curl -sS -o /dev/null -w '%{http_code}' "${auth[@]}" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPOSITORY")
+          if [ "$status" != 200 ]; then echo "Repository access failed (HTTP $status). Public repos can use the default token; private repos require the worker-repository secret POTHUB_FORGE_GITHUB_TOKEN with Contents: read access."; exit 1; fi
+      - name: Checkout source (read-only, no persisted credentials)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          path: source
+          token: ${{ secrets.POTHUB_FORGE_GITHUB_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Detect project and target
+        id: detect
+        env:
+          QUALITY_OPTIONS: ${{ inputs.quality_options }}
+        run: |
+          type='${{ inputs.project_type }}'; target='${{ inputs.output }}'
+          if [ "$type" = auto ]; then
+            if [ -f source/pubspec.yaml ]; then type=flutter
+            elif [ -f source/package.json ]; then
+              type=node
+              if grep -q '"react-native"' source/package.json; then type=react-native; elif grep -q '"@capacitor/' source/package.json; then type=capacitor; fi
+            elif [ -f source/android/gradlew ] || [ -f source/gradlew ]; then type=android
+            else type=unknown; fi
+          fi
+          if [ "$type" = unknown ]; then echo 'Unsupported or unrecognized project structure.'; exit 1; fi
+          if [ "$target" = auto ]; then
+            if [ "$type" = node ] && [ ! -d source/android ] && [ ! -f source/capacitor.config.ts ] && [ ! -f source/capacitor.config.js ] && [ ! -f source/capacitor.config.json ]; then target=web
+            elif [ "$type" = node ]; then target=apk
+            elif [ "$type" = flutter ] || [ "$type" = android ] || [ "$type" = react-native ] || [ "$type" = capacitor ]; then target=apk-and-aab
+            else target=web; fi
+          fi
+          if [ "$target" = web ] && [ "$type" != node ]; then echo 'Web output is only supported for Node-based web projects.'; exit 1; fi
+          if [ "$target" != web ] && [ "$type" = node ]; then echo 'APK output is not supported for Node-only web projects.'; exit 1; fi
+          echo "type=$type" >> "$GITHUB_OUTPUT"; echo "target=$target" >> "$GITHUB_OUTPUT"
+          if [ "$target" != web ]; then q=",${QUALITY_OPTIONS},"; if [[ "$q" != *",debug,"* && "$q" != *",release,"* ]]; then echo 'Select debug or release APK output.'; exit 1; fi; fi
+          if [ "$target" = apk-and-aab ] && [[ ",${QUALITY_OPTIONS}," != *",release,"* ]]; then echo 'AAB requires release preference.'; exit 1; fi
+          echo "Detected framework: $type; output: $target"
+      - name: Validate existing release signing configuration
+        if: contains(inputs.quality_options, 'signing') && (steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab')
+        run: |
+          if ! find source -type f \
+            \( -name 'build.gradle' -o -name 'build.gradle.kts' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' \
+            -print0 | xargs -0 grep -E 'signingConfig|signingConfigs|key.properties' 2>/dev/null | head -n 1 | grep -q .; then
+            echo 'Release signing was requested but no existing Android signing configuration was detected. Configure a secure signing key in the project (do not commit keystore credentials) or deselect signing.'
+            exit 1
+          fi
+      - name: Setup Node
+        if: steps.detect.outputs.type == 'node' || steps.detect.outputs.type == 'react-native' || steps.detect.outputs.type == 'capacitor'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build web output
+        if: steps.detect.outputs.target == 'web'
+        working-directory: source
+        env:
+          QUALITY_OPTIONS: ${{ inputs.quality_options }}
+        run: |
+          test -f package.json || { echo 'Web build requires package.json'; exit 1; }
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund
+          elif [ -f pnpm-lock.yaml ]; then corepack enable; pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then corepack enable; yarn install --immutable
+          else npm install --no-audit --no-fund; fi
+          if [[ ",${QUALITY_OPTIONS}," == *",tests,"* ]]; then npm test --if-present; fi
+          if [[ ",${QUALITY_OPTIONS}," == *",lint,"* ]]; then npm run typecheck --if-present; npm run lint --if-present; fi
+          if [[ ",${QUALITY_OPTIONS}," == *",audit,"* ]]; then npm audit --omit=dev --audit-level=high; fi
+          npm run build
+          mkdir -p ../artifacts/web
+          if [ -d dist ]; then cp -a dist/. ../artifacts/web/; elif [ -d build ]; then cp -a build/. ../artifacts/web/; elif [ -d out ]; then cp -a out/. ../artifacts/web/; else echo 'Build succeeded but no common web output directory found (dist/build/out).'; exit 1; fi
+      - name: Upload web artifact
+        if: steps.detect.outputs.target == 'web'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pothub-web-build
+          path: artifacts/web
+          if-no-files-found: error
+          retention-days: 7
+      - name: Install JS dependencies for Android wrappers
+        if: steps.detect.outputs.type == 'react-native' || steps.detect.outputs.type == 'capacitor'
+        working-directory: source
+        env:
+          NATIVE_FEATURES: ${{ inputs.native_features }}
+          QUALITY_OPTIONS: ${{ inputs.quality_options }}
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+          if [ '${{ steps.detect.outputs.type }}' = 'react-native' ]; then
+            if [[ ",${QUALITY_OPTIONS}," == *",tests,"* ]]; then npm test --if-present; fi
+            if [[ ",${QUALITY_OPTIONS}," == *",lint,"* ]]; then npm run typecheck --if-present; npm run lint --if-present; fi
+            if [[ ",${QUALITY_OPTIONS}," == *",audit,"* ]]; then npm audit --omit=dev --audit-level=high; fi
+          fi
+          if [ '${{ steps.detect.outputs.type }}' = 'capacitor' ]; then
+            FORGE_SOURCE_DIR="$GITHUB_WORKSPACE/source" FORGE_NATIVE_FEATURES="$NATIVE_FEATURES" node "$GITHUB_WORKSPACE/scripts/forge-native-setup.mjs"
+            npm install --no-audit --no-fund
+            if [[ ",${QUALITY_OPTIONS}," == *",tests,"* ]]; then npm test --if-present; fi
+            if [[ ",${QUALITY_OPTIONS}," == *",lint,"* ]]; then npm run typecheck --if-present; npm run lint --if-present; fi
+            if [[ ",${QUALITY_OPTIONS}," == *",audit,"* ]]; then npm audit --omit=dev --audit-level=high; fi
+            npm run build
+            npx cap sync android
+          fi
+      - name: Setup Java for Android
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Android SDK
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        uses: android-actions/setup-android@v3
+      - name: Setup Flutter
+        if: steps.detect.outputs.type == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Native API and sign-in configuration audit
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        env:
+          FORGE_SOURCE_DIR: ${{ github.workspace }}/source
+          FORGE_NATIVE_FEATURES: ${{ inputs.native_features }}
+        run: node "$GITHUB_WORKSPACE/scripts/forge-native-audit.mjs"
+      - name: Build Flutter APK and AAB
+        if: steps.detect.outputs.type == 'flutter' && (steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab')
+        working-directory: source
+        env:
+          QUALITY_OPTIONS: ${{ inputs.quality_options }}
+          TARGET_OUTPUT: ${{ steps.detect.outputs.target }}
+        run: |
+          flutter pub get
+          if [[ ",${QUALITY_OPTIONS}," == *",lint,"* ]]; then flutter analyze --no-pub; fi
+          if [[ ",${QUALITY_OPTIONS}," == *",tests,"* ]]; then flutter test --no-pub; fi
+          mkdir -p ../artifacts
+          if [[ ",${QUALITY_OPTIONS}," == *",debug,"* ]]; then flutter build apk --debug --no-pub; cp build/app/outputs/flutter-apk/*.apk ../artifacts/; fi
+          if [[ ",${QUALITY_OPTIONS}," == *",release,"* ]]; then if flutter build apk --release --no-pub; then cp build/app/outputs/flutter-apk/*release*.apk ../artifacts/ 2>/dev/null || true; else echo 'Release APK build failed.'; exit 1; fi; fi
+          if [ "$TARGET_OUTPUT" = 'apk-and-aab' ]; then if flutter build appbundle --release --no-pub; then cp build/app/outputs/bundle/release/*.aab ../artifacts/ 2>/dev/null || true; else echo 'AAB build failed.'; exit 1; fi
+          if [ "$TARGET_OUTPUT" = 'apk-and-aab' ]; then find ../artifacts -name '*.aab' -type f -size +0c | grep -q . || { echo 'AAB output is missing.'; exit 1; }; fi; fi
+          find ../artifacts -name '*.apk' -type f -size +0c | grep -q . || { echo 'APK missing'; exit 1; }
+      - name: Build native Android Gradle APK and AAB
+        if: steps.detect.outputs.type != 'flutter' && (steps.detect.outputs.type == 'android' || steps.detect.outputs.type == 'react-native' || steps.detect.outputs.type == 'capacitor') && (steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab')
+        env:
+          QUALITY_OPTIONS: ${{ inputs.quality_options }}
+          TARGET_OUTPUT: ${{ steps.detect.outputs.target }}
+        run: |
+          cd source
+          if [ -d android ]; then cd android; elif [ -f gradlew ]; then :; else echo 'No Android Gradle project found'; exit 1; fi
+          chmod +x gradlew
+          if [[ ",${QUALITY_OPTIONS}," == *",tests,"* ]]; then ./gradlew test --no-daemon; fi
+          if [[ ",${QUALITY_OPTIONS}," == *",lint,"* ]]; then ./gradlew lint --no-daemon; fi
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          if [[ ",${QUALITY_OPTIONS}," == *",debug,"* ]]; then ./gradlew assembleDebug --no-daemon; find . -path '*/build/outputs/apk/debug/*.apk' -type f -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \;; fi
+          if [[ ",${QUALITY_OPTIONS}," == *",release,"* ]]; then if ./gradlew assembleRelease --no-daemon; then find . -path '*/build/outputs/apk/release/*.apk' -type f -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \; || true; else echo 'Release APK build failed.'; exit 1; fi; fi
+          if [ "$TARGET_OUTPUT" = 'apk-and-aab' ]; then if ./gradlew bundleRelease --no-daemon; then find . -path '*/build/outputs/bundle/release/*.aab' -type f -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \; || true; else echo 'AAB build failed.'; exit 1; fi
+          if [ "$TARGET_OUTPUT" = 'apk-and-aab' ]; then find "$GITHUB_WORKSPACE/artifacts" -name '*.aab' -type f -size +0c | grep -q . || { echo 'AAB output is missing.'; exit 1; }; fi; fi
+          find "$GITHUB_WORKSPACE/artifacts" -name '*.apk' -type f -size +0c | grep -q . || { echo 'APK artifact missing'; exit 1; }
+      - name: Include native API audit report
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        run: |
+          if [ -f source/MONYGIST-NATIVE-API-AUDIT.md ]; then mkdir -p artifacts/audit; cp source/MONYGIST-NATIVE-API-AUDIT.md artifacts/audit/; fi
+          if [ -f source/MONYGIST-NATIVE-CAPABILITIES.md ]; then mkdir -p artifacts/audit; cp source/MONYGIST-NATIVE-CAPABILITIES.md artifacts/audit/; fi
+      - name: Collect mapping and symbol files
+        if: contains(inputs.quality_options, 'mapping') && (steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab')
+        run: |
+          mkdir -p artifacts/symbols
+          find source -type f \
+            \( -name 'mapping.txt' -o -name '*.symbols' -o -name '*.dSYM.zip' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' \
+            -exec cp --parents {} artifacts/symbols/ \; || true
+      - name: Upload Android artifacts
+        if: steps.detect.outputs.target == 'apk' || steps.detect.outputs.target == 'apk-and-aab'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pothub-android-build
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Unsupported project
+        if: steps.detect.outputs.type == 'unknown'
+        run: echo 'No supported framework detected. Build was not attempted.'
+      - name: Job summary
+        if: always()
+        env:
+          REQUEST_SUMMARY: ${{ inputs.request_summary }}
+          NATIVE_FEATURES: ${{ inputs.native_features }}
+          QUALITY_OPTIONS: ${{ inputs.quality_options }}
+        run: |
+          echo '## Pothub Forge Build' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Source repository: ${{ inputs.repository }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Source ref: ${{ inputs.ref }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Outputs: APK/AAB or web artifact, according to request' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Native features requested: $NATIVE_FEATURES" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Quality checks requested: $QUALITY_OPTIONS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Request context: $REQUEST_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Android release outputs use the project signing configuration if present; otherwise they are unsigned.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Native capability plugins and a bridge helper are generated for Capacitor projects only. App-specific screens, consent UX, Firebase push setup and store declarations still require project integration.' >> "$GITHUB_STEP_SUMMARY"
