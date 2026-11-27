@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "MonyGist",
+  "name": "MonyGist \u2014 AI workspace",
   "short_name": "MonyGist",
   "start_url": "/",
   "scope": "/",
@@ -8,7 +8,7 @@
   "orientation": "any",
   "background_color": "#0d0d0d",
   "theme_color": "#0d0d0d",
-  "description": "An AI coding agent and workspace for repository repair, research, writing and files.",
+  "description": "Installable AI workspace for coding, research, writing, and repository tools.",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -34,5 +34,14 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "categories": [
+    "productivity",
+    "developer",
+    "utilities"
   ]
 }

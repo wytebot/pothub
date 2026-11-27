@@ -3,7 +3,7 @@
 //   /api/vercel/projects     -> the projects the token can see (personal scope + teams)
 //   /api/vercel/deployments  -> the latest deployments of one project
 //   /api/vercel/events       -> the build log of one deployment
-//   /api/vercel/variables   -> write a non-sensitive project environment variable
+//   /api/vercel/env-list|env-create|env-update|env-delete -> project environment variable CRUD
 // The token is used for this one request and is never stored or logged. Only api.vercel.com is ever contacted.
 import { bodyOf, clientIp, limited, reply } from '../_lib/http.js';
 
@@ -63,6 +63,29 @@ export default async function handler(req, res) {
       const list = Array.isArray(j) ? j : j.events || [];
       const lines = list.map((e) => ({ t: e.created || e.date || 0, type: String(e.type || ''), text: clean(e.text ?? e.payload?.text ?? '') })).filter((l) => l.text.trim());
       return reply(req, res, 200, { lines: lines.slice(-3000) });
+    }
+    if (action === 'env-list') {
+      const projectId = String(b.projectId || ''); if (!ID.test(projectId)) return reply(req, res, 400, { error: 'Invalid project.' });
+      const u = new URL(`${API}/v10/projects/${encodeURIComponent(projectId)}/env`); if (team) u.searchParams.set('teamId', team); u.searchParams.set('limit', '100');
+      const r = await fetch(u, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }); const j = await r.json().catch(() => ({}));
+      if (!r.ok) { const er = new Error(j?.error?.message || `Vercel answered ${r.status}`); er.status = r.status; throw er; }
+      return reply(req, res, 200, { variables: (j.envs || []).map(v => ({ id: v.id, key: v.key, type: v.type || 'plain', targets: v.target || [], createdAt: v.createdAt || 0, updatedAt: v.updatedAt || 0, comment: v.comment || '' })) });
+    }
+    if (action === 'env-create' || action === 'env-update') {
+      const projectId = String(b.projectId || ''); const name = String(b.name || ''); const value = String(b.value ?? ''); const type = ['plain','secret','encrypted'].includes(String(b.type)) ? String(b.type) : 'secret';
+      const targets = Array.isArray(b.targets) ? b.targets.filter(x => ['production','preview','development'].includes(x)) : ['production','preview','development'];
+      if (!ID.test(projectId) || !/^[A-Z_][A-Z0-9_]{0,63}$/i.test(name) || !targets.length) return reply(req, res, 400, { error: 'Invalid environment variable request.' });
+      const envId = String(b.envId || ''); if (action === 'env-update' && !ID.test(envId)) return reply(req, res, 400, { error: 'Invalid variable id.' });
+      const u = new URL(`${API}/v10/projects/${encodeURIComponent(projectId)}/env${action === 'env-update' ? `/${encodeURIComponent(envId)}` : ''}`); if (team) u.searchParams.set('teamId', team);
+      const r = await fetch(u, { method: action === 'env-update' ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ key: name, value, type, target: targets, ...(b.comment ? { comment: String(b.comment).slice(0, 256) } : {}) }) });
+      const j = await r.json().catch(() => ({})); if (!r.ok) { const er = new Error(j?.error?.message || `Vercel answered ${r.status}`); er.status = r.status; throw er; }
+      return reply(req, res, 200, { saved: true, variable: { id: j.id || envId, key: j.key || name, type: j.type || type, target: j.target || targets } });
+    }
+    if (action === 'env-delete') {
+      const projectId = String(b.projectId || ''); const envId = String(b.envId || ''); if (!ID.test(projectId) || !ID.test(envId)) return reply(req, res, 400, { error: 'Invalid project or variable id.' });
+      const u = new URL(`${API}/v10/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(envId)}`); if (team) u.searchParams.set('teamId', team);
+      const r = await fetch(u, { method: 'DELETE', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }); if (!r.ok) { const j = await r.json().catch(() => ({})); const er = new Error(j?.error?.message || `Vercel answered ${r.status}`); er.status = r.status; throw er; }
+      return reply(req, res, 200, { deleted: true });
     }
     if (action === 'variables') {
       const projectId = String(b.projectId || ''); const name = String(b.name || ''); const value = String(b.value ?? '');

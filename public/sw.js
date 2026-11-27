@@ -4,7 +4,7 @@
 const CACHE = 'pothub-static-__BUILD_ID__';
 // The build fills this with every file the app needs (see vite.config.ts), so the whole app opens offline right after the first visit.
 const PRECACHE = /*__PRECACHE__*/[];
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
+const APP_SHELL = ['/', '/offline.html', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', (event) => {
   // One missing file must never stop the rest from being saved.
@@ -32,7 +32,7 @@ self.addEventListener('fetch', (event) => {
       fetch(request, { cache: 'no-store' }).then((response) => {
         if (response.ok) caches.open(CACHE).then((cache) => cache.put('/', response.clone()));
         return response;
-      }).catch(async () => (await caches.match('/')) || Response.error())
+      }).catch(async () => (await caches.match('/')) || (await caches.match('/offline.html')) || Response.error())
     );
     return;
   }
