@@ -8,7 +8,7 @@ export interface ServerProfile {
   limits: { image: number; video: number } | null;
 }
 
-const SITE_ORIGIN = 'https://pothub-self.vercel.app';
+const SITE_ORIGIN = ((import.meta.env.VITE_SITE_ORIGIN as string | undefined)?.trim() || 'https://pothub-self.vercel.app').replace(/\/$/, '');
 /** Website-tool and GitHub functions live in this site's own /api folder on Vercel. Relative on the web, absolute in the Android app. */
 const webBase = (() => { try { return location.protocol.startsWith('http') && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '' : SITE_ORIGIN; } catch { return SITE_ORIGIN; } })();
 
