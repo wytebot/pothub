@@ -78,3 +78,6 @@
 - Added explicit disconnect confirmation and visible post-disconnect status messages. Existing provider credentials and repository workspace drafts are not cleared by these disconnect flows.
 - Invalid/expired GitHub credentials and failed Vercel refresh attempts no longer silently delete saved tokens; credentials remain until deliberate disconnect/removal.
 - Codelab ZIP imports now merge by path: uploaded files replace matching repository paths, new files are added, untouched files remain; binary ZIP assets are staged as base64 for GitHub blob uploads, and duplicate ZIP paths are rejected before staging.
+- Fixed Vercel Backend route icon to use an icon supported by the app's icon registry (resolves TS2322).
+- Added a local TypeScript declaration for `libsodium-wrappers` (resolves TS7016 when type declarations are unavailable).
+- Added copy-full-log buttons to GitHub and Vercel deployment log cards with success/error status feedback.

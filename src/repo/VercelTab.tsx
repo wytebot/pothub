@@ -111,7 +111,7 @@ export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | nul
         </> : <p className="rp-muted">{busy ? 'Loading…' : 'No deployments yet.'}</p>}
       </section>
       <section className="rp-card" aria-label="Build logs">
-        <div className="rp-chead"><h2>Build logs</h2>{err && <span className="rp-pill bad">failed</span>}</div>
+        <div className="rp-chead"><h2>Build logs</h2><div className="rp-actions"><button className="rp-ib" type="button" disabled={!logText.length} title="Copy full Vercel build log" aria-label="Copy Vercel build log" onClick={() => { void navigator.clipboard.writeText(logText.join("\n")).then(() => setCopyNote("Vercel log copied")).catch(() => setCopyNote("Could not copy log; clipboard permission denied")); }}><Icon name="copy" size={17}/></button>{err && <span className="rp-pill bad">failed</span>}</div></div>{copyNote && <p className="rp-sub" role="status">{copyNote}</p>}
         {logText.length ? <LogView lines={logText} /> : <p className="rp-muted">{busy ? 'Loading…' : dep ? 'No log lines yet.' : '—'}</p>}
       </section>
       {failure && <button className="btn primary rp-analyze" onClick={() => setAnalyze(true)}>Analyze</button>}

@@ -38,7 +38,7 @@ const secondary: Route[] = [
   { path: '/support', label: 'Support', el: <Support /> },
   { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>MonyGist, version {__APP_VERSION__}. A text-first AI workspace for chat, writing, research and development.</p></div></section> },
   { path: '/storage', label: 'Storage information', el: <Storage /> },
-  { path: '/vercel-backend', label: 'Vercel Backend', icon: 'server', el: <VercelBackend /> },
+  { path: '/vercel-backend', label: 'Vercel Backend', icon: 'folder', el: <VercelBackend /> },
 ];
 const all = [...primary, ...secondary];
 

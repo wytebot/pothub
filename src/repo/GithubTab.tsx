@@ -18,7 +18,7 @@ const stamp = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s/;
 export function GithubTab({ token, repo }: { token: string; repo: Repo | null }) {
   const [runs, setRuns] = useState<Run[]>([]); const [runId, setRunId] = useState(0);
   const [jobs, setJobs] = useState<Job[]>([]); const [log, setLog] = useState<string[]>([]); const [logNote, setLogNote] = useState('');
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [note, setNote] = useState(''); const [copyNote, setCopyNote] = useState('');
   const [analyze, setAnalyze] = useState(false);
   const [variableName, setVariableName] = useState(''); const [variableValue, setVariableValue] = useState(''); const [variableBusy, setVariableBusy] = useState(false); const [variableNote, setVariableNote] = useState(''); const [envTab, setEnvTab] = useState<'variables'|'secrets'>('variables'); const [repoVars, setRepoVars] = useState<GithubActionVariable[]>([]); const [repoSecrets, setRepoSecrets] = useState<{name:string;created_at?:string;updated_at?:string}[]>([]); const [editingVar, setEditingVar] = useState<string|null>(null);
   const alive = useRef(true); useEffect(() => () => { alive.current = false; }, []);
@@ -101,7 +101,7 @@ export function GithubTab({ token, repo }: { token: string; repo: Repo | null })
         </> : <p className="rp-muted">{busy ? 'Loading…' : 'No workflow runs.'}</p>}
       </section>
       <section className="rp-card" aria-label="Build logs">
-        <div className="rp-chead"><h2>Build logs</h2>{failed && <span className="rp-pill bad">failed</span>}</div>
+        <div className="rp-chead"><h2>Build logs</h2><div className="rp-actions"><button className="rp-ib" type="button" disabled={!log.length} title="Copy full GitHub build log" aria-label="Copy GitHub build log" onClick={() => { void navigator.clipboard.writeText(log.join("\n")).then(() => setCopyNote("GitHub log copied")).catch(() => setCopyNote("Could not copy log; clipboard permission denied")); }}><Icon name="copy" size={17}/></button>{failed && <span className="rp-pill bad">failed</span>}</div></div>{copyNote && <p className="rp-sub" role="status">{copyNote}</p>}
         {log.length ? <LogView lines={log} /> : <p className="rp-muted">{logNote || (failed ? 'Reading the log…' : run && runState(run) === 'ok' ? 'The latest run succeeded.' : '—')}</p>}
       </section>
       {failure && <button className="btn primary rp-analyze" onClick={() => setAnalyze(true)}>Analyze</button>}
