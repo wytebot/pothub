@@ -13,6 +13,7 @@ import { Codelab } from './pages/Codelab';
 import { Deployments } from './pages/Deployments';
 import { Billing } from './pages/Billing';
 import { ForgeBuild } from './pages/ForgeBuild';
+import { VercelBackend } from './pages/VercelBackend';
 import { getStorageInfo } from './storage/quota';
 import { useMe, signInWithGoogle, signOut } from './auth/session';
 import { applyUpdate, UPDATE_READY } from './version';
@@ -37,6 +38,7 @@ const secondary: Route[] = [
   { path: '/support', label: 'Support', el: <Support /> },
   { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>MonyGist, version {__APP_VERSION__}. A text-first AI workspace for chat, writing, research and development.</p></div></section> },
   { path: '/storage', label: 'Storage information', el: <Storage /> },
+  { path: '/vercel-backend', label: 'Vercel Backend', icon: 'server', el: <VercelBackend /> },
 ];
 const all = [...primary, ...secondary];
 
@@ -56,6 +58,8 @@ export function App() {
   const [pull, setPull] = useState(0);
   const [update, setUpdate] = useState('');
   const [guestSignInBusy, setGuestSignInBusy] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome: string }> } | null>(null);
+  const [installed, setInstalled] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
   const touch = useRef<{ y: number; on: boolean } | null>(null);
   const routePath = path.split('?')[0].startsWith('/sites/') ? '/sites' : path.split('?')[0]; // the old backlink, diagnosis and crawl pages now live inside Configured websites
@@ -64,6 +68,8 @@ export function App() {
   const route: Route = !me && !guestAccessible.has(requestedRoute.path) ? primary[0] : requestedRoute;
 
   useEffect(() => setDrawer(false), [path]);
+  useEffect(() => { const installedEvt = () => setInstalled(true); const before = (e: Event) => { e.preventDefault(); setInstallPrompt(e as Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome: string }> }); }; window.addEventListener('appinstalled', installedEvt); window.addEventListener('beforeinstallprompt', before); return () => { window.removeEventListener('appinstalled', installedEvt); window.removeEventListener('beforeinstallprompt', before); }; }, []);
+  const installApp = async () => { if (!installPrompt?.prompt) return; await installPrompt.prompt(); const choice = installPrompt.userChoice ? await installPrompt.userChoice : undefined; if (choice?.outcome === 'accepted') setInstalled(true); setInstallPrompt(null); };
   useEffect(() => { const f = (e: Event) => setUpdate((e as CustomEvent<{ id: string }>).detail?.id ?? 'new'); window.addEventListener(UPDATE_READY, f); return () => window.removeEventListener(UPDATE_READY, f); }, []);
   useEffect(() => { document.title = `${route.label} · MonyGist`; }, [route]);
   useEffect(() => { getStorageInfo().then((i) => setLow(i.supported && i.quota > 0 && i.usage / i.quota > 0.85)).catch(() => {}); }, [path]);
@@ -81,6 +87,7 @@ export function App() {
       <header className="topbar">
         <button className="icon-btn" aria-label="Open navigation" aria-expanded={drawer} onClick={() => setDrawer(true)}><Icon name="menu" size={20} /></button>
         <span className="brand">MonyGist</span>
+        {installPrompt && !installed && <button className="btn pwa-install" onClick={() => void installApp()}>Install app</button>}
         {!me ? <button className="guest-signin" disabled={guestSignInBusy} onClick={async () => { setGuestSignInBusy(true); const r = await signInWithGoogle(); if (!r.ok && r.message) alert(`Sign-in failed\n\n${r.message}\n\nCheck your connection, Google sign-in configuration, and whether this app/browser is allowed to open the sign-in window.`); setGuestSignInBusy(false); }}>{guestSignInBusy ? 'Signing in…' : 'Sign in'}</button> : <details className="header-tools"><summary>Tools <Icon name="chevron" size={14}/></summary><div className="header-tools-pop"><a href="#/sites">Configured websites</a><a href="#/codelab">Codelab</a><a href="#/billing">Premium & billing</a></div></details>}
       </header>
       {drawer && <div className="drawer-scrim" onClick={() => setDrawer(false)} />}
