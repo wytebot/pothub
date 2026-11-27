@@ -41,7 +41,9 @@ export async function loadVercelToken(): Promise<string> {
   try {
     const r = await requestSite<TokenReply>('/api/auth/vercel/refresh', { refresh_token: s.refresh });
     const next = sessionOf(r); await saveVercelSession(next); return next.access;
-  } catch { await clearVercelToken(); return ''; }
+  } catch { // Retain the stored credential until the user deliberately disconnects or deletes it.
+    return s.access;
+  }
 }
 
 interface TokenReply { access_token: string; refresh_token?: string; expires_in?: number }
@@ -68,11 +70,17 @@ export async function finishVercelSignIn(code: string, state: string): Promise<v
   if (!r.access_token) throw new Error('Vercel did not return an access token.');
   await saveVercelSession(sessionOf(r));
 }
-/** Signs out: the token is revoked at Vercel when it came from the sign-in, then forgotten on this device. */
-export async function signOutVercel(): Promise<void> {
+/** Disconnect only after OAuth revocation succeeds; never silently lose a saved credential on revoke failure. */
+export async function signOutVercel(): Promise<{ oauthRevoked: boolean; personalToken: boolean }> {
   const s = await loadVercelSession();
-  if (s?.oauth) { try { await requestSite('/api/auth/vercel/revoke', { token: s.access }); } catch { /* the token still expires within the hour */ } }
+  if (!s) return { oauthRevoked: false, personalToken: false };
+  if (s.oauth) {
+    await requestSite('/api/auth/vercel/revoke', { token: s.access }, 15_000);
+    await clearVercelToken();
+    return { oauthRevoked: true, personalToken: false };
+  }
   await clearVercelToken();
+  return { oauthRevoked: false, personalToken: true };
 }
 
 export const vcProjects = (token: string) => requestSite<{ projects: VcProject[] }>('/api/vercel/projects', { token }).then((r) => r.projects);

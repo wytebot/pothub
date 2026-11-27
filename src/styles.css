@@ -1068,3 +1068,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .gh-env-manager .gh-env-item{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--border);border-radius:9px;padding:11px 12px;background:var(--surface)}
 .gh-env-manager .gh-env-item .rp-sub{margin:5px 0 0;overflow-wrap:anywhere}
 @media(max-width:600px){.gh-env-manager .gh-env-item{align-items:flex-start;flex-direction:column}.gh-env-manager .gh-env-actions{width:100%}.gh-env-manager .gh-env-actions .btn{flex:1}}
+
+/* GitHub Actions environment controls use a functional panel layout, not pill-shaped chrome. */
+.gh-env-manager { border-radius: 14px; }
+.gh-env-manager .btn, .gh-env-manager .gh-env-tabs .btn { border-radius: 8px; }
+.gh-env-manager .gh-env-item { border-radius: 10px; }
+.gh-env-manager input, .gh-env-manager textarea { border-radius: 8px; }
+.gh-env-manager .gh-env-actions { flex-wrap: wrap; }
