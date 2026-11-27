@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "check:raw-imports": "node scripts/check-raw-imports.mjs",
     "test": "vitest run",
     "android:sync": "npm run build && cap sync android && node scripts/copy-google-services.mjs && node scripts/copy-android-resources.mjs"
   },
