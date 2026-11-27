@@ -90,3 +90,9 @@ export async function setVercelProjectVariable(token: string, projectId: string,
   if (!projectId || value.length > 5000 || !targets.length) throw new Error('Invalid Vercel variable request.');
   await requestSite<{ saved: boolean }>('/api/vercel/variables', { token, projectId, team: teamId, name, value, targets });
 }
+
+export interface VcEnvVariable { id: string; key: string; type: string; targets: string[]; createdAt: number; updatedAt: number; comment: string }
+export const vcEnvList = (token: string, projectId: string, team: string) => requestSite<{ variables: VcEnvVariable[] }>('/api/vercel/env-list', { token, projectId, team }).then(r => r.variables);
+export const vcEnvCreate = (token: string, projectId: string, team: string, name: string, value: string, type: 'plain'|'secret'|'encrypted', targets: string[], comment = '') => requestSite('/api/vercel/env-create', { token, projectId, team, name, value, type, targets, comment });
+export const vcEnvUpdate = (token: string, projectId: string, team: string, envId: string, name: string, value: string, type: 'plain'|'secret'|'encrypted', targets: string[], comment = '') => requestSite('/api/vercel/env-update', { token, projectId, team, envId, name, value, type, targets, comment });
+export const vcEnvDelete = (token: string, projectId: string, team: string, envId: string) => requestSite('/api/vercel/env-delete', { token, projectId, team, envId });

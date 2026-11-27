@@ -177,12 +177,42 @@ export async function dispatchGithubWorkflow(token: string, full: string, workfl
 
 const VARIABLE_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/i;
 const SECRETISH = /(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|AUTH|CERT|COOKIE)/i;
-/** Writes a GitHub Actions repository variable, never a secret; rejects secret-like variable names. */
+/** Repository Actions variables CRUD. */
+export type GithubActionVariable = { name: string; value: string; created_at?: string; updated_at?: string };
+export async function listGithubRepoVariables(token: string, full: string): Promise<GithubActionVariable[]> {
+  const out: GithubActionVariable[] = []; let page = 1;
+  while (page <= 10) { const res = await github<{ variables: GithubActionVariable[]; total_count: number }>(token, `/repos/${full}/actions/variables?per_page=100&page=${page}`); out.push(...(res.variables || [])); if (!res.variables?.length || out.length >= (res.total_count || 0)) break; page++; }
+  return out;
+}
+export async function createGithubRepoVariable(token: string, full: string, name: string, value: string): Promise<void> {
+  if (!VARIABLE_NAME.test(name)) throw new Error('Invalid GitHub Actions variable name.');
+  if (value.length > 48_000) throw new Error('Variable value exceeds GitHub’s 48 KB limit.');
+  await github<void>(token, `/repos/${full}/actions/variables`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, value }) });
+}
+export async function updateGithubRepoVariable(token: string, full: string, name: string, value: string): Promise<void> {
+  if (!VARIABLE_NAME.test(name)) throw new Error('Invalid GitHub Actions variable name.');
+  if (value.length > 48_000) throw new Error('Variable value exceeds GitHub’s 48 KB limit.');
+  await github<void>(token, `/repos/${full}/actions/variables/${enc(name)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, value }) });
+}
+export async function deleteGithubRepoVariable(token: string, full: string, name: string): Promise<void> { await github<void>(token, `/repos/${full}/actions/variables/${enc(name)}`, { method: 'DELETE' }); }
+/** Lists secret metadata only; GitHub never returns existing secret values. */
+export async function listGithubRepoSecrets(token: string, full: string): Promise<{ name: string; created_at?: string; updated_at?: string }[]> {
+  const out: { name: string; created_at?: string; updated_at?: string }[] = []; let page = 1;
+  while (page <= 10) { const res = await github<{ secrets: typeof out; total_count: number }>(token, `/repos/${full}/actions/secrets?per_page=100&page=${page}`); out.push(...(res.secrets || [])); if (!res.secrets?.length || out.length >= (res.total_count || 0)) break; page++; }
+  return out;
+}
+export async function putGithubRepoSecret(token: string, full: string, name: string, value: string): Promise<void> {
+  if (!VARIABLE_NAME.test(name)) throw new Error('Invalid GitHub Actions secret name.');
+  if (!value) throw new Error('Secret value cannot be empty.');
+  const key = await github<{ key: string; key_id: string }>(token, `/repos/${full}/actions/secrets/public-key`);
+  const sodium = (await import('libsodium-wrappers')).default; await sodium.ready;
+  const sealed = sodium.crypto_box_seal(value, sodium.from_base64(key.key, sodium.base64_variants.ORIGINAL));
+  await github<void>(token, `/repos/${full}/actions/secrets/${enc(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ encrypted_value: sodium.to_base64(sealed, sodium.base64_variants.ORIGINAL), key_id: key.key_id }) });
+}
+export async function deleteGithubRepoSecret(token: string, full: string, name: string): Promise<void> { await github<void>(token, `/repos/${full}/actions/secrets/${enc(name)}`, { method: 'DELETE' }); }
+/** Legacy setter retained for existing callers; now permits non-secret names only. */
 export async function setGithubRepoVariable(token: string, full: string, name: string, value: string): Promise<void> {
   if (!VARIABLE_NAME.test(name) || SECRETISH.test(name)) throw new Error('Variable name is invalid or looks sensitive. Use GitHub Secrets for sensitive values.');
-  if (value.length > 5000) throw new Error('Repository variable value exceeds 5,000 characters.');
-  const body = JSON.stringify({ name, value });
-  const route = `/repos/${full}/actions/variables/${enc(name)}`;
-  try { await github<void>(token, route, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body }); }
-  catch (e) { if (!(e instanceof Error) || !/404|Not Found/i.test(e.message)) throw e; await github<void>(token, `/repos/${full}/actions/variables`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }); }
+  try { await updateGithubRepoVariable(token, full, name, value); }
+  catch (e) { if (!(e instanceof Error) || !/404|Not Found/i.test(e.message)) throw e; await createGithubRepoVariable(token, full, name, value); }
 }

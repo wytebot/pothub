@@ -4,7 +4,7 @@ import { Select } from '../ui/Select';
 import { AnalyzePanel } from './AnalyzePanel';
 import { buildSteps, extractError, logTail, type BuildStep, type LogLine } from './buildLog';
 import { LogView } from './LogView';
-import { isBuilding, isFailed, loadVercelSession, loadVercelToken, saveVercelToken, signOutVercel, startVercelSignIn, vcDeployments, vcEvents, vcProjects, setVercelProjectVariable, type VcDeployment, type VcProject } from './vercel';
+import { isBuilding, isFailed, loadVercelSession, loadVercelToken, saveVercelToken, signOutVercel, startVercelSignIn, vcDeployments, vcEvents, vcProjects, type VcDeployment, type VcProject } from './vercel';
 import type { Failure } from './flow';
 import type { Repo } from './github';
 
@@ -20,7 +20,6 @@ export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | nul
   const [dep, setDep] = useState<VcDeployment | null>(null);
   const [lines, setLines] = useState<LogLine[]>([]);
   const [analyze, setAnalyze] = useState(false);
-  const [varName, setVarName] = useState(''); const [varValue, setVarValue] = useState(''); const [varBusy, setVarBusy] = useState(false); const [varNote, setVarNote] = useState('');
   const project = projects.find((p) => p.id === pid) ?? null;
   const alive = useRef(true); useEffect(() => () => { alive.current = false; }, []);
 
@@ -58,7 +57,6 @@ export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | nul
     try { const list = await vcProjects(t); await saveVercelToken(t); setToken(t); setInput(''); setProjects(list); setPid(list.find((p) => repo && p.repo.toLowerCase() === repo.full_name.toLowerCase())?.id ?? list[0]?.id ?? ''); }
     catch (e) { fail(e, 'Could not connect to Vercel.'); } finally { setBusy(false); }
   };
-  const saveVariable = async () => { if (!token || !project || !varName.trim()) return; setVarBusy(true); setVarNote(''); try { await setVercelProjectVariable(token, project.id, project.team, varName.trim().toUpperCase(), varValue); setVarNote(`Saved ${varName.toUpperCase()} as a non-sensitive Vercel environment variable for Production, Preview and Development.`); setVarName(''); setVarValue(''); } catch (e) { setVarNote(e instanceof Error ? e.message : 'Could not save Vercel variable.'); } finally { setVarBusy(false); } };
   const signIn = async () => { setError(''); setSigning(true); try { await startVercelSignIn(); } catch (e) { fail(e, 'Could not start Vercel sign-in.'); setSigning(false); } };
   const disconnect = async () => { await signOutVercel(); setToken(''); setOauth(false); setProjects([]); setPid(''); setDep(null); setLines([]); };
 
@@ -93,12 +91,6 @@ export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | nul
         <button className="rp-ib" aria-label="Disconnect Vercel" onClick={() => void disconnect()}><Icon name="close" size={18} /></button>
       </div>
       {error && <p className="rp-err" role="alert">{error}{oauth && /refused/i.test(error) ? ' Vercel’s sign-in can only read deployments when its API permissions are enabled for your Vercel App. Disconnect and use an access token instead.' : ''}</p>}
-      <section className="rp-card" aria-label="Vercel environment variables">
-        <div className="rp-chead"><h2>Environment variables</h2><span className="rp-pill idle">Non-secret</span></div>
-        <p className="rp-sub">Add plain variables to the selected Vercel project in all environments. Sensitive values are blocked.</p>
-        <div className="rp-bar rp-var-form"><input aria-label="Environment variable name" placeholder="VARIABLE_NAME" value={varName} onChange={(e) => setVarName(e.target.value.toUpperCase())} maxLength={64}/><input aria-label="Environment variable value" placeholder="Non-sensitive value" value={varValue} onChange={(e) => setVarValue(e.target.value)} maxLength={5000}/><button className="btn" disabled={varBusy || !varName.trim()} onClick={() => void saveVariable()}>{varBusy ? 'Saving…' : 'Save'}</button></div>
-        {varNote && <p className="rp-muted" role="status">{varNote}</p>}
-      </section>
       <section className="rp-card" aria-label="Build steps">
         <div className="rp-chead"><h2>Build steps</h2>{dep && <span className={`rp-pill ${isFailed(state) ? 'bad' : isBuilding(state) ? 'run' : 'ok'}`}>{state.toLowerCase()}</span>}</div>
         {dep ? <>
