@@ -14,6 +14,7 @@ const MARK: Record<BuildStep['state'], string> = { done: '✓', failed: '✕', r
 /** Vercel deployment: connect once, then two cards (build steps, build logs) and, when the build failed, the Analyze button. */
 export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | null }) {
   const [token, setToken] = useState<string | null>(null);
+  const [copyNote, setCopyNote] = useState('');
   const [input, setInput] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice,setNotice]=useState('');
   const [oauth, setOauth] = useState(false); const [signing, setSigning] = useState(false);
   const [projects, setProjects] = useState<VcProject[]>([]); const [pid, setPid] = useState('');

@@ -81,3 +81,6 @@
 - Fixed Vercel Backend route icon to use an icon supported by the app's icon registry (resolves TS2322).
 - Added a local TypeScript declaration for `libsodium-wrappers` (resolves TS7016 when type declarations are unavailable).
 - Added copy-full-log buttons to GitHub and Vercel deployment log cards with success/error status feedback.
+
+## Vercel build-log copy state fix
+- `src/repo/VercelTab.tsx`: declare the `copyNote` state used by the Build Logs copy button, fixing TS2304 (`copyNote`/`setCopyNote` undefined).
