@@ -62,3 +62,11 @@
 - Automatic web search skips file-attached/repository-tagged requests and short command prompts.
 - File packaging errors are handled after generation and preserve the generated answer.
 - Vercel per-instance limiter prunes stale keys when the map grows.
+
+## PWA, Vercel Backend and long-context handling
+- PWA: enhanced manifest identity, standalone display modes, install prompt and offline fallback page/cache.
+- Removed environment variable editor from Vercel deployment page; moved it to separate collapsible-menu Vercel Backend page.
+- Added project environment variable list/create/update/delete endpoints, including secret/rotation entry flow and deployment targets.
+- Repository/file chunking retained; input is unlimited at the composer level, provider limits are handled by chunk/continuation workflow.
+
+- Expanded GitHub Actions repository environment UI to manage variables and encrypted secrets (create, edit, rotate, delete, refresh); redesigned controls and cards with non-pill corners.
