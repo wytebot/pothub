@@ -1,4 +1,0 @@
-{$RUNNER_DOMAIN} {
-  encode zstd gzip
-  reverse_proxy pothub-runner:8788
-}
