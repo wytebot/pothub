@@ -70,3 +70,11 @@
 - Repository/file chunking retained; input is unlimited at the composer level, provider limits are handled by chunk/continuation workflow.
 
 - Expanded GitHub Actions repository environment UI to manage variables and encrypted secrets (create, edit, rotate, delete, refresh); redesigned controls and cards with non-pill corners.
+
+
+### Integration persistence and deliberate disconnect (2026-11-27)
+- GitHub OAuth disconnect now revokes before deleting local credentials; failed revocation preserves the saved token and connected state. PAT disconnect is confirmed and explains that provider-side revocation must be done manually.
+- Vercel OAuth disconnect now requires successful revocation before removing the saved credential; failed revoke preserves it. PAT disconnect is confirmed and directs users to revoke at Vercel.
+- Added explicit disconnect confirmation and visible post-disconnect status messages. Existing provider credentials and repository workspace drafts are not cleared by these disconnect flows.
+- Invalid/expired GitHub credentials and failed Vercel refresh attempts no longer silently delete saved tokens; credentials remain until deliberate disconnect/removal.
+- Codelab ZIP imports now merge by path: uploaded files replace matching repository paths, new files are added, untouched files remain; binary ZIP assets are staged as base64 for GitHub blob uploads, and duplicate ZIP paths are rejected before staging.
