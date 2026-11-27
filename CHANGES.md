@@ -83,3 +83,5 @@
 - Added copy-full-log buttons to GitHub and Vercel deployment log cards with success/error status feedback.
 
 - Fix GitHub Actions secret encryption dependency bundling by switching to `libsodium-wrappers-sumo`, which ships the full sodium implementation and avoids the missing `./libsodium.mjs` import seen in Vercel's production Vite bundle. Updated the dynamic import and TypeScript declaration accordingly.
+
+- Build fix (Vercel "Could not resolve ./libsodium-sumo.mjs"): `libsodium-wrappers-sumo` has the same broken ES-module build as `libsodium-wrappers` (its wrapper imports a file that is not in the package), so switching between them could not fix the bundle. GitHub Actions secret encryption now uses a small pure-JavaScript sealed box (`src/repo/sealedBox.ts`, built on `tweetnacl` 1.0.3 and `blakejs` 1.2.1) and no longer depends on libsodium at all. The output matches libsodium's `crypto_box_seal`; I checked that a box produced by this algorithm is opened by the native libsodium library. Delete `src/libsodium-wrappers.d.ts` (now unused). Added `src/vendor-types.d.ts` for blakejs and a unit test, `src/repo/sealedBox.test.ts`.

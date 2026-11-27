@@ -31,7 +31,8 @@
     "pdfjs-dist": "4.4.168",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "libsodium-wrappers-sumo": "^0.7.15"
+    "blakejs": "1.2.1",
+    "tweetnacl": "1.0.3"
   },
   "devDependencies": {
     "@capacitor/android": "^6.1.2",

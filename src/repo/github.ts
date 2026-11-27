@@ -205,9 +205,8 @@ export async function putGithubRepoSecret(token: string, full: string, name: str
   if (!VARIABLE_NAME.test(name)) throw new Error('Invalid GitHub Actions secret name.');
   if (!value) throw new Error('Secret value cannot be empty.');
   const key = await github<{ key: string; key_id: string }>(token, `/repos/${full}/actions/secrets/public-key`);
-  const sodium = (await import('libsodium-wrappers-sumo')).default; await sodium.ready;
-  const sealed = sodium.crypto_box_seal(value, sodium.from_base64(key.key, sodium.base64_variants.ORIGINAL));
-  await github<void>(token, `/repos/${full}/actions/secrets/${enc(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ encrypted_value: sodium.to_base64(sealed, sodium.base64_variants.ORIGINAL), key_id: key.key_id }) });
+  const { sealSecret } = await import('./sealedBox');
+  await github<void>(token, `/repos/${full}/actions/secrets/${enc(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ encrypted_value: sealSecret(value, key.key), key_id: key.key_id }) });
 }
 export async function deleteGithubRepoSecret(token: string, full: string, name: string): Promise<void> { await github<void>(token, `/repos/${full}/actions/secrets/${enc(name)}`, { method: 'DELETE' }); }
 /** Legacy setter retained for existing callers; now permits non-secret names only. */
