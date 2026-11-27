@@ -82,5 +82,4 @@
 - Added a local TypeScript declaration for `libsodium-wrappers` (resolves TS7016 when type declarations are unavailable).
 - Added copy-full-log buttons to GitHub and Vercel deployment log cards with success/error status feedback.
 
-## Vercel build-log copy state fix
-- `src/repo/VercelTab.tsx`: declare the `copyNote` state used by the Build Logs copy button, fixing TS2304 (`copyNote`/`setCopyNote` undefined).
+- Fix GitHub Actions secret encryption dependency bundling by switching to `libsodium-wrappers-sumo`, which ships the full sodium implementation and avoids the missing `./libsodium.mjs` import seen in Vercel's production Vite bundle. Updated the dynamic import and TypeScript declaration accordingly.
