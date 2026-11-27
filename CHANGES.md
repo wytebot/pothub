@@ -52,3 +52,13 @@
 - Generated project ZIPs are commit-only in chat (no download control), with create/select GitHub repository and bounded binary-aware commits.
 - Codelab editor and sandbox terminal tools expanded; continuity recall improved; appearance page removed while system theme remains.
 - Full dependency-based build/tests remain pending because install timed out.
+
+## 0.16.4 audit-fix patch
+- Added a React crash boundary and global runtime error/rejection logging with non-blocking notification event.
+- Background job start failures and missing job service now fall back to local generation with a short user note.
+- Guest authentication accepts both legacy and MonyGist guest headers; CORS allows both.
+- Site origin now uses VITE_SITE_ORIGIN/SITE_ORIGIN with the legacy default retained.
+- Background polling now fails after repeated errors, uses backoff, and gives clear sign-in failures while retaining job ID.
+- Automatic web search skips file-attached/repository-tagged requests and short command prompts.
+- File packaging errors are handled after generation and preserve the generated answer.
+- Vercel per-instance limiter prunes stale keys when the map grows.

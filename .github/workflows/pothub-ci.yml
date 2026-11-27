@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: node scripts/check-raw-imports.mjs
       - run: npm test
       - run: npm run build
   api:
