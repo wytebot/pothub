@@ -14,6 +14,7 @@ import { Deployments } from './pages/Deployments';
 import { Billing } from './pages/Billing';
 import { ForgeBuild } from './pages/ForgeBuild';
 import { VercelBackend } from './pages/VercelBackend';
+import { GithubBackend } from './pages/GithubBackend';
 import { getStorageInfo } from './storage/quota';
 import { useMe, signInWithGoogle, signOut } from './auth/session';
 import { applyUpdate, UPDATE_READY } from './version';
@@ -29,6 +30,7 @@ const primary: Route[] = [
   { path: '/deployments', label: 'Deployments', icon: 'play', el: <Deployments /> },
   { path: '/billing', label: 'Premium', icon: 'star', el: <Billing /> },
   { path: '/forge', label: 'App Builder', icon: 'download', el: <ForgeBuild /> },
+  { path: '/github-backend', label: 'GitHub Backend', icon: 'code', el: <GithubBackend /> },
 ];
 const secondary: Route[] = [
   { path: '/settings', label: 'Settings', el: <Settings /> },
@@ -38,7 +40,6 @@ const secondary: Route[] = [
   { path: '/support', label: 'Support', el: <Support /> },
   { path: '/about', label: 'About', el: <section className="page"><h1>About</h1><div className="panel"><p>MonyGist, version {__APP_VERSION__}. A text-first AI workspace for chat, writing, research and development.</p></div></section> },
   { path: '/storage', label: 'Storage information', el: <Storage /> },
-  { path: '/vercel-backend', label: 'Vercel Backend', icon: 'folder', el: <VercelBackend /> },
 ];
 const all = [...primary, ...secondary];
 
