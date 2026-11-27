@@ -33,6 +33,6 @@ export async function verifyIdToken(authorization) {
 export async function identify(req) {
   const who = await verifyIdToken(req.headers.authorization);
   if (who) return who;
-  const g = String(req.headers['x-pothub-guest'] || '');
+  const g = String(req.headers['x-monygist-guest'] || req.headers['x-pothub-guest'] || '');
   return /^[A-Za-z0-9_-]{22,64}$/.test(g) ? { uid: `guest:${g}`, email: null, emailVerified: false, guest: true } : null;
 }

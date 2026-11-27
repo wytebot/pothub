@@ -1,6 +1,7 @@
 // Shared helpers for the Vercel functions in /api. Files starting with _ are not deployed as routes.
 // The Pothub web app and its Android app may call any backend, so a separate backend needs no extra setup.
-const NATIVE_ORIGINS = ['https://pothub-self.vercel.app', 'https://localhost', 'capacitor://localhost'];
+const SITE_ORIGIN = String(process.env.VITE_SITE_ORIGIN || process.env.SITE_ORIGIN || 'https://pothub-self.vercel.app').replace(/\/$/, '');
+const NATIVE_ORIGINS = [SITE_ORIGIN, 'https://localhost', 'capacitor://localhost'];
 const host = (req) => String(req.headers['x-forwarded-host'] || req.headers.host || '');
 export const clientIp = (req) => String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim();
 export const origin = (req) => `https://${host(req)}`;
@@ -17,7 +18,7 @@ function allowedOrigin(req) {
 export function applyCors(req, res) {
   const o = allowedOrigin(req);
   res.setHeader('Vary', 'Origin');
-  if (o) { res.setHeader('Access-Control-Allow-Origin', o); res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Pothub-Guest'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); res.setHeader('Access-Control-Expose-Headers', 'X-Pothub-Gateway'); }
+  if (o) { res.setHeader('Access-Control-Allow-Origin', o); res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-MonyGist-Guest, X-Pothub-Guest'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); res.setHeader('Access-Control-Expose-Headers', 'X-Pothub-Gateway'); }
 }
 
 export function reply(req, res, status, body) {
@@ -36,7 +37,9 @@ export function bodyOf(req) {
 
 // Best-effort limiter (per warm function instance). It slows abuse; it is not a global quota.
 const hits = new Map();
+function pruneHits() { const now = Date.now(); for (const [key, timestamps] of hits) { const fresh = timestamps.filter((x) => now - x < 60_000); if (fresh.length) hits.set(key, fresh); else hits.delete(key); } }
 export function limited(key, max) {
+  if (hits.size > 5000) pruneHits();
   const now = Date.now(); const t = (hits.get(key) || []).filter((x) => now - x < 60_000); t.push(now); hits.set(key, t);
   return t.length > max;
 }
