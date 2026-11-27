@@ -298,6 +298,25 @@ ${webBlock}`;
           catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('warn', 'durable job unavailable', `${e.message}; generating locally instead`); log.step('Background service unavailable — continuing on this device…'); out = await generateText(model.provider, secret, req); notes.push('The background service was unavailable, so this response was generated on this device. Keep MonyGist open until it finishes.'); }
         } else { log.say('warn', 'background service not configured', 'generating locally on this device'); log.step('Background service not configured — continuing on this device…'); out = await generateText(model.provider, secret, req); notes.push('The background service is not configured, so this response was generated on this device. Keep MonyGist open until it finishes.'); }
       } else out = await generateText(model.provider, secret, req);
+      // Continue provider-limited responses automatically, preserving the entire answer. Provider hard limits
+      // remain unavoidable, but the user-facing answer is not silently clipped at one generation.
+      if (out.truncated && !engineering) {
+        let stitched = out.text; let rounds = 0; let stillTruncated = true;
+        while (stillTruncated && rounds < 8 && !signal.aborted) {
+          rounds++;
+          log.step(`Continuing long response (${rounds}/8)…`);
+          const continuation = await generateText(model.provider, secret, {
+            model: model.id, system: req.system,
+            history: [...history, { role: 'assistant', text: stitched }, { role: 'user', text: 'Continue from the exact point where the previous response ended. Do not repeat the previous text, summarize, or restart. Finish the remaining requested work.' }],
+            prompt: 'Continue the unfinished response from the prior assistant message. Preserve formatting and complete the task.', files: [], signal,
+            ...(wanted.code || wanted.format === 'zip' ? { maxTokens: codeMaxTokens(model.provider) } : {}),
+            onText: (t: string) => { partial = stitched + t; if (!wanted.file) o.onText(partial); },
+          });
+          stitched += continuation.text; stillTruncated = continuation.truncated;
+        }
+        out = { ...out, text: stitched, truncated: stillTruncated };
+        if (stillTruncated) notes.push('The provider repeatedly reached its maximum output size. This answer has been continued automatically through several rounds; ask “continue” for the remaining part.');
+      }
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Attach a text-based document or source file for text analysis.`);
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
