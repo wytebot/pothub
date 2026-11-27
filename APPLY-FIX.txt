@@ -1,7 +1,0 @@
-Pothub Vercel build fix
-
-Replace vite.config.ts at the repository root with the included file.
-
-This adds VITE_FIREBASE_API_KEY to the explicit public-environment allowlist. Firebase Web API keys are public client configuration; keep Firebase Admin service-account JSON, OAuth client secrets, Flutterwave secrets, webhook secrets, and other private credentials server-side without the VITE_ prefix.
-
-Commit and push the change, then redeploy. This patch addresses the exact build guard failure shown in the Vercel log; it does not claim a full production build has been run here.
