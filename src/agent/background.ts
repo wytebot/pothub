@@ -38,16 +38,19 @@ export const cancelRemote = (id: string) => { void request('/api/jobs/cancel', {
 
 /** Follows a job until it ends. Network drops never end it: polling simply carries on when the connection is back. */
 export async function follow(id: string, o: { signal?: AbortSignal; onText?: (soFar: string) => void; from?: string } = {}): Promise<{ text: string; truncated: boolean }> {
-  let text = ''; const { signal } = o;
+  let text = ''; let failures = 0; const { signal } = o;
   for (;;) {
     if (signal?.aborted) { if (signal.reason !== DETACH) cancelRemote(id); throw new Error('Cancelled.'); }
     let v: View | null = null;
     try { v = await request<View>(`/api/jobs/status?id=${encodeURIComponent(id)}&from=${text.length}`, undefined, 20_000); }
     catch (e) {
       const m = e instanceof Error ? e.message : '';
-      if (/no longer available/i.test(m)) throw new Error('This job is no longer available. Send it again.');
-      if (/session has expired/i.test(m)) throw e;
+      if (/no longer available/i.test(m)) throw new Error(`This job is no longer available (job ${id}). Send it again.`);
+      if (/session has expired|sign in|unauthori[sz]ed|\b401\b|\b403\b/i.test(m)) throw new Error(`Sign-in is required to resume job ${id}. Sign in again, then resume the job.`);
+      failures += 1; if (failures >= 8) throw new Error(`Could not reach the job server after repeated attempts. Job ${id} is retained and can be resumed later.`);
+      await sleep(Math.min(30_000, 1200 * 2 ** Math.min(failures, 5)), signal); continue;
     }
+    failures = 0;
     if (v) {
       if (v.chunk) { text += v.chunk; o.onText?.(text); }
       if (v.status === 'done') return { text: text.trim(), truncated: !!v.truncated };
