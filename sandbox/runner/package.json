@@ -1,8 +1,0 @@
-{
-  "name": "pothub-isolated-engine-runner",
-  "private": true,
-  "type": "module",
-  "scripts": {"start":"tsx src/index.ts", "typecheck":"tsc --noEmit", "test":"tsx --test src/*.test.ts"},
-  "dependencies": {"dockerode":"^4.0.7", "unzipper":"^0.12.3"},
-  "devDependencies": {"@types/dockerode":"^3.3.38", "@types/unzipper":"^0.10.10", "@types/node":"^22.7.0", "tsx":"^4.19.0", "typescript":"^5.5.4"}
-}
