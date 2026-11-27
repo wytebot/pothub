@@ -14,7 +14,7 @@ const MARK: Record<BuildStep['state'], string> = { done: '✓', failed: '✕', r
 /** Vercel deployment: connect once, then two cards (build steps, build logs) and, when the build failed, the Analyze button. */
 export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | null }) {
   const [token, setToken] = useState<string | null>(null);
-  const [input, setInput] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [input, setInput] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice,setNotice]=useState('');
   const [oauth, setOauth] = useState(false); const [signing, setSigning] = useState(false);
   const [projects, setProjects] = useState<VcProject[]>([]); const [pid, setPid] = useState('');
   const [dep, setDep] = useState<VcDeployment | null>(null);
@@ -58,7 +58,18 @@ export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | nul
     catch (e) { fail(e, 'Could not connect to Vercel.'); } finally { setBusy(false); }
   };
   const signIn = async () => { setError(''); setSigning(true); try { await startVercelSignIn(); } catch (e) { fail(e, 'Could not start Vercel sign-in.'); setSigning(false); } };
-  const disconnect = async () => { await signOutVercel(); setToken(''); setOauth(false); setProjects([]); setPid(''); setDep(null); setLines([]); };
+  const disconnect = async () => {
+    const promptText=oauth
+      ? 'Disconnect Vercel? MonyGist will revoke the OAuth token first. If revocation fails, your saved connection will be kept.'
+      : 'Disconnect this Vercel access token from MonyGist? The token will be removed from this device. Revoke the personal token at vercel.com/account/tokens as well.';
+    if(!window.confirm(promptText))return;
+    try {
+      const result=await signOutVercel();
+      setToken(''); setOauth(false); setProjects([]); setPid(''); setDep(null); setLines([]);
+      setError('');
+      setNotice(result.oauthRevoked?'Vercel OAuth access was revoked and removed from this device.':'Vercel token removed from this device. Revoke the personal token separately at Vercel account token settings.');
+    } catch(e) { fail(e,'Could not disconnect Vercel. Your saved token was kept.'); }
+  };
 
   if (token === null) return <div className="rp-card"><p className="rp-muted">Loading…</p></div>;
   if (!token) return (
@@ -70,6 +81,7 @@ export function VercelTab({ ghToken, repo }: { ghToken: string; repo: Repo | nul
         <button className="btn" disabled={busy || !input.trim()} onClick={() => void connect()}>{busy ? 'Connecting…' : 'Connect with token'}</button>
         <a className="rp-muted" href="https://vercel.com/account/tokens" target="_blank" rel="noreferrer">Create a token</a>
       </details>
+      {notice && <p className="rp-ok" role="status">{notice}</p>}
       {error && <p className="rp-err" role="alert">{error}</p>}
     </div>
   );
