@@ -14,6 +14,12 @@ describe('web research for implementation requests', () => {
   it('searches for current implementation and debugging help', () => {
     for (const prompt of ['Fix my React app build error', 'Implement OAuth in my website', 'Upgrade Firebase integration in this app', 'Deploy my TypeScript backend']) expect(shouldAutoWebSearch(prompt)).toBe(true);
   });
+  it('skips auto-search when code attachments or repo tags are present, and short commands are not queries', () => {
+    expect(shouldAutoWebSearch('Fix my React app build error', { hasFiles: true })).toBe(false);
+    expect(shouldAutoWebSearch('Fix my React app build error', { repoTagged: true })).toBe(false);
+    expect(shouldAutoWebSearch('fix it')).toBe(false);
+    expect(shouldAutoWebSearch('debug the code')).toBe(false);
+  });
   it('does not research ordinary conversational or stable conceptual prompts', () => {
     for (const prompt of ['Tell me a joke', 'Explain photosynthesis', 'What is a closure in JavaScript?', 'Write a birthday poem']) expect(shouldAutoWebSearch(prompt)).toBe(false);
   });

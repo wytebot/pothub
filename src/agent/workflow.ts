@@ -209,7 +209,7 @@ export async function runText(o: { prompt: string; files: Attachment[]; history:
   // Nothing about the search is added to the reply text. When it was used, the source sites are shown under the
   // answer (`sources`); when it was not (nothing found, or it failed), the answer is simply written without it.
   let sent = prompt; let webBlock = ''; let webSources: WebSource[] = [];
-  if (shouldAutoWebSearch(prompt) || extractPromptUrls(prompt).length) {
+  if (shouldAutoWebSearch(prompt, { hasFiles: o.files.length > 0, repoTagged: /@repo\b|repository tagged/i.test(prompt) }) || extractPromptUrls(prompt).length) {
     log.step(extractPromptUrls(prompt).length ? 'Reading supplied links…' : 'Searching the web…');
     try {
       const q = prompt.replace(/\s+/g, ' ').slice(0, 200);
@@ -293,15 +293,16 @@ ${webBlock}`;
         engineeringProjectFile = (out as EngineeringResult).sandboxProjectFile; engineeringPatchCount = (out as EngineeringResult).sandboxPatchCount ?? 0; engineeringProjectPatchOnly = (out as EngineeringResult).sandboxProjectPatchOnly ?? false;
       } else if (o.job && !isGatewayRef(secret)) {
         const job = o.job;
-        if (!backgroundAvailable()) throw new NotStarted('The durable job service is not configured. Set VITE_API_URL and deploy the MonyGist worker.');
-        try { out = await generateInBackground(model.provider, secret, req, { msgId: job.msgId, onStarted: (id: string) => { addPending({ id, chatId: job.chatId, msgId: job.msgId, prompt, wanted, modelName: model.name, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Running in the background…'); } }); }
-        catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('err', 'durable background job unavailable', e.message); throw new Error(`This request could not be started as a durable background job. ${e.message}`); }
+        if (backgroundAvailable()) {
+          try { out = await generateInBackground(model.provider, secret, req, { msgId: job.msgId, onStarted: (id: string) => { addPending({ id, chatId: job.chatId, msgId: job.msgId, prompt, wanted, modelName: model.name, notes: [...notes], sources: webSources.length ? webSources : undefined, started: Date.now() }); log.step('Running in the background…'); } }); }
+          catch (e) { if (!(e instanceof NotStarted)) throw e; log.say('warn', 'durable job unavailable', `${e.message}; generating locally instead`); log.step('Background service unavailable — continuing on this device…'); out = await generateText(model.provider, secret, req); notes.push('The background service was unavailable, so this response was generated on this device. Keep MonyGist open until it finishes.'); }
+        } else { log.say('warn', 'background service not configured', 'generating locally on this device'); log.step('Background service not configured — continuing on this device…'); out = await generateText(model.provider, secret, req); notes.push('The background service is not configured, so this response was generated on this device. Keep MonyGist open until it finishes.'); }
       } else out = await generateText(model.provider, secret, req);
       log.done(g, `${out.text.length.toLocaleString()} characters · ${secs(Date.now() - t0)}`);
       if (out.unread.length) notes.push(`${model.name} cannot read ${out.unread.join(', ')}, so ${out.unread.length > 1 ? 'those were' : 'it was'} left out. Attach a text-based document or source file for text analysis.`);
       if (out.truncated) notes.push('The answer reached the model\'s length limit. Ask me to continue and I will pick up from here.');
       if (trimmed) notes.push('This conversation is longer than the model can hold at once, so the oldest messages were left out of this reply.');
-      const delivered = engineeringProjectFile ? { file: null as OutFile | null, notes: [] as string[] } : await deliverable(out.text, wanted, prompt, o.files, log); notes.push(...delivered.notes); const file = engineeringProjectFile ?? delivered.file;
+      let delivered: { file: OutFile | null; notes: string[] } = { file: null, notes: [] }; if (!engineeringProjectFile) { try { delivered = await deliverable(out.text, wanted, prompt, o.files, log); } catch (packErr) { log.say('warn', 'file packaging failed', msg(packErr)); notes.push(`Your answer was generated, but packaging the requested file failed: ${msg(packErr)}. Retry file packaging without regenerating the answer.`); } } notes.push(...delivered.notes); const file = engineeringProjectFile ?? delivered.file;
       const displayText = engineeringProjectFile ? `${out.text}\n\n${engineeringPatchCount ? engineeringProjectPatchOnly ? `**Patch ZIP attached:** ${engineeringPatchCount} changed file(s). This is a patch-only archive, not your complete source project.` : `**Sanitized project ZIP attached:** ${engineeringPatchCount} file change(s) were merged. Review the validation report and restore excluded dependencies/secrets before replacing your project.` : '**Project ZIP attached:** no complete file patches were detected, so it may contain the original project without code changes. Review the answer before replacing your project.'}` : wanted.file && file ? `**${file.name} is ready.** Download the attached file to review its contents.` : out.text;
       saveGood(model);
       void notifyDone({ kind: 'text', title: file ? 'Your answer and file are ready' : 'Your answer is ready', body: `${model.name} finished “${q(prompt, 60).slice(1, -1)}”.`, route: '/' });

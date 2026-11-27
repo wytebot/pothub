@@ -13,9 +13,10 @@ const TECH_WEB = /\b(build|create|develop|write|generate|make|implement|wire|int
 const TECH_CONTEXT = /\b(app|application|website|web app|mobile|android|ios|react|vite|typescript|javascript|node|npm|api|sdk|framework|library|package|database|firebase|firestore|github|vercel|capacitor|flutter|python|server|backend|frontend|terminal|compiler|build|deployment|code|coding|program|software|engine|tool|integration|provider|model)\b/i;
 const EXPLICIT_WEB = /\b(search (the )?(web|internet|online)|web search|look ?up|deep research|research (this|that|the|it|about)|find (current|latest|recent)|with sources|cite sources)\b/i;
 /** Automatically research requests where web evidence materially improves correctness. */
-export function shouldAutoWebSearch(prompt: string): boolean {
+export function shouldAutoWebSearch(prompt: string, options: { hasFiles?: boolean; repoTagged?: boolean } = {}): boolean {
   const q = prompt.replace(/\s+/g, ' ').trim();
-  if (!q || /\b(research methodology|how to research)\b/i.test(q)) return false;
+  if (!q || options.hasFiles || options.repoTagged || /\b(research methodology|how to research)\b/i.test(q)) return false;
+  if (q.length < 28 && /^(fix it|debug it|debug the code|fix the code|build (it|the app)|repair it|update it|zip (it|this)|please fix)$/i.test(q)) return false;
   if (EXPLICIT_WEB.test(q) || NEEDS_WEB.test(q)) return true;
   return TECH_WEB.test(q) && TECH_CONTEXT.test(q);
 }
