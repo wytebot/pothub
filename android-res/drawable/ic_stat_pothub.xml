@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- MonyGist monochrome M/code-bracket mark. Resource name retained for app compatibility. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="64" android:viewportHeight="64">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M8 22L20 10L24 14L16 22L24 30L20 34L8 22Z M56 22L44 10L40 14L48 22L40 30L44 34L56 22Z M22 12H28V42L32 37L36 42V12H42V52H36L32 45L28 52H22Z"/>
-</vector>
